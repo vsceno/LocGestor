@@ -15,6 +15,9 @@ const MENU = [
     'relatorios' => ['Relatórios',     'relatorios'],
     'config'     => ['Configurações',  'config'],
 ];
+const MENU_PLATAFORMA = [
+    'tenants' => ['Locadoras', 'produtos'],
+];
 
 /** Ícones SVG inline (traço), 24x24. */
 function icone(string $nome): string
@@ -54,6 +57,9 @@ function flashes_html(): string
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {
+    if (AREA === 'plataforma') {
+        return 'Painel da plataforma';
+    }
     $emp = empresa();
     return ($emp['nome_fantasia'] ?? '') !== '' ? $emp['nome_fantasia'] : (tenant()['nome'] ?? '');
 }
@@ -81,7 +87,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
         </div>
     </div>
     <nav class="menu">
-        <?php foreach (MENU as $mod => [$rotulo, $ico]): ?>
+        <?php foreach (AREA === 'plataforma' ? MENU_PLATAFORMA : MENU as $mod => [$rotulo, $ico]): ?>
             <a href="<?= e(url($mod)) ?>"<?= $mod === $menuAtivo ? ' class="ativo" aria-current="page"' : '' ?>>
                 <?= icone($ico) ?><span><?= e($rotulo) ?></span>
             </a>
@@ -90,7 +96,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
     <div class="usuario">
         <div class="usuario-info">
             <strong><?= e($u['nome'] ?? '') ?></strong>
-            <small><?= e(($u['login'] ?? '') . ' · ' . (($u['perfil'] ?? '') === 'admin' ? 'administrador' : 'operador')) ?></small>
+            <small><?= e(($u['login'] ?? '') . ' · ' . (($u['perfil'] ?? '') === 'admin' ? 'administrador' : ($u['perfil'] ?? ''))) ?></small>
         </div>
         <form method="post" action="<?= e(url('login', ['a' => 'sair'])) ?>">
             <?= csrf_field() ?>
