@@ -200,7 +200,7 @@ function locacoes_nova(): void
 
     layout_start('Nova locação', 'locacoes');
     ?>
-    <form method="post" action="<?= e(url('locacoes', ['a' => 'criar'])) ?>" class="form" id="form-locacao"
+    <form method="post" action="<?= e(url('locacoes', ['a' => 'criar'])) ?>" class="form" id="form-locacao" data-itens
           data-api="<?= e(url('api', ['a' => 'disponivel'])) ?>">
         <?= csrf_field() ?>
         <input type="hidden" name="reserva_id" id="reserva_id" value="<?= e($reserva['id'] ?? '') ?>">
@@ -277,26 +277,6 @@ function locacoes_nova(): void
     </form>
     <?php
     layout_end();
-}
-
-function linha_item_html(array $produtos, array $ln): void
-{
-    ?>
-    <tr class="linha-item">
-        <td><select name="produto_id[]" class="sel-produto" aria-label="Produto">
-            <option value="">— escolha —</option>
-            <?php foreach ($produtos as $p): ?>
-                <option value="<?= e($p['id']) ?>" data-diaria="<?= e($p['valor_diaria']) ?>"
-                    <?= $p['id'] === $ln['produto_id'] ? 'selected' : '' ?>><?= e($p['codigo'] . ' — ' . $p['descricao']) ?></option>
-            <?php endforeach; ?>
-        </select></td>
-        <td class="num"><input type="number" name="quantidade[]" class="qtd" value="<?= e($ln['quantidade']) ?>" min="1" step="1" style="width:80px" aria-label="Quantidade"></td>
-        <td class="num"><input type="text" name="diaria[]" class="diaria" value="<?= e($ln['diaria']) ?>" inputmode="decimal" style="width:100px" aria-label="Diária"></td>
-        <td class="num disp">—</td>
-        <td class="num subtotal">—</td>
-        <td><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
-    </tr>
-    <?php
 }
 
 function locacoes_criar(): void

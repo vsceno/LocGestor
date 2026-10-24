@@ -302,6 +302,40 @@ function cliente_resolver(string $texto): array
     return $achados[0];
 }
 
+/**
+ * Itens do formulário (produto_id[], quantidade[], diaria[]) => [produto_id => ['qtd', 'diaria']].
+ * Linhas repetidas do mesmo produto são somadas; diária vazia fica null (usa a do cadastro).
+ */
+function itens_do_form(array $d, string $onde): array
+{
+    $itens = [];
+    foreach ((array) ($d['produto_id'] ?? []) as $i => $pid) {
+        $pid = (string) $pid;
+        if ($pid === '') {
+            continue;
+        }
+        if (!is_uuid($pid)) {
+            throw new UserError('Produto inválido na linha ' . ($i + 1) . '.');
+        }
+        $qtd = filter_var($d['quantidade'][$i] ?? '', FILTER_VALIDATE_INT);
+        if ($qtd === false || $qtd < 1 || $qtd > 100000) {
+            throw new UserError('Quantidade inválida na linha ' . ($i + 1) . '.');
+        }
+        $diariaTxt = trim((string) ($d['diaria'][$i] ?? ''));
+        if (!isset($itens[$pid])) {
+            $itens[$pid] = ['qtd' => 0, 'diaria' => null];
+        }
+        $itens[$pid]['qtd'] += $qtd;
+        if ($itens[$pid]['diaria'] === null && $diariaTxt !== '') {
+            $itens[$pid]['diaria'] = parse_money($diariaTxt);
+        }
+    }
+    if (!$itens) {
+        throw new UserError("Inclua pelo menos um item na $onde.");
+    }
+    return $itens;
+}
+
 /** Busca a locação com todos os valores da view. null se não existir (nesta locadora). */
 function locacao_buscar(string $id): ?array
 {
@@ -385,33 +419,7 @@ function locacao_criar(array $d): array
         throw new UserError('Reserva inválida.');
     }
 
-    // Itens: linhas repetidas do mesmo produto são somadas; a diária vem do formulário ou do produto
-    $itens = [];
-    $produtos = (array) ($d['produto_id'] ?? []);
-    foreach ($produtos as $i => $pid) {
-        $pid = (string) $pid;
-        if ($pid === '') {
-            continue;
-        }
-        if (!is_uuid($pid)) {
-            throw new UserError('Produto inválido na linha ' . ($i + 1) . '.');
-        }
-        $qtd = filter_var($d['quantidade'][$i] ?? '', FILTER_VALIDATE_INT);
-        if ($qtd === false || $qtd < 1 || $qtd > 100000) {
-            throw new UserError('Quantidade inválida na linha ' . ($i + 1) . '.');
-        }
-        $diariaTxt = trim((string) ($d['diaria'][$i] ?? ''));
-        if (!isset($itens[$pid])) {
-            $itens[$pid] = ['qtd' => 0, 'diaria' => $diariaTxt === '' ? null : parse_money($diariaTxt)];
-        }
-        $itens[$pid]['qtd'] += $qtd;
-        if ($itens[$pid]['diaria'] === null && $diariaTxt !== '') {
-            $itens[$pid]['diaria'] = parse_money($diariaTxt);
-        }
-    }
-    if (!$itens) {
-        throw new UserError('Inclua pelo menos um item na locação.');
-    }
+    $itens = itens_do_form($d, 'locação');
 
     return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens) {
         if ($reservaId !== null) {
@@ -640,4 +648,269 @@ function locacao_cancelar(string $locacaoId, string $motivo, string $forma): voi
         locacao_historico($locacaoId, 'Cancelada' . ($motivo !== '' ? ". Motivo: $motivo" : '.')
                                       . ($pago > 0 ? ' Estorno de ' . money($pago) . " ($forma)." : ''));
     });
+}
+
+// =====================================================================
+// RESERVAS
+// =====================================================================
+
+/**
+ * Cria ou altera uma reserva. Começa hoje ou depois e precisa de estoque no período
+ * (descontando locações e outras reservas; na edição, ignora a própria reserva).
+ * $d: cliente (texto do datalist), data_inicio, data_fim, obs, produto_id[], quantidade[]
+ */
+function reserva_salvar(array $d, ?string $id = null): array
+{
+    $cliente = cliente_resolver((string) ($d['cliente'] ?? ''));
+    if ($cliente['bloqueado']) {
+        throw new UserError("O cliente {$cliente['nome']} está bloqueado e não pode fazer reservas.");
+    }
+    $ini = (string) ($d['data_inicio'] ?? '');
+    $fim = (string) ($d['data_fim'] ?? '');
+    if (!valid_date($ini) || !valid_date($fim)) {
+        throw new UserError('Informe datas válidas de retirada e de devolução.');
+    }
+    if ($ini < today()) {
+        throw new UserError('A reserva deve começar hoje ou depois. Para equipamento que já saiu, registre uma locação.');
+    }
+    if ($fim < $ini) {
+        throw new UserError('A devolução não pode ser antes da retirada.');
+    }
+    $obs = trim((string) ($d['obs'] ?? ''));
+    $itens = array_map(fn($it) => $it['qtd'], itens_do_form($d, 'reserva'));
+
+    return tx(function () use ($id, $cliente, $ini, $fim, $obs, $itens) {
+        if ($id !== null) {
+            $st = val('SELECT status FROM reservas WHERE id = :id FOR UPDATE', ['id' => $id]);
+            if ($st === null) {
+                throw new UserError('Reserva não encontrada.');
+            }
+            if ($st !== 'ativa') {
+                throw new UserError('Só é possível alterar reserva ativa.');
+            }
+        }
+        produtos_travar(array_keys($itens));
+        $ativos = (int) val('SELECT count(*) FROM produtos WHERE ativo AND id = ANY (CAST(:ids AS uuid[]))',
+                            ['ids' => '{' . implode(',', array_keys($itens)) . '}']);
+        if ($ativos !== count($itens)) {
+            throw new UserError('Produto não encontrado ou inativo.');
+        }
+        validar_estoque($itens, $ini, $fim, $id);
+
+        if ($id === null) {
+            $numero = (int) val("SELECT proximo_numero('reserva')");
+            $id = (string) val('INSERT INTO reservas (numero, cliente_id, data_inicio, data_fim, obs, usuario_id)
+                                VALUES (:n, :c, :i, :f, :o, :u) RETURNING id',
+                ['n' => $numero, 'c' => $cliente['id'], 'i' => $ini, 'f' => $fim, 'o' => $obs, 'u' => uid()]);
+        } else {
+            $numero = (int) val('UPDATE reservas SET cliente_id = :c, data_inicio = :i, data_fim = :f, obs = :o
+                                  WHERE id = :id RETURNING numero',
+                ['c' => $cliente['id'], 'i' => $ini, 'f' => $fim, 'o' => $obs, 'id' => $id]);
+            q('DELETE FROM reserva_itens WHERE reserva_id = :id', ['id' => $id]);
+        }
+        foreach ($itens as $pid => $qtd) {
+            q('INSERT INTO reserva_itens (reserva_id, produto_id, quantidade) VALUES (:r, :p, :q)',
+              ['r' => $id, 'p' => $pid, 'q' => $qtd]);
+        }
+        return ['id' => $id, 'numero' => $numero];
+    });
+}
+
+function reserva_cancelar(string $id): void
+{
+    $st = val('SELECT status FROM reservas WHERE id = :id', ['id' => $id]);
+    if ($st === null) {
+        throw new UserError('Reserva não encontrada.');
+    }
+    if ($st !== 'ativa') {
+        throw new UserError('Só é possível cancelar reserva ativa.');
+    }
+    q("UPDATE reservas SET status = 'cancelada' WHERE id = :id", ['id' => $id]);
+}
+
+// =====================================================================
+// FLUXO DE CAIXA
+// =====================================================================
+
+/** Lançamento manual (despesa, outra receita). Os de locação são feitos pelas telas de locação. */
+function lancamento_registrar(array $d): void
+{
+    $data = (string) ($d['data'] ?? '');
+    $tipo = (string) ($d['tipo'] ?? '');
+    $categoria = trim((string) ($d['categoria'] ?? ''));
+    $descricao = trim((string) ($d['descricao'] ?? ''));
+    $valor = parse_money($d['valor'] ?? '');
+    $erros = [];
+    if (!valid_date($data) || $data > today()) {
+        $erros[] = 'Informe a data (até hoje).';
+    }
+    if (!in_array($tipo, ['E', 'S'], true)) {
+        $erros[] = 'Escolha entrada ou saída.';
+    }
+    if ($categoria === '' || mb_strlen($categoria) > 60) {
+        $erros[] = 'Informe a categoria (até 60 caracteres).';
+    }
+    if ($descricao === '' || mb_strlen($descricao) > 200) {
+        $erros[] = 'Informe a descrição (até 200 caracteres).';
+    }
+    if ($valor <= 0) {
+        $erros[] = 'O valor deve ser maior que zero.';
+    }
+    if ($erros) {
+        throw new UserError(implode(' ', $erros));
+    }
+    q('INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, usuario_id)
+       VALUES (:d, :t, :c, :ds, :v, :f, :u)',
+      ['d' => $data, 't' => $tipo, 'c' => $categoria, 'ds' => $descricao, 'v' => $valor,
+       'f' => forma_valida((string) ($d['forma'] ?? '')), 'u' => uid()]);
+}
+
+/** Só o admin exclui, e nunca lançamentos ligados a uma locação (esses se corrigem pela locação). */
+function lancamento_excluir(string $id): void
+{
+    require_admin();
+    $l = one('SELECT locacao_id FROM caixa WHERE id = :id', ['id' => $id]);
+    if ($l === null) {
+        throw new UserError('Lançamento não encontrado.');
+    }
+    if ($l['locacao_id'] !== null) {
+        throw new UserError('Lançamentos de locação não podem ser excluídos. Use o estorno (cancelamento) na própria locação.');
+    }
+    q('DELETE FROM caixa WHERE id = :id', ['id' => $id]);
+}
+
+// =====================================================================
+// CONFIGURAÇÕES: empresa, usuários e senha
+// =====================================================================
+
+function empresa_salvar(array $d): void
+{
+    require_admin();
+    $cnpj = so_digitos($d['cnpj'] ?? '');
+    $e = [
+        'razao_social'    => trim((string) ($d['razao_social'] ?? '')),
+        'nome_fantasia'   => trim((string) ($d['nome_fantasia'] ?? '')),
+        'cnpj'            => $cnpj,
+        'ie'              => trim((string) ($d['ie'] ?? '')),
+        'telefone'        => telefone_formatar($d['telefone'] ?? ''),
+        'email'           => trim((string) ($d['email'] ?? '')),
+        'endereco'        => trim((string) ($d['endereco'] ?? '')),
+        'cidade'          => trim((string) ($d['cidade'] ?? '')),
+        'uf'              => strtoupper(trim((string) ($d['uf'] ?? ''))),
+        'cep'             => trim((string) ($d['cep'] ?? '')),
+        'termos_contrato' => trim((string) ($d['termos_contrato'] ?? '')),
+        'obs_fatura'      => trim((string) ($d['obs_fatura'] ?? '')),
+    ];
+    $erros = [];
+    if (mb_strlen($e['razao_social']) < 3 || mb_strlen($e['razao_social']) > 150) {
+        $erros[] = 'Informe a razão social.';
+    }
+    if ($cnpj !== '' && (strlen($cnpj) !== 14 || !doc_valido($cnpj))) {
+        $erros[] = 'CNPJ inválido.';
+    }
+    if ($e['email'] !== '' && filter_var($e['email'], FILTER_VALIDATE_EMAIL) === false) {
+        $erros[] = 'E-mail inválido.';
+    }
+    if ($e['uf'] !== '' && !in_array($e['uf'], UFS, true)) {
+        $erros[] = 'UF inválida.';
+    }
+    foreach (['nome_fantasia' => 150, 'ie' => 20, 'endereco' => 200, 'cidade' => 80, 'cep' => 9] as $k => $max) {
+        if (mb_strlen($e[$k]) > $max) {
+            $erros[] = "O campo $k aceita no máximo $max caracteres.";
+        }
+    }
+    if ($e['termos_contrato'] === '') {
+        $erros[] = 'O texto do contrato não pode ficar vazio.';
+    }
+    if ($erros) {
+        throw new UserError(implode(' ', $erros));
+    }
+    $sets = implode(', ', array_map(fn($k) => "$k = :$k", array_keys($e)));
+    q("UPDATE empresa SET $sets", $e); // sem WHERE de propósito: o RLS restringe à linha da locadora logada
+}
+
+/** Respeita tenants.limite_usuarios, contando só os usuários ativos. */
+function verificar_limite_usuarios(?string $ignorarId = null): void
+{
+    $limite = (int) tenant()['limite_usuarios'];
+    $ativos = (int) val('SELECT count(*) FROM usuarios WHERE ativo AND id IS DISTINCT FROM CAST(:id AS uuid)', ['id' => $ignorarId]);
+    if ($ativos >= $limite) {
+        throw new UserError("Seu plano permite até $limite usuário(s) ativo(s). Desative um usuário ou fale com o suporte para ampliar o plano.");
+    }
+}
+
+/**
+ * Cria ou altera um usuário da locadora (só admin).
+ * Ninguém pode desativar nem rebaixar a si mesmo. Senha mínima de 8 caracteres.
+ */
+function usuario_salvar(array $d, ?string $id = null): void
+{
+    require_admin();
+    $nome = trim((string) ($d['nome'] ?? ''));
+    $login = strtolower(trim((string) ($d['login'] ?? '')));
+    $perfil = ($d['perfil'] ?? '') === 'admin' ? 'admin' : 'operador';
+    $ativo = !empty($d['ativo']);
+    $senha = (string) ($d['senha'] ?? '');
+
+    $erros = [];
+    if ($nome === '' || mb_strlen($nome) > 100) {
+        $erros[] = 'Informe o nome.';
+    }
+    if (!preg_match('/^[a-z0-9._-]{3,40}$/', $login)) {
+        $erros[] = 'Login inválido (3 a 40 letras minúsculas, números, ponto, hífen ou sublinhado).';
+    }
+    if (($id === null || $senha !== '') && mb_strlen($senha) < 8) {
+        $erros[] = 'A senha deve ter pelo menos 8 caracteres.';
+    }
+    if ($id !== null && $id === uid() && (!$ativo || $perfil !== 'admin')) {
+        $erros[] = 'Você não pode desativar nem rebaixar o seu próprio usuário.';
+    }
+    if ($erros) {
+        throw new UserError(implode(' ', $erros));
+    }
+
+    tx(function () use ($id, $nome, $login, $perfil, $ativo, $senha) {
+        // Trava os usuários desta locadora para a contagem do limite não mudar no meio
+        q('SELECT id FROM usuarios FOR UPDATE');
+        if ($id === null) {
+            if ($ativo) {
+                verificar_limite_usuarios();
+            }
+            q('INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo) VALUES (:n, :l, :h, :p, :a)',
+              ['n' => $nome, 'l' => $login, 'h' => password_hash($senha, PASSWORD_DEFAULT), 'p' => $perfil,
+               'a' => $ativo ? 'true' : 'false']);
+            return;
+        }
+        $atual = one('SELECT ativo FROM usuarios WHERE id = :id', ['id' => $id]);
+        if ($atual === null) {
+            throw new UserError('Usuário não encontrado.');
+        }
+        if ($ativo && !$atual['ativo']) {
+            verificar_limite_usuarios($id);
+        }
+        q('UPDATE usuarios SET nome = :n, login = :l, perfil = :p, ativo = :a WHERE id = :id',
+          ['n' => $nome, 'l' => $login, 'p' => $perfil, 'a' => $ativo ? 'true' : 'false', 'id' => $id]);
+        if ($senha !== '') {
+            q('UPDATE usuarios SET senha_hash = :h WHERE id = :id', ['h' => password_hash($senha, PASSWORD_DEFAULT), 'id' => $id]);
+        }
+    });
+}
+
+function senha_trocar(string $atual, string $nova, string $confirma): void
+{
+    $hash = val('SELECT senha_hash FROM usuarios WHERE id = :id', ['id' => uid()]);
+    if ($hash === null || !password_verify($atual, $hash)) {
+        usleep(500000);
+        throw new UserError('A senha atual não confere.');
+    }
+    if (mb_strlen($nova) < 8) {
+        throw new UserError('A nova senha deve ter pelo menos 8 caracteres.');
+    }
+    if ($nova !== $confirma) {
+        throw new UserError('A confirmação não é igual à nova senha.');
+    }
+    if ($nova === $atual) {
+        throw new UserError('A nova senha deve ser diferente da atual.');
+    }
+    q('UPDATE usuarios SET senha_hash = :h WHERE id = :id', ['h' => password_hash($nova, PASSWORD_DEFAULT), 'id' => uid()]);
 }

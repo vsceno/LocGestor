@@ -358,6 +358,15 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .dados dt { color: var(--texto-2); font-size: .85rem; }
 .dados dd { margin: 0; overflow-wrap: anywhere; }
 
+/* Gráficos e indicadores clicáveis */
+.grafico { position: relative; height: 280px; }
+a.kpi { color: inherit; text-decoration: none; }
+a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
+.relatorios-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.relatorios-lista a { display: block; color: inherit; text-decoration: none; height: 100%; }
+.relatorios-lista a:hover .card { border-color: var(--laranja); }
+.relatorios-lista .card { height: 100%; margin: 0; }
+
 /* Locação: total previsto e resumo da devolução */
 .total-previsto { font-size: 1.1rem; margin: 4px 0 14px; }
 .total-previsto strong { color: var(--laranja-escuro); font-size: 1.35rem; }

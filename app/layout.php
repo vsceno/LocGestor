@@ -68,6 +68,34 @@ function selo_status_locacao(array $l): string
     return $l['status'] === 'devolvida' ? '<span class="selo verde">devolvida</span>' : '<span class="selo">cancelada</span>';
 }
 
+/**
+ * Linha da tabela dinâmica de itens (nova locação e reserva). Na reserva ($comDiaria = false)
+ * a diária e o subtotal ficam ocultos: a reserva não guarda preço.
+ */
+function linha_item_html(array $produtos, array $ln, bool $comDiaria = true): void
+{
+    ?>
+    <tr class="linha-item">
+        <td><select name="produto_id[]" class="sel-produto" aria-label="Produto">
+            <option value="">— escolha —</option>
+            <?php foreach ($produtos as $p): ?>
+                <option value="<?= e($p['id']) ?>" data-diaria="<?= e($p['valor_diaria']) ?>"
+                    <?= $p['id'] === $ln['produto_id'] ? 'selected' : '' ?>><?= e($p['codigo'] . ' — ' . $p['descricao']) ?></option>
+            <?php endforeach; ?>
+        </select></td>
+        <td class="num"><input type="number" name="quantidade[]" class="qtd" value="<?= e($ln['quantidade']) ?>" min="1" step="1" style="width:80px" aria-label="Quantidade"></td>
+        <?php if ($comDiaria): ?>
+            <td class="num"><input type="text" name="diaria[]" class="diaria" value="<?= e($ln['diaria']) ?>" inputmode="decimal" style="width:100px" aria-label="Diária"></td>
+        <?php else: ?>
+            <td hidden><input type="hidden" class="diaria" value=""></td>
+        <?php endif; ?>
+        <td class="num disp">—</td>
+        <td class="num subtotal"<?= $comDiaria ? '' : ' hidden' ?>>—</td>
+        <td><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
+    </tr>
+    <?php
+}
+
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {

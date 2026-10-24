@@ -22,9 +22,12 @@ var LG = {
     },
 
     // -----------------------------------------------------------------
-    // Nova locação: itens dinâmicos, disponibilidade em tempo real e total previsto
+    // Nova locação / reserva (form[data-itens]): itens dinâmicos, disponibilidade
+    // em tempo real e total previsto. Acréscimo, desconto e total são opcionais.
     // -----------------------------------------------------------------
     novaLocacao: function (form) {
+        var vazio = { value: '', textContent: '', addEventListener: function () {} };
+        var campo = function (sel) { return form.querySelector(sel) || vazio; };
         var corpo = form.querySelector('#tabela-itens tbody');
         var modelo = document.getElementById('modelo-linha');
         var saida = form.querySelector('#data_saida'), prev = form.querySelector('#data_prev');
@@ -42,9 +45,9 @@ var LG = {
                 soma += sub;
                 tr.querySelector('.subtotal').textContent = tr.querySelector('.sel-produto').value ? LG.moeda(sub) : '—';
             });
-            var total = soma + LG.numero(form.querySelector('#acrescimo').value) - LG.numero(form.querySelector('#desconto').value);
-            form.querySelector('#total-previsto').textContent = LG.moeda(total);
-            form.querySelector('#total-detalhe').textContent = '(' + d + ' diária' + (d > 1 ? 's' : '') + ')';
+            var total = soma + LG.numero(campo('#acrescimo').value) - LG.numero(campo('#desconto').value);
+            campo('#total-previsto').textContent = LG.moeda(total);
+            campo('#total-detalhe').textContent = '(' + d + ' diária' + (d > 1 ? 's' : '') + ')';
             var info = form.querySelector('#info-dias');
             info.textContent = LG.dias(saida.value, prev.value) < 0 ? 'A devolução não pode ser antes da saída.' : d + ' diária(s)';
             info.className = 'ajuda' + (LG.dias(saida.value, prev.value) < 0 ? ' alerta' : '');
@@ -132,7 +135,7 @@ var LG = {
             recalcular();
         });
         [saida, prev].forEach(function (el) { el.addEventListener('change', function () { recalcular(); agendarConsulta(); }); });
-        ['#acrescimo', '#desconto'].forEach(function (s) { form.querySelector(s).addEventListener('input', recalcular); });
+        ['#acrescimo', '#desconto'].forEach(function (s) { campo(s).addEventListener('input', recalcular); });
         recalcular();
         consultar();
     },
@@ -260,7 +263,7 @@ document.addEventListener('DOMContentLoaded', function () {
         el.addEventListener('blur', function () { LG.buscarCep(el); });
     });
 
-    if (document.getElementById('form-locacao')) { LG.novaLocacao(document.getElementById('form-locacao')); }
+    document.querySelectorAll('form[data-itens]').forEach(LG.novaLocacao);
     if (document.getElementById('form-devolucao')) { LG.devolucao(document.getElementById('form-devolucao')); }
 
     // Cadastro de cliente: rótulos mudam conforme PF/PJ

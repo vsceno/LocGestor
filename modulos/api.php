@@ -32,7 +32,8 @@ function api_disponivel(): void
     }
     api_json([
         'ok'         => true,
-        'disponivel' => disponivel($produto, $inicio, $fim, $reserva === '' ? null : $reserva),
+        // Pode dar negativo quando um item atrasado se sobrepõe a uma reserva: na tela, é zero
+        'disponivel' => max(0, disponivel($produto, $inicio, $fim, $reserva === '' ? null : $reserva)),
         'estoque'    => (int) $p['qtd_total'],
         'diaria'     => (float) $p['valor_diaria'],
         'descricao'  => $p['descricao'],
