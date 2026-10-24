@@ -20,7 +20,8 @@ declare(strict_types=1);
  *     começa hoje (ou antes), porque item atrasado continua fora mesmo com a previsão vencida
  *   - reservas ativas que se cruzam com o período (menos a reserva ignorada, ao convertê-la)
  */
-function disponivel(string $produtoId, string $inicio, string $fim, ?string $ignorarReserva = null): int
+function disponivel(string $produtoId, string $inicio, string $fim, ?string $ignorarReserva = null,
+                    ?string $ignorarLocacao = null): int
 {
     $r = one("
         SELECT p.qtd_total
@@ -29,6 +30,7 @@ function disponivel(string $produtoId, string $inicio, string $fim, ?string $ign
                            JOIN locacoes l ON l.id = li.locacao_id
                           WHERE l.status = 'aberta'
                             AND li.produto_id = p.id
+                            AND (CAST(:igl1 AS uuid) IS NULL OR l.id <> CAST(:igl2 AS uuid))
                             AND (l.data_prev_devolucao >= CAST(:ini1 AS date) OR CAST(:ini2 AS date) <= CURRENT_DATE)), 0)
              - COALESCE((SELECT SUM(ri.quantidade)
                            FROM reserva_itens ri
@@ -41,7 +43,7 @@ function disponivel(string $produtoId, string $inicio, string $fim, ?string $ign
           FROM produtos p
          WHERE p.id = :id",
         ['id' => $produtoId, 'ini1' => $inicio, 'ini2' => $inicio, 'ini3' => $inicio, 'fim' => $fim,
-         'ign1' => $ignorarReserva, 'ign2' => $ignorarReserva]);
+         'ign1' => $ignorarReserva, 'ign2' => $ignorarReserva, 'igl1' => $ignorarLocacao, 'igl2' => $ignorarLocacao]);
     return $r === null ? 0 : (int) $r['disponivel'];
 }
 
@@ -51,11 +53,12 @@ function disponivel(string $produtoId, string $inicio, string $fim, ?string $ign
  * "Estoque insuficiente: Betoneira 400 L (pedido 8, disponível 7)."
  * Use dentro de tx(), depois de travar os produtos com produtos_travar().
  */
-function validar_estoque(array $itens, string $inicio, string $fim, ?string $ignorarReserva = null): void
+function validar_estoque(array $itens, string $inicio, string $fim, ?string $ignorarReserva = null,
+                         ?string $ignorarLocacao = null): void
 {
     $faltas = [];
     foreach ($itens as $produtoId => $qtd) {
-        $disp = disponivel((string) $produtoId, $inicio, $fim, $ignorarReserva);
+        $disp = disponivel((string) $produtoId, $inicio, $fim, $ignorarReserva, $ignorarLocacao);
         if ($qtd > $disp) {
             $nome = val('SELECT descricao FROM produtos WHERE id = :id', ['id' => $produtoId]);
             $faltas[] = sprintf('%s (pedido %d, disponível %d)', $nome, $qtd, max(0, $disp));
@@ -266,4 +269,375 @@ function categoria_salvar(string $nome, ?string $id = null): void
     } elseif (val('UPDATE categorias SET nome = :n WHERE id = :id RETURNING id', ['n' => $nome, 'id' => $id]) === null) {
         throw new UserError('Categoria não encontrada.');
     }
+}
+
+// =====================================================================
+// LOCAÇÕES
+// =====================================================================
+
+/** Texto que identifica o cliente no <datalist>: "Nome · documento" (o UUID nunca aparece). */
+function cliente_rotulo(array $c): string
+{
+    return $c['cpf_cnpj'] !== '' ? $c['nome'] . ' · ' . doc_formatar($c['cpf_cnpj']) : $c['nome'];
+}
+
+/** Resolve o texto escolhido no <datalist> para o cliente (só clientes ativos). */
+function cliente_resolver(string $texto): array
+{
+    $partes = explode(' · ', trim($texto), 2);
+    $nome = trim($partes[0]);
+    $doc = so_digitos($partes[1] ?? '');
+    if ($nome === '') {
+        throw new UserError('Escolha o cliente.');
+    }
+    $achados = all("SELECT id, nome, cpf_cnpj, bloqueado FROM clientes
+                     WHERE ativo AND nome = :nome AND (:doc1 = '' OR cpf_cnpj = :doc2)",
+                   ['nome' => $nome, 'doc1' => $doc, 'doc2' => $doc]);
+    if (!$achados) {
+        throw new UserError('Cliente não encontrado. Escolha um cliente da lista ou cadastre-o antes.');
+    }
+    if (count($achados) > 1) {
+        throw new UserError('Há mais de um cliente com esse nome. Escolha na lista a opção com o documento.');
+    }
+    return $achados[0];
+}
+
+/** Busca a locação com todos os valores da view. null se não existir (nesta locadora). */
+function locacao_buscar(string $id): ?array
+{
+    return one("SELECT l.*, c.nome AS cliente_nome, c.cpf_cnpj AS cliente_doc, c.tipo AS cliente_tipo,
+                       v.valor_previsto, v.valor_atual, v.valor_pago,
+                       (SELECT count(*) FROM devolucoes d WHERE d.locacao_id = l.id) AS devolucoes
+                  FROM locacoes l
+                  JOIN clientes c ON c.id = l.cliente_id
+                  JOIN vw_locacao_valores v ON v.locacao_id = l.id
+                 WHERE l.id = :id", ['id' => $id]);
+}
+
+/** Acrescenta uma linha datada ao histórico (campo obs) da locação. */
+function locacao_historico(string $id, string $texto): void
+{
+    $linha = '[' . date('d/m/Y H:i') . ' ' . (user()['nome'] ?? '') . '] ' . $texto;
+    q("UPDATE locacoes SET obs = CASE WHEN obs = '' THEN :l1 ELSE obs || E'\\n' || :l2 END WHERE id = :id",
+      ['l1' => $linha, 'l2' => $linha, 'id' => $id]);
+}
+
+function forma_valida(string $forma): string
+{
+    if (!in_array($forma, FORMAS_PGTO, true)) {
+        throw new UserError('Escolha a forma de pagamento.');
+    }
+    return $forma;
+}
+
+/** Lança uma entrada no caixa ligada à locação (recebimento ou adiantamento). */
+function caixa_lancar_locacao(array $loc, string $tipo, float $valor, string $forma, string $data, string $prefixo): void
+{
+    q("INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, locacao_id, usuario_id)
+       VALUES (:data, :tipo, 'Locação', :descr, :valor, :forma, :loc, :u)",
+      ['data' => $data, 'tipo' => $tipo, 'descr' => "$prefixo locação nº {$loc['numero']} - {$loc['cliente_nome']}",
+       'valor' => $valor, 'forma' => $forma, 'loc' => $loc['id'], 'u' => uid()]);
+}
+
+/**
+ * Cria a locação. $d vem do formulário:
+ *   cliente (texto do datalist), data_saida, data_prev_devolucao, local_uso, obs,
+ *   acrescimo, desconto, adiantamento, forma, reserva_id (opcional),
+ *   produto_id[], quantidade[], diaria[]
+ * Devolve ['id' => uuid, 'numero' => int].
+ */
+function locacao_criar(array $d): array
+{
+    $cliente = cliente_resolver((string) ($d['cliente'] ?? ''));
+    if ($cliente['bloqueado']) {
+        throw new UserError("O cliente {$cliente['nome']} está bloqueado e não pode fazer novas locações.");
+    }
+
+    $saida = (string) ($d['data_saida'] ?? '');
+    $prev = (string) ($d['data_prev_devolucao'] ?? '');
+    if (!valid_date($saida) || !valid_date($prev)) {
+        throw new UserError('Informe datas válidas de saída e de devolução prevista.');
+    }
+    // A locação registra o que já saiu. Retirada futura é reserva.
+    if ($saida > today()) {
+        throw new UserError('A data de saída não pode ser no futuro. Para garantir equipamentos para outra data, faça uma reserva.');
+    }
+    if ($prev < $saida) {
+        throw new UserError('A devolução prevista não pode ser antes da saída.');
+    }
+
+    $acrescimo = parse_money($d['acrescimo'] ?? '');
+    $desconto = parse_money($d['desconto'] ?? '');
+    $adiantamento = parse_money($d['adiantamento'] ?? '');
+    if ($acrescimo < 0 || $desconto < 0 || $adiantamento < 0) {
+        throw new UserError('Acréscimo, desconto e adiantamento não podem ser negativos.');
+    }
+    $forma = $adiantamento > 0 ? forma_valida((string) ($d['forma'] ?? '')) : '';
+    $local = trim((string) ($d['local_uso'] ?? ''));
+    $obs = trim((string) ($d['obs'] ?? ''));
+    if (mb_strlen($local) > 200) {
+        throw new UserError('O local de uso aceita no máximo 200 caracteres.');
+    }
+
+    $reservaId = (string) ($d['reserva_id'] ?? '');
+    $reservaId = $reservaId === '' ? null : $reservaId;
+    if ($reservaId !== null && !is_uuid($reservaId)) {
+        throw new UserError('Reserva inválida.');
+    }
+
+    // Itens: linhas repetidas do mesmo produto são somadas; a diária vem do formulário ou do produto
+    $itens = [];
+    $produtos = (array) ($d['produto_id'] ?? []);
+    foreach ($produtos as $i => $pid) {
+        $pid = (string) $pid;
+        if ($pid === '') {
+            continue;
+        }
+        if (!is_uuid($pid)) {
+            throw new UserError('Produto inválido na linha ' . ($i + 1) . '.');
+        }
+        $qtd = filter_var($d['quantidade'][$i] ?? '', FILTER_VALIDATE_INT);
+        if ($qtd === false || $qtd < 1 || $qtd > 100000) {
+            throw new UserError('Quantidade inválida na linha ' . ($i + 1) . '.');
+        }
+        $diariaTxt = trim((string) ($d['diaria'][$i] ?? ''));
+        if (!isset($itens[$pid])) {
+            $itens[$pid] = ['qtd' => 0, 'diaria' => $diariaTxt === '' ? null : parse_money($diariaTxt)];
+        }
+        $itens[$pid]['qtd'] += $qtd;
+        if ($itens[$pid]['diaria'] === null && $diariaTxt !== '') {
+            $itens[$pid]['diaria'] = parse_money($diariaTxt);
+        }
+    }
+    if (!$itens) {
+        throw new UserError('Inclua pelo menos um item na locação.');
+    }
+
+    return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens) {
+        if ($reservaId !== null) {
+            $st = val('SELECT status FROM reservas WHERE id = :id FOR UPDATE', ['id' => $reservaId]);
+            if ($st !== 'ativa') {
+                throw new UserError('A reserva não está mais ativa.');
+            }
+        }
+
+        // Trava os produtos e confere o estoque com os dados já travados
+        produtos_travar(array_keys($itens));
+        $cadastro = [];
+        foreach (all('SELECT id, descricao, valor_diaria, ativo FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
+                     ['ids' => '{' . implode(',', array_keys($itens)) . '}']) as $p) {
+            $cadastro[$p['id']] = $p;
+        }
+        foreach ($itens as $pid => &$it) {
+            if (!isset($cadastro[$pid])) {
+                throw new UserError('Produto não encontrado.');
+            }
+            if (!$cadastro[$pid]['ativo']) {
+                throw new UserError("O produto {$cadastro[$pid]['descricao']} está inativo.");
+            }
+            $it['diaria'] ??= (float) $cadastro[$pid]['valor_diaria'];
+            if ($it['diaria'] < 0) {
+                throw new UserError('A diária não pode ser negativa.');
+            }
+        }
+        unset($it);
+        validar_estoque(array_map(fn($it) => $it['qtd'], $itens), $saida, $prev, $reservaId);
+
+        $numero = (int) val("SELECT proximo_numero('locacao')");
+        $id = (string) val('INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso,
+                                                  desconto, acrescimo, obs, reserva_id, usuario_id)
+                            VALUES (:n, :c, :s, :p, :local, :desc, :acr, :obs, :res, :u) RETURNING id',
+            ['n' => $numero, 'c' => $cliente['id'], 's' => $saida, 'p' => $prev, 'local' => $local,
+             'desc' => $desconto, 'acr' => $acrescimo, 'obs' => $obs, 'res' => $reservaId, 'u' => uid()]);
+        foreach ($itens as $pid => $it) {
+            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria) VALUES (:l, :p, :q, :d)',
+              ['l' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria']]);
+        }
+        if ($reservaId !== null) {
+            q("UPDATE reservas SET status = 'convertida' WHERE id = :id", ['id' => $reservaId]);
+        }
+        if ($adiantamento > 0) {
+            caixa_lancar_locacao(['id' => $id, 'numero' => $numero, 'cliente_nome' => $cliente['nome']],
+                                 'E', $adiantamento, $forma, today(), 'Adiantamento');
+        }
+        return ['id' => $id, 'numero' => $numero];
+    });
+}
+
+/**
+ * Devolução total ou parcial. $d: data, qtd[locacao_item_id] => quantidade,
+ * multa, avaria, obs, receber (valor a receber agora), forma.
+ * Dias = max(1, data - saída); cada item vale qtd x diária x dias.
+ */
+function devolucao_registrar(string $locacaoId, array $d): array
+{
+    $data = (string) ($d['data'] ?? '');
+    $multa = parse_money($d['multa'] ?? '');
+    $avaria = parse_money($d['avaria'] ?? '');
+    $receber = parse_money($d['receber'] ?? '');
+    $obs = trim((string) ($d['obs'] ?? ''));
+    if (!valid_date($data)) {
+        throw new UserError('Informe a data da devolução.');
+    }
+    if ($multa < 0 || $avaria < 0 || $receber < 0) {
+        throw new UserError('Multa, avaria e valor recebido não podem ser negativos.');
+    }
+    $forma = $receber > 0 ? forma_valida((string) ($d['forma'] ?? '')) : '';
+    $qtds = (array) ($d['qtd'] ?? []);
+
+    return tx(function () use ($locacaoId, $data, $multa, $avaria, $receber, $forma, $obs, $qtds) {
+        $loc = one('SELECT l.*, c.nome AS cliente_nome FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
+                     WHERE l.id = :id FOR UPDATE OF l', ['id' => $locacaoId]);
+        if ($loc === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($loc['status'] !== 'aberta') {
+            throw new UserError('Só é possível registrar devolução de locação em aberto.');
+        }
+        if ($data < $loc['data_saida'] || $data > today()) {
+            throw new UserError('A data da devolução deve estar entre a saída (' . dt($loc['data_saida']) . ') e hoje.');
+        }
+
+        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, p.descricao
+                        FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
+                       WHERE li.locacao_id = :id ORDER BY p.descricao FOR UPDATE OF li', ['id' => $locacaoId]);
+        $dias = max(1, days_between($loc['data_saida'], $data));
+        $devolver = [];
+        foreach ($itens as $it) {
+            $txt = trim((string) ($qtds[$it['id']] ?? '0'));
+            $q = $txt === '' ? 0 : filter_var($txt, FILTER_VALIDATE_INT);
+            $pendente = $it['quantidade'] - $it['qtd_devolvida'];
+            if ($q === false || $q < 0) {
+                throw new UserError("Quantidade inválida para {$it['descricao']}.");
+            }
+            if ($q > $pendente) {
+                throw new UserError("Não é possível devolver $q de {$it['descricao']}: só há $pendente pendente(s).");
+            }
+            if ($q > 0) {
+                $devolver[] = ['item' => $it, 'qtd' => $q, 'valor' => round($q * $it['valor_diaria'] * $dias, 2)];
+            }
+        }
+        // Itens que não pertencem a esta locação não são aceitos
+        $idsValidos = array_column($itens, 'id');
+        foreach (array_keys($qtds) as $k) {
+            if (!in_array((string) $k, $idsValidos, true) && (int) $qtds[$k] !== 0) {
+                throw new UserError('Item inválido na devolução.');
+            }
+        }
+        if (!$devolver) {
+            throw new UserError('Informe a quantidade de pelo menos um item a devolver.');
+        }
+
+        $devId = (string) val('INSERT INTO devolucoes (locacao_id, data, multa, avaria, obs, usuario_id)
+                               VALUES (:l, :d, :m, :a, :o, :u) RETURNING id',
+            ['l' => $locacaoId, 'd' => $data, 'm' => $multa, 'a' => $avaria, 'o' => $obs, 'u' => uid()]);
+        foreach ($devolver as $dv) {
+            q('INSERT INTO devolucao_itens (devolucao_id, locacao_item_id, quantidade, dias, valor) VALUES (:d, :i, :q, :n, :v)',
+              ['d' => $devId, 'i' => $dv['item']['id'], 'q' => $dv['qtd'], 'n' => $dias, 'v' => $dv['valor']]);
+            q('UPDATE locacao_itens SET qtd_devolvida = qtd_devolvida + :q WHERE id = :i', ['q' => $dv['qtd'], 'i' => $dv['item']['id']]);
+        }
+
+        // Nada mais pendente: a locação está encerrada
+        $pendentes = (int) val('SELECT COALESCE(SUM(quantidade - qtd_devolvida), 0) FROM locacao_itens WHERE locacao_id = :id',
+                               ['id' => $locacaoId]);
+        if ($pendentes === 0) {
+            q("UPDATE locacoes SET status = 'devolvida' WHERE id = :id", ['id' => $locacaoId]);
+        }
+        if ($receber > 0) {
+            caixa_lancar_locacao($loc, 'E', $receber, $forma, today(), 'Recebimento');
+        }
+        return ['total' => $pendentes === 0, 'dias' => $dias];
+    });
+}
+
+/** Recebimento avulso: entrada no caixa, categoria "Locação". */
+function recebimento_registrar(string $locacaoId, array $d): void
+{
+    $valor = parse_money($d['valor'] ?? '');
+    $data = (string) ($d['data'] ?? today());
+    if ($valor <= 0) {
+        throw new UserError('Informe o valor recebido.');
+    }
+    if (!valid_date($data) || $data > today()) {
+        throw new UserError('A data do recebimento não pode ser no futuro.');
+    }
+    $forma = forma_valida((string) ($d['forma'] ?? ''));
+    tx(function () use ($locacaoId, $valor, $data, $forma) {
+        $loc = one('SELECT l.id, l.numero, l.status, c.nome AS cliente_nome FROM locacoes l
+                      JOIN clientes c ON c.id = l.cliente_id WHERE l.id = :id FOR UPDATE OF l', ['id' => $locacaoId]);
+        if ($loc === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($loc['status'] === 'cancelada') {
+            throw new UserError('Locação cancelada não recebe pagamentos.');
+        }
+        caixa_lancar_locacao($loc, 'E', $valor, $forma, $data, 'Recebimento');
+    });
+}
+
+/** Prorroga a devolução prevista. Se a nova data avança sobre reservas, confere o estoque. */
+function locacao_prorrogar(string $locacaoId, string $novaData, string $motivo = ''): void
+{
+    if (!valid_date($novaData)) {
+        throw new UserError('Informe a nova data de devolução.');
+    }
+    tx(function () use ($locacaoId, $novaData, $motivo) {
+        $loc = one('SELECT * FROM locacoes WHERE id = :id FOR UPDATE', ['id' => $locacaoId]);
+        if ($loc === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($loc['status'] !== 'aberta') {
+            throw new UserError('Só é possível prorrogar locação em aberto.');
+        }
+        if ($novaData < $loc['data_saida']) {
+            throw new UserError('A nova data não pode ser antes da saída.');
+        }
+        if ($novaData === $loc['data_prev_devolucao']) {
+            throw new UserError('A nova data é igual à atual.');
+        }
+        if ($novaData > $loc['data_prev_devolucao']) {
+            // Os itens pendentes continuarão fora até a nova data: não podem invadir reservas já feitas
+            $pend = [];
+            foreach (all('SELECT produto_id, SUM(quantidade - qtd_devolvida) AS q FROM locacao_itens
+                           WHERE locacao_id = :id GROUP BY produto_id HAVING SUM(quantidade - qtd_devolvida) > 0',
+                         ['id' => $locacaoId]) as $r) {
+                $pend[$r['produto_id']] = (int) $r['q'];
+            }
+            produtos_travar(array_keys($pend));
+            try {
+                validar_estoque($pend, today(), $novaData, null, $locacaoId);
+            } catch (UserError $e) {
+                throw new UserError('Não é possível prorrogar até ' . dt($novaData) . ' por causa de reservas no período. '
+                                    . $e->getMessage());
+            }
+        }
+        q('UPDATE locacoes SET data_prev_devolucao = :d WHERE id = :id', ['d' => $novaData, 'id' => $locacaoId]);
+        locacao_historico($locacaoId, 'Prorrogada de ' . dt($loc['data_prev_devolucao']) . ' para ' . dt($novaData)
+                                      . ($motivo !== '' ? ". Motivo: $motivo" : '.'));
+    });
+}
+
+/** Cancela locação em aberto sem devoluções. Havendo valor pago, lança o estorno (saída) no caixa. */
+function locacao_cancelar(string $locacaoId, string $motivo, string $forma): void
+{
+    tx(function () use ($locacaoId, $motivo, $forma) {
+        q('SELECT id FROM locacoes WHERE id = :id FOR UPDATE', ['id' => $locacaoId]);
+        $loc = locacao_buscar($locacaoId);
+        if ($loc === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($loc['status'] !== 'aberta') {
+            throw new UserError('Só é possível cancelar locação em aberto.');
+        }
+        if ((int) $loc['devolucoes'] > 0) {
+            throw new UserError('Esta locação já tem devoluções registradas e não pode ser cancelada.');
+        }
+        $pago = (float) $loc['valor_pago'];
+        if ($pago > 0) {
+            caixa_lancar_locacao($loc, 'S', $pago, forma_valida($forma), today(), 'Estorno');
+        }
+        q("UPDATE locacoes SET status = 'cancelada' WHERE id = :id", ['id' => $locacaoId]);
+        locacao_historico($locacaoId, 'Cancelada' . ($motivo !== '' ? ". Motivo: $motivo" : '.')
+                                      . ($pago > 0 ? ' Estorno de ' . money($pago) . " ($forma)." : ''));
+    });
 }

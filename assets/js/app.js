@@ -4,6 +4,182 @@
 var LG = {
     digitos: function (s) { return String(s || '').replace(/\D/g, ''); },
 
+    // "1.234,56" -> 1234.56 (também aceita "1234.56")
+    numero: function (s) {
+        s = String(s || '').replace(/[R$\s]/g, '');
+        if (s.indexOf(',') >= 0) { s = s.replace(/\./g, '').replace(',', '.'); }
+        var n = parseFloat(s);
+        return isNaN(n) ? 0 : n;
+    },
+    moeda: function (n) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); },
+    decimal: function (n) { return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+
+    // Diferença em dias entre duas datas aaaa-mm-dd (sem fuso horário)
+    dias: function (de, ate) {
+        if (!de || !ate) { return 0; }
+        var a = de.split('-'), b = ate.split('-');
+        return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+    },
+
+    // -----------------------------------------------------------------
+    // Nova locação: itens dinâmicos, disponibilidade em tempo real e total previsto
+    // -----------------------------------------------------------------
+    novaLocacao: function (form) {
+        var corpo = form.querySelector('#tabela-itens tbody');
+        var modelo = document.getElementById('modelo-linha');
+        var saida = form.querySelector('#data_saida'), prev = form.querySelector('#data_prev');
+        var api = form.getAttribute('data-api');
+        var reserva = form.querySelector('#reserva_id').value;
+        var cache = {}, espera = null;
+
+        function diarias() { return Math.max(1, LG.dias(saida.value, prev.value)); }
+
+        function recalcular() {
+            var d = diarias(), soma = 0;
+            corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
+                var qtd = parseInt(tr.querySelector('.qtd').value, 10) || 0;
+                var sub = qtd * LG.numero(tr.querySelector('.diaria').value) * d;
+                soma += sub;
+                tr.querySelector('.subtotal').textContent = tr.querySelector('.sel-produto').value ? LG.moeda(sub) : '—';
+            });
+            var total = soma + LG.numero(form.querySelector('#acrescimo').value) - LG.numero(form.querySelector('#desconto').value);
+            form.querySelector('#total-previsto').textContent = LG.moeda(total);
+            form.querySelector('#total-detalhe').textContent = '(' + d + ' diária' + (d > 1 ? 's' : '') + ')';
+            var info = form.querySelector('#info-dias');
+            info.textContent = LG.dias(saida.value, prev.value) < 0 ? 'A devolução não pode ser antes da saída.' : d + ' diária(s)';
+            info.className = 'ajuda' + (LG.dias(saida.value, prev.value) < 0 ? ' alerta' : '');
+            avisarEstoque();
+        }
+
+        // Compara a soma pedida de cada produto (linhas repetidas somam) com o disponível
+        function avisarEstoque() {
+            var pedido = {};
+            corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
+                var p = tr.querySelector('.sel-produto').value;
+                if (p) { pedido[p] = (pedido[p] || 0) + (parseInt(tr.querySelector('.qtd').value, 10) || 0); }
+            });
+            corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
+                var p = tr.querySelector('.sel-produto').value, cel = tr.querySelector('.disp');
+                var chave = p + '|' + saida.value + '|' + prev.value;
+                if (!p) { cel.textContent = '—'; cel.className = 'num disp'; return; }
+                if (cache[chave] === undefined) { cel.textContent = '...'; return; }
+                var disp = cache[chave];
+                var falta = pedido[p] > disp;
+                cel.innerHTML = '';
+                var s = document.createElement('span');
+                s.className = 'selo ' + (falta ? 'vermelho' : 'verde');
+                s.textContent = disp;
+                cel.appendChild(s);
+                if (falta) {
+                    var aviso = document.createElement('div');
+                    aviso.className = 'alerta';
+                    aviso.style.fontSize = '.78rem';
+                    aviso.textContent = 'pedido ' + pedido[p] + ', disponível ' + disp;
+                    cel.appendChild(aviso);
+                }
+            });
+        }
+
+        function consultar() {
+            if (!saida.value || !prev.value || LG.dias(saida.value, prev.value) < 0) { return; }
+            var pendentes = [];
+            corpo.querySelectorAll('.sel-produto').forEach(function (sel) {
+                var chave = sel.value + '|' + saida.value + '|' + prev.value;
+                if (sel.value && cache[chave] === undefined && pendentes.indexOf(sel.value) < 0) { pendentes.push(sel.value); }
+            });
+            pendentes.forEach(function (p) {
+                var chave = p + '|' + saida.value + '|' + prev.value;
+                var u = api + '&produto=' + encodeURIComponent(p) + '&inicio=' + saida.value + '&fim=' + prev.value
+                        + (reserva ? '&reserva=' + encodeURIComponent(reserva) : '');
+                fetch(u, { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (j) { if (j.ok) { cache[chave] = j.disponivel; avisarEstoque(); } })
+                    .catch(function () { /* sem rede: o servidor confere ao salvar */ });
+            });
+            avisarEstoque();
+        }
+
+        function agendarConsulta() { clearTimeout(espera); espera = setTimeout(consultar, 250); }
+
+        function prepararLinha(tr) {
+            var sel = tr.querySelector('.sel-produto'), diaria = tr.querySelector('.diaria');
+            diaria.dataset.auto = diaria.value === '' ? '1' : '';
+            sel.addEventListener('change', function () {
+                var opt = sel.options[sel.selectedIndex];
+                // Preenche a diária do cadastro, a menos que o usuário tenha digitado outra
+                if (opt && opt.dataset.diaria && (diaria.value === '' || diaria.dataset.auto === '1')) {
+                    diaria.value = LG.decimal(parseFloat(opt.dataset.diaria));
+                    diaria.dataset.auto = '1';
+                }
+                recalcular(); agendarConsulta();
+            });
+            diaria.addEventListener('input', function () { diaria.dataset.auto = ''; recalcular(); });
+            tr.querySelector('.qtd').addEventListener('input', recalcular);
+            tr.querySelector('.remover').addEventListener('click', function () {
+                if (corpo.querySelectorAll('tr.linha-item').length > 1) { tr.remove(); } else {
+                    sel.value = ''; diaria.value = ''; tr.querySelector('.qtd').value = 1;
+                }
+                recalcular();
+            });
+        }
+
+        corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
+        form.querySelector('#add-item').addEventListener('click', function () {
+            var tr = modelo.content.firstElementChild.cloneNode(true);
+            corpo.appendChild(tr);
+            prepararLinha(tr);
+            tr.querySelector('.sel-produto').focus();
+            recalcular();
+        });
+        [saida, prev].forEach(function (el) { el.addEventListener('change', function () { recalcular(); agendarConsulta(); }); });
+        ['#acrescimo', '#desconto'].forEach(function (s) { form.querySelector(s).addEventListener('input', recalcular); });
+        recalcular();
+        consultar();
+    },
+
+    // -----------------------------------------------------------------
+    // Devolução: diárias e atraso pela data, valores e resumo ao vivo
+    // -----------------------------------------------------------------
+    devolucao: function (form) {
+        var data = form.querySelector('#data_dev');
+        var receber = form.querySelector('#receber');
+        var apurado = parseFloat(form.dataset.apurado) || 0;
+        var ajuste = (parseFloat(form.dataset.acrescimo) || 0) - (parseFloat(form.dataset.desconto) || 0);
+        var pago = parseFloat(form.dataset.pago) || 0;
+        var receberEditado = false;
+
+        function recalcular() {
+            var dias = Math.max(1, LG.dias(form.dataset.saida, data.value));
+            var atraso = LG.dias(form.dataset.prev, data.value);
+            form.querySelector('#dev-dias').textContent = dias;
+            form.querySelector('#dev-atraso').textContent = atraso > 0 ? '(' + atraso + ' dia(s) de atraso)' : '';
+            var itens = 0, ficam = 0;
+            form.querySelectorAll('tr.linha-dev').forEach(function (tr) {
+                var inp = tr.querySelector('.qtd-dev');
+                var q = Math.min(parseInt(inp.value, 10) || 0, parseInt(inp.max, 10));
+                var v = q * parseFloat(tr.dataset.diaria) * dias;
+                itens += v;
+                ficam += parseInt(inp.max, 10) - q;
+                tr.querySelector('.valor-dev').textContent = LG.moeda(v);
+            });
+            var desta = itens + LG.numero(form.querySelector('#multa').value) + LG.numero(form.querySelector('#avaria').value);
+            var total = apurado + desta + ajuste;
+            var saldo = total - pago;
+            form.querySelector('#r-desta').textContent = LG.moeda(desta);
+            form.querySelector('#r-total').textContent = LG.moeda(total);
+            form.querySelector('#r-saldo').textContent = LG.moeda(saldo);
+            form.querySelector('#r-pendente-aviso').textContent = ficam > 0
+                ? ficam + ' item(ns) continuarão na rua e serão cobrados na próxima devolução.' : '';
+            if (!receberEditado) { receber.value = saldo > 0 ? LG.decimal(saldo) : ''; }
+        }
+
+        receber.addEventListener('input', function () { receberEditado = true; });
+        form.querySelectorAll('input').forEach(function (el) {
+            if (el !== receber) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); }
+        });
+        recalcular();
+    },
+
     // Máscaras aplicadas enquanto o usuário digita
     mascaras: {
         doc: function (v) {
@@ -83,6 +259,9 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-viacep]').forEach(function (el) {
         el.addEventListener('blur', function () { LG.buscarCep(el); });
     });
+
+    if (document.getElementById('form-locacao')) { LG.novaLocacao(document.getElementById('form-locacao')); }
+    if (document.getElementById('form-devolucao')) { LG.devolucao(document.getElementById('form-devolucao')); }
 
     // Cadastro de cliente: rótulos mudam conforme PF/PJ
     var tipo = document.getElementById('tipo');

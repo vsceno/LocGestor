@@ -284,7 +284,7 @@ code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: .9e
 .form .check { display: flex; align-items: center; font-weight: 400; color: var(--texto); }
 .linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 14px; }
 .ajuda { display: block; font-weight: 400; font-size: .78rem; color: var(--texto-2); margin-top: 3px; }
-.obrig::after { content: " *"; color: var(--vermelho); }
+.obrig::before { content: "*"; color: var(--vermelho); margin-right: 3px; }
 
 .filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
 .filtros input, .filtros select { width: auto; margin: 0; }
@@ -357,6 +357,15 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .dados { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
 .dados dt { color: var(--texto-2); font-size: .85rem; }
 .dados dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Locação: total previsto e resumo da devolução */
+.total-previsto { font-size: 1.1rem; margin: 4px 0 14px; }
+.total-previsto strong { color: var(--laranja-escuro); font-size: 1.35rem; }
+.dados.resumo dd { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela input[type="number"], .tabela input[type="text"], .tabela select {
+    padding: 6px 8px; border: 1px solid var(--borda-forte); border-radius: 6px; font: inherit; max-width: 100%;
+}
+.tabela select { width: 100%; }
 
 /* ---------------------------------------------------------------------
    Login
