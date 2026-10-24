@@ -150,10 +150,11 @@ function one(string $sql, array $params = []): ?array
     return $r === false ? null : $r;
 }
 
+/** Primeira coluna da primeira linha, ou null se não houver linha (um booleano false continua false). */
 function val(string $sql, array $params = [])
 {
-    $r = q($sql, $params)->fetchColumn();
-    return $r === false ? null : $r;
+    $r = q($sql, $params)->fetch(PDO::FETCH_NUM);
+    return $r === false ? null : $r[0];
 }
 
 /** Executa $fn dentro de uma transação; desfaz tudo se der qualquer erro. */
@@ -311,6 +312,24 @@ function old(string $k, $padrao = '')
 function has_old(): bool
 {
     return !empty($GLOBALS['_OLD']);
+}
+
+/** Padrão "contém" para LIKE, com % e _ do usuário escapados. */
+function like(string $s): string
+{
+    return '%' . addcslashes($s, '%_\\') . '%';
+}
+
+/** Valor de um campo de formulário: o que foi digitado (após erro) ou o que está gravado. */
+function valor_form(array $registro, string $campo, $padrao = '')
+{
+    return has_old() ? old($campo, '') : ($registro[$campo] ?? $padrao);
+}
+
+/** Checkbox: após erro, marcado se veio no POST; senão, o valor gravado. */
+function marcado_form(array $registro, string $campo, bool $padrao = false): bool
+{
+    return has_old() ? old($campo, '') !== '' : (bool) ($registro[$campo] ?? $padrao);
 }
 
 // ---------------------------------------------------------------------
@@ -475,6 +494,19 @@ function doc_valido($doc): bool
         return true;
     }
     return false;
+}
+
+/** 85988776655 → (85) 98877-6655; 8532221000 → (85) 3222-1000. Outros formatos ficam como digitados. */
+function telefone_formatar($tel): string
+{
+    $d = so_digitos($tel);
+    if (strlen($d) === 11) {
+        return preg_replace('/(\d{2})(\d{5})(\d{4})/', '($1) $2-$3', $d);
+    }
+    if (strlen($d) === 10) {
+        return preg_replace('/(\d{2})(\d{4})(\d{4})/', '($1) $2-$3', $d);
+    }
+    return trim((string) $tel);
 }
 
 /** 52998224725 → 529.982.247-25; 11222333000181 → 11.222.333/0001-81 */

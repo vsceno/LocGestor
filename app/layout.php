@@ -54,6 +54,20 @@ function flashes_html(): string
     return $html;
 }
 
+/** Selo de situação da locação (aberta, atrasada, vence hoje, devolvida, cancelada). */
+function selo_status_locacao(array $l): string
+{
+    if ($l['status'] === 'aberta') {
+        if ($l['data_prev_devolucao'] < today()) {
+            return '<span class="selo vermelho">atrasada</span>';
+        }
+        return $l['data_prev_devolucao'] === today()
+            ? '<span class="selo amarelo">vence hoje</span>'
+            : '<span class="selo azul">aberta</span>';
+    }
+    return $l['status'] === 'devolvida' ? '<span class="selo verde">devolvida</span>' : '<span class="selo">cancelada</span>';
+}
+
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {

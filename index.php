@@ -11,6 +11,7 @@ const AREA = 'locadora';
 
 require __DIR__ . '/app/bootstrap.php';
 require __DIR__ . '/app/layout.php';
+require __DIR__ . '/app/negocio.php';
 
 executar_rota(
     ['login', 'dashboard', 'clientes', 'produtos', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api'],
