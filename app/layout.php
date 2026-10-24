@@ -1,0 +1,155 @@
+<?php
+/*
+ * LocGestor - layout das telas (menu lateral) e das páginas de impressão (A4).
+ */
+
+declare(strict_types=1);
+
+const MENU = [
+    'dashboard'  => ['Painel',         'painel'],
+    'locacoes'   => ['Locações',       'locacoes'],
+    'reservas'   => ['Reservas',       'reservas'],
+    'clientes'   => ['Clientes',       'clientes'],
+    'produtos'   => ['Produtos',       'produtos'],
+    'caixa'      => ['Fluxo de caixa', 'caixa'],
+    'relatorios' => ['Relatórios',     'relatorios'],
+    'config'     => ['Configurações',  'config'],
+];
+
+/** Ícones SVG inline (traço), 24x24. */
+function icone(string $nome): string
+{
+    $p = [
+        'painel'     => '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+        'locacoes'   => '<path d="M1 4h14v12H1z"/><path d="M15 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+        'reservas'   => '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+        'clientes'   => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        'produtos'   => '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>',
+        'caixa'      => '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+        'relatorios' => '<path d="M12 20V10M18 20V4M6 20v-4"/>',
+        'config'     => '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+        'sair'       => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+        'menu'       => '<path d="M3 12h18M3 6h18M3 18h18"/>',
+    ];
+    return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+         . 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($p[$nome] ?? '') . '</svg>';
+}
+
+/** Endereço de um arquivo de assets com versão (evita cache velho após atualização). */
+function asset(string $caminho): string
+{
+    $arq = RAIZ . '/' . $caminho;
+    return $caminho . (is_file($arq) ? '?v=' . filemtime($arq) : '');
+}
+
+function flashes_html(): string
+{
+    $html = '';
+    foreach (flashes() as $f) {
+        $html .= '<div class="flash flash-' . e($f['tipo']) . '" role="alert">' . e($f['msg']) . '</div>';
+    }
+    return $html;
+}
+
+/** Nome da locadora mostrado no topo do menu. */
+function nome_locadora(): string
+{
+    $emp = empresa();
+    return ($emp['nome_fantasia'] ?? '') !== '' ? $emp['nome_fantasia'] : (tenant()['nome'] ?? '');
+}
+
+function layout_start(string $titulo, string $menuAtivo = ''): void
+{
+    $u = user();
+    ?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?= e($titulo) ?> · <?= e(nome_locadora()) ?></title>
+<link rel="stylesheet" href="<?= e(asset('assets/css/app.css')) ?>">
+</head>
+<body>
+<input type="checkbox" id="menu-toggle" class="menu-toggle" aria-label="Abrir menu">
+<aside class="sidebar">
+    <div class="marca">
+        <span class="logo">LG</span>
+        <div class="marca-txt">
+            <strong title="<?= e(nome_locadora()) ?>"><?= e(nome_locadora()) ?></strong>
+            <small><?= e(config('app_name', 'LocGestor')) ?></small>
+        </div>
+    </div>
+    <nav class="menu">
+        <?php foreach (MENU as $mod => [$rotulo, $ico]): ?>
+            <a href="<?= e(url($mod)) ?>"<?= $mod === $menuAtivo ? ' class="ativo" aria-current="page"' : '' ?>>
+                <?= icone($ico) ?><span><?= e($rotulo) ?></span>
+            </a>
+        <?php endforeach; ?>
+    </nav>
+    <div class="usuario">
+        <div class="usuario-info">
+            <strong><?= e($u['nome'] ?? '') ?></strong>
+            <small><?= e(($u['login'] ?? '') . ' · ' . (($u['perfil'] ?? '') === 'admin' ? 'administrador' : 'operador')) ?></small>
+        </div>
+        <form method="post" action="<?= e(url('login', ['a' => 'sair'])) ?>">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn-sair" title="Sair"><?= icone('sair') ?><span>Sair</span></button>
+        </form>
+    </div>
+</aside>
+<label for="menu-toggle" class="menu-fundo" aria-hidden="true"></label>
+<div class="principal">
+    <header class="topo">
+        <label for="menu-toggle" class="btn-menu" title="Menu"><?= icone('menu') ?></label>
+        <h1><?= e($titulo) ?></h1>
+    </header>
+    <main class="conteudo">
+        <?= flashes_html() ?>
+<?php
+}
+
+/** $scripts: caminhos de JS extras (relativos à raiz), carregados depois do app.js. */
+function layout_end(array $scripts = []): void
+{
+    ?>
+    </main>
+</div>
+<script src="<?= e(asset('assets/js/app.js')) ?>"></script>
+<?php foreach ($scripts as $s): ?>
+<script src="<?= e(asset($s)) ?>"></script>
+<?php endforeach; ?>
+</body>
+</html>
+<?php
+}
+
+/** Página para impressão em A4 (contrato, fatura, relatórios). */
+function print_start(string $titulo): void
+{
+    ?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?= e($titulo) ?></title>
+<link rel="stylesheet" href="<?= e(asset('assets/css/print.css')) ?>">
+</head>
+<body>
+<div class="barra-impressao">
+    <button type="button" onclick="window.print()">Imprimir</button>
+    <button type="button" onclick="history.back()">Voltar</button>
+</div>
+<div class="folha">
+<?php
+}
+
+function print_end(): void
+{
+    ?>
+</div>
+</body>
+</html>
+<?php
+}
