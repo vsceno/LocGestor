@@ -1,0 +1,12 @@
+config.php
+*.log
+.env
+/vendor/
+/node_modules/
+.vscode/
+Thumbs.db
+desktop.ini
+.DS_Store
+*.zip
+/backups/
+*.sql.gz
