@@ -234,7 +234,8 @@ function tenants_criar(): void
         // Linha da empresa (com os textos padrão de contrato e fatura) e as 5 categorias padrão
         q('SELECT provisionar_dados_padrao(:nome)', ['nome' => $nome]);
 
-        q("INSERT INTO usuarios (nome, login, senha_hash, perfil) VALUES (:nome, :login, :hash, 'admin')",
+        // Senha temporária: o admin da locadora é obrigado a trocá-la no primeiro acesso
+        q("INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha) VALUES (:nome, :login, :hash, 'admin', true)",
           ['nome' => $adminNome, 'login' => $adminLogin, 'hash' => password_hash($senhaTemp, PASSWORD_DEFAULT)]);
     });
 
@@ -266,7 +267,7 @@ function tenants_criada(): void
             <dt>Usuário</dt><dd><code><?= e($p['login']) ?></code></dd>
             <dt>Senha temporária</dt><dd><code id="senha-temp"><?= e($p['senha']) ?></code></dd>
         </dl>
-        <p class="muted">Oriente o administrador a trocar a senha em Configurações no primeiro acesso.</p>
+        <p class="muted">No primeiro acesso, o sistema obriga o administrador a definir uma senha nova.</p>
         <p><a class="btn" href="<?= e(url('tenants')) ?>">Voltar para a lista</a></p>
     </div>
     <?php

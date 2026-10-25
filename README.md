@@ -26,7 +26,8 @@ salvo localmente (funciona sem internet).
 7. [Nota fiscal](#7-nota-fiscal)
 8. [Segurança e LGPD](#8-segurança-e-lgpd)
 9. [Problemas comuns](#9-problemas-comuns)
-10. [O que ficou de fora e próximos passos](#10-o-que-ficou-de-fora-e-próximos-passos)
+10. [Colocando em produção: login, HTTPS, backup e PostgreSQL](#10-colocando-em-produção-login-https-backup-e-postgresql)
+11. [O que ficou de fora e próximos passos](#11-o-que-ficou-de-fora-e-próximos-passos)
 
 ---
 
@@ -201,7 +202,8 @@ locgestor/
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução) e graficos.js
 ├── assets/vendor/         chart.umd.js (Chart.js 4.4.1 local)
-├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat
+├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
+│                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
 ├── tests/isolamento.php   testes de isolamento entre locadoras (terminal)
 └── logs/                  app.log e php-erros.log (não versionados)
 ```
@@ -311,18 +313,120 @@ Preparação para o futuro:
 | `php tests\isolamento.php` acusa falha | **não use o sistema em produção** até corrigir: algo no banco deixou de isolar as locadoras |
 | Gráficos vazios em `http://localhost/locgestor/` | um `.htaccess` em `C:\laragon\www` que bloqueia `/vendor/` impede o Chart.js de carregar. Acesse por `http://locgestor.test` |
 | Arquivos "travados" (erro no `git commit`, log com linhas faltando) | programas de backup/sincronização (TeraBox, OneDrive etc.) prendem os arquivos enquanto copiam. Exclua a pasta do projeto da sincronização (ela também contém o `config.php` com as senhas) |
-| PostgreSQL aceita qualquer senha | o Laragon vem com `trust` no `pg_hba.conf`. Defina uma senha para o `postgres` e troque para `scram-sha-256` antes de expor a máquina |
+| PostgreSQL aceita qualquer senha | o Laragon vem com `trust` no `pg_hba.conf`. Siga a seção 10.5 antes de expor a máquina |
+| "Muitas tentativas de acesso. Aguarde 15 minutos..." | limite de login atingido (seção 10.2). Espere 15 minutos ou, como `postgres`: `DELETE FROM login_tentativas;` |
+| Usuário só consegue abrir "Minha senha" | ele entrou com senha temporária; ao definir uma senha nova, o sistema libera as outras telas |
+| `backup.log` com "FALHOU" | PostgreSQL desligado, ou o `postgres` tem senha e falta o `pgpass.conf` (seção 10.4) |
+| Erro "column trocar_senha does not exist" ou "relation login_tentativas does not exist" | banco instalado antes desta versão: rode a migração (seção 10.1) |
 
 ---
 
-## 10. O que ficou de fora e próximos passos
+## 10. Colocando em produção: login, HTTPS, backup e PostgreSQL
+
+### 10.1 Atualizar um banco já instalado (migrações)
+
+Instalações novas já saem completas pelo `instalar.bat`. Um banco criado **antes** de uma atualização recebe as
+mudanças pelos arquivos de `database/migrations/`, em ordem (cada um pode ser rodado mais de uma vez sem estragar nada):
+
+```bat
+psql -U postgres -d locgestor -f database\migrations\001_seguranca_login.sql
+php tests\isolamento.php
+```
+
+| Migração | O que faz |
+|---|---|
+| `001_seguranca_login.sql` | tabela `login_tentativas` (limite de login) e coluna `usuarios.trocar_senha` (senha temporária) |
+
+### 10.2 Proteções do login (já ativas)
+
+- **Limite de tentativas:** 5 erros por conta ou 20 por IP em 15 minutos bloqueiam novas tentativas por 15 minutos,
+  mesmo com a senha certa. Vale para as locadoras e para o painel da plataforma, e também para contas que não
+  existem (o bloqueio não revela quais existem). O banco guarda só *hashes* do IP e da conta, nunca o texto.
+  Cada bloqueio vai para o `logs/app.log` como **ALERTA DE SEGURANÇA**. Um acerto zera os erros daquela conta.
+  Para liberar na hora: `DELETE FROM login_tentativas;` (como `postgres`).
+- **Senha temporária:** o admin criado pelo painel da plataforma, os usuários criados pelo admin da locadora e quem
+  teve a senha redefinida pelo admin entram e só conseguem usar a tela **Minha senha** até definirem uma nova.
+
+### 10.3 HTTPS
+
+1. No Laragon: *Menu › Apache › SSL › Enabled* (ou instale o certificado do seu domínio no servidor).
+2. Confira que `https://locgestor.test` abre.
+3. No `config.php`: `'forcar_https' => true,`
+
+A partir daí, todo acesso por `http://` é redirecionado (301) para `https://`, o navegador passa a exigir HTTPS
+(cabeçalho HSTS) e o cookie de sessão vira `Secure`. Só ative o item 3 depois que o item 2 funcionar.
+
+### 10.4 Backup e restauração
+
+`database\backup.bat` gera um `pg_dump` compactado do banco, confere se o arquivo pode ser lido e mantém os
+**30** mais recentes em `C:\laragon\backups\locgestor` (fora da pasta do site, para nunca ficar acessível pelo
+navegador). Cada execução é anotada em `backup.log`, na mesma pasta.
+
+**Agendar todo dia às 23h** (PowerShell; já feito nesta instalação):
+
+```powershell
+$acao    = New-ScheduledTaskAction -Execute 'C:\laragon\www\locgestor\database\backup.bat' -WorkingDirectory 'C:\laragon\www\locgestor\database'
+$gatilho = New-ScheduledTaskTrigger -Daily -At '23:00'
+# notebook: roda mesmo na bateria e, se estiver desligado às 23h, roda assim que ligar
+$config  = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+Register-ScheduledTask -TaskPath '\LocGestor\' -TaskName 'Backup diario' -Action $acao -Trigger $gatilho -Settings $config -Force
+```
+
+Variáveis opcionais: `BACKUP_DIR` (outra pasta) e `MANTER` (quantos guardar). Se o `postgres` tiver senha
+(seção 10.5), crie `%APPDATA%\postgresql\pgpass.conf` com a linha `localhost:5432:*:postgres:SENHA`.
+
+**Copie os backups para fora do computador** (pendrive, nuvem, outro servidor). Backup que fica só na mesma
+máquina não protege contra defeito no disco, roubo ou vírus.
+
+**Restaurar** (apaga o banco atual; faça antes um backup dele):
+
+```bat
+psql -U postgres -c "DROP DATABASE locgestor"
+psql -U postgres -d postgres -v senha_app=SENHA_APP -v senha_plataforma=SENHA_PLAT -f database\00_roles.sql
+pg_restore -U postgres -d locgestor C:\laragon\backups\locgestor\locgestor_AAAAMMDD_HHMMSS.dump
+php tests\isolamento.php
+```
+
+O `00_roles.sql` recria os papéis e o banco vazio; o `pg_restore` traz as tabelas, os dados, o RLS e as permissões.
+Para só **testar** um backup sem mexer no banco em uso, restaure num banco com outro nome
+(`CREATE DATABASE locgestor_teste OWNER locgestor_owner TEMPLATE template0`) e apague-o depois.
+
+### 10.5 Exigir senha no PostgreSQL
+
+O Laragon vem com `trust` no `pg_hba.conf`: qualquer pessoa ou programa no computador entra no banco como
+qualquer usuário, inclusive `postgres`, sem senha. **Outros projetos** que usam o mesmo PostgreSQL também serão
+afetados pela mudança, então siga na ordem:
+
+1. **Diagnóstico** (não altera nada): mostra quem está sem senha e as regras atuais.
+   ```bat
+   psql -U postgres -d postgres -f database\seguranca_postgres.sql
+   ```
+2. **Defina uma senha** para cada papel marcado como `SEM SENHA` (o `postgres` pelo script; os demais com
+   `ALTER ROLE nome PASSWORD '...'`):
+   ```bat
+   psql -U postgres -d postgres -v senha_postgres=SENHA_FORTE -f database\seguranca_postgres.sql
+   ```
+3. **Coloque as senhas nos outros projetos** (`.env` de cada um) e no `pgpass.conf` do backup (seção 10.4).
+4. **Pare o PostgreSQL** no Laragon, abra o `pg_hba.conf` (o caminho aparece no diagnóstico) e troque `trust` por
+   `scram-sha-256` nas linhas ativas, por exemplo:
+   ```
+   host    all    all    127.0.0.1/32    scram-sha-256
+   host    all    all    ::1/128         scram-sha-256
+   ```
+5. **Inicie o PostgreSQL** e confira: `psql -U postgres` deve pedir senha; `php tests\isolamento.php` deve passar;
+   abra o LocGestor e os outros projetos.
+
+Se algo parar de funcionar, volte `scram-sha-256` para `trust` no `pg_hba.conf` e reinicie o PostgreSQL.
+
+---
+
+## 11. O que ficou de fora e próximos passos
 
 Não implementado nesta versão:
 
 - emissão de **NF-e** (remessa/retorno) e certificado A1 por locadora;
 - **edição de plano e limite** de uma locadora já criada no painel da plataforma (hoje: pelo banco);
-- **troca obrigatória** da senha temporária no primeiro acesso;
-- **recuperação de senha** por e-mail e envio de contrato/fatura por e-mail ou WhatsApp;
+- **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail ou WhatsApp;
 - **cobrança** da assinatura das locadoras (planos e faturamento do SaaS);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** (fotos de avaria, documentos do cliente);
@@ -330,8 +434,9 @@ Não implementado nesta versão:
 
 Sugestões de próximos passos, em ordem:
 
-1. Ajustar o PostgreSQL para `scram-sha-256` e usar senhas fortes em todos os papéis.
-2. Publicar com HTTPS (o cookie de sessão passa a ser `Secure` automaticamente).
-3. Backups diários do banco (`pg_dump`), guardados fora do servidor.
-4. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).
-5. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.
+1. Exigir senha no PostgreSQL (seção 10.5) e copiar os backups para fora do computador.
+2. Testes automatizados das telas rodando no GitHub Actions a cada push, junto com `tests/isolamento.php`.
+3. Envio de contrato/fatura e lembretes de devolução por WhatsApp; PDF gerado no servidor.
+4. Cobrança por PIX com baixa automática no caixa.
+5. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).
+6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.

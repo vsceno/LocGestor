@@ -56,8 +56,15 @@ function login_entrar(): void
     $login = strtolower(post('login'));
     $senha = $_POST['senha'] ?? '';
 
-    $falhar = function (): never {
+    // Excesso de erros recentes nesta conta ou neste IP: recusa sem nem conferir a senha
+    $chaves = login_chaves("$slug|$login");
+    if (login_bloqueado($chaves)) {
+        login_recusar_por_excesso();
+    }
+
+    $falhar = function () use ($chaves): never {
         tenant_limpar();
+        login_falhou($chaves);
         usleep(random_int(600000, 1000000)); // atraso contra tentativa e erro
         log_app('AVISO', 'Login recusado.');
         throw new UserError('Dados de acesso inválidos.');
@@ -86,6 +93,7 @@ function login_entrar(): void
         q('UPDATE usuarios SET senha_hash = :h WHERE id = :id', ['h' => password_hash($senha, PASSWORD_DEFAULT), 'id' => $u['id']]);
     }
     q('UPDATE usuarios SET ultimo_acesso = now() WHERE id = :id', ['id' => $u['id']]);
+    login_sucesso($chaves);
 
     session_regenerate_id(true);
     $_SESSION = [

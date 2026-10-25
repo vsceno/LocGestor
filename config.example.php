@@ -22,6 +22,8 @@ return [
         'user'     => 'locgestor_plataforma',
         'password' => '',
     ],
+    // Em produção, com certificado instalado: true (redireciona http -> https)
+    'forcar_https' => false,
     'app_name' => 'LocGestor',
     'timezone' => 'America/Fortaleza',
     'per_page' => 20,

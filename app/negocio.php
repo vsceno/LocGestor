@@ -877,7 +877,8 @@ function usuario_salvar(array $d, ?string $id = null): void
             if ($ativo) {
                 verificar_limite_usuarios();
             }
-            q('INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo) VALUES (:n, :l, :h, :p, :a)',
+            // A senha foi definida pelo admin: o novo usuário troca no primeiro acesso
+            q('INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo, trocar_senha) VALUES (:n, :l, :h, :p, :a, true)',
               ['n' => $nome, 'l' => $login, 'h' => password_hash($senha, PASSWORD_DEFAULT), 'p' => $perfil,
                'a' => $ativo ? 'true' : 'false']);
             return;
@@ -892,7 +893,9 @@ function usuario_salvar(array $d, ?string $id = null): void
         q('UPDATE usuarios SET nome = :n, login = :l, perfil = :p, ativo = :a WHERE id = :id',
           ['n' => $nome, 'l' => $login, 'p' => $perfil, 'a' => $ativo ? 'true' : 'false', 'id' => $id]);
         if ($senha !== '') {
-            q('UPDATE usuarios SET senha_hash = :h WHERE id = :id', ['h' => password_hash($senha, PASSWORD_DEFAULT), 'id' => $id]);
+            // Senha redefinida pelo admin para outro usuário vale só até o próximo acesso dele
+            q('UPDATE usuarios SET senha_hash = :h, trocar_senha = :t WHERE id = :id',
+              ['h' => password_hash($senha, PASSWORD_DEFAULT), 't' => $id !== uid() ? 'true' : 'false', 'id' => $id]);
         }
     });
 }
@@ -913,5 +916,7 @@ function senha_trocar(string $atual, string $nova, string $confirma): void
     if ($nova === $atual) {
         throw new UserError('A nova senha deve ser diferente da atual.');
     }
-    q('UPDATE usuarios SET senha_hash = :h WHERE id = :id', ['h' => password_hash($nova, PASSWORD_DEFAULT), 'id' => uid()]);
+    q('UPDATE usuarios SET senha_hash = :h, trocar_senha = false WHERE id = :id',
+      ['h' => password_hash($nova, PASSWORD_DEFAULT), 'id' => uid()]);
+    $_SESSION['usuario']['trocar_senha'] = false;
 }

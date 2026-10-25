@@ -76,7 +76,7 @@ function tenant_iniciar_sessao(): void
 
     // O usuário pode ter sido desativado depois do login (consulta já filtrada pelo RLS)
     $u = is_uuid(uid())
-        ? one('SELECT id, nome, login, perfil, ativo FROM usuarios WHERE id = :id', ['id' => uid()])
+        ? one('SELECT id, nome, login, perfil, ativo, trocar_senha FROM usuarios WHERE id = :id', ['id' => uid()])
         : null;
     if ($u === null || !$u['ativo']) {
         tenant_limpar();

@@ -84,6 +84,19 @@ function log_limpo(string $msg): string
 }
 
 // ---------------------------------------------------------------------
+// HTTPS: com 'forcar_https' => true no config.php, todo acesso por http é
+// redirecionado para https, e o navegador passa a exigir https (HSTS).
+// ---------------------------------------------------------------------
+$emHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+if (config('forcar_https', false) && !$emHttps && PHP_SAPI !== 'cli') {
+    header('Location: https://' . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301);
+    exit;
+}
+if ($emHttps) {
+    header('Strict-Transport-Security: max-age=31536000');
+}
+
+// ---------------------------------------------------------------------
 // Cabeçalhos de segurança e sessão
 // ---------------------------------------------------------------------
 header('X-Content-Type-Options: nosniff');
@@ -383,6 +396,53 @@ function require_admin(): void
     if (!is_admin()) {
         throw new UserError('Acesso restrito ao administrador.');
     }
+}
+
+// ---------------------------------------------------------------------
+// Proteção do login contra tentativa e erro: no máximo LOGIN_MAX_CONTA erros
+// por conta e LOGIN_MAX_IP por IP a cada LOGIN_JANELA_MIN minutos.
+// O bloqueio vale mesmo para conta inexistente, para não revelar quais existem.
+// ---------------------------------------------------------------------
+const LOGIN_JANELA_MIN = 15;
+const LOGIN_MAX_CONTA = 5;
+const LOGIN_MAX_IP = 20;
+
+/** Chaves (hash) do IP e da conta. Nada pessoal é guardado em texto. */
+function login_chaves(string $conta): array
+{
+    return [
+        'ip'    => hash('sha256', 'ip|' . ($_SERVER['REMOTE_ADDR'] ?? '')),
+        'conta' => hash('sha256', 'conta|' . AREA . '|' . mb_strtolower($conta)),
+    ];
+}
+
+function login_bloqueado(array $chaves): bool
+{
+    $r = one('SELECT count(*) FILTER (WHERE chave = :c1) AS conta, count(*) FILTER (WHERE chave = :i1) AS ip
+                FROM login_tentativas
+               WHERE chave IN (:c2, :i2) AND criado_em > now() - make_interval(mins => :min)',
+             ['c1' => $chaves['conta'], 'i1' => $chaves['ip'], 'c2' => $chaves['conta'], 'i2' => $chaves['ip'],
+              'min' => LOGIN_JANELA_MIN]);
+    return $r['conta'] >= LOGIN_MAX_CONTA || $r['ip'] >= LOGIN_MAX_IP;
+}
+
+function login_falhou(array $chaves): void
+{
+    q('INSERT INTO login_tentativas (chave) VALUES (:c), (:i)', ['c' => $chaves['conta'], 'i' => $chaves['ip']]);
+    q("DELETE FROM login_tentativas WHERE criado_em < now() - INTERVAL '1 day'");
+}
+
+/** Login certo zera os erros daquela conta (os do IP continuam contando). */
+function login_sucesso(array $chaves): void
+{
+    q('DELETE FROM login_tentativas WHERE chave = :c', ['c' => $chaves['conta']]);
+}
+
+function login_recusar_por_excesso(): never
+{
+    usleep(random_int(600000, 1000000));
+    log_app('ALERTA DE SEGURANÇA', 'Login bloqueado por excesso de tentativas.');
+    throw new UserError('Muitas tentativas de acesso. Aguarde ' . LOGIN_JANELA_MIN . ' minutos e tente de novo.');
 }
 
 /** Encerra a sessão atual e abre uma nova, vazia (para levar a mensagem flash). */

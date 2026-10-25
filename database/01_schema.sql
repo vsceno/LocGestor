@@ -59,6 +59,15 @@ CREATE TABLE plataforma_usuarios (
     CONSTRAINT plataforma_usuarios_login_uk UNIQUE (login)
 );
 
+-- Tentativas de login que falharam (limite contra tentativa e erro).
+-- Guarda só hashes do IP e da conta, nunca o IP ou o login em texto.
+CREATE TABLE login_tentativas (
+    id          uuid PRIMARY KEY DEFAULT uuidv7(),
+    chave       CHAR(64)    NOT NULL,
+    criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX login_tentativas_chave_idx ON login_tentativas (chave, criado_em);
+
 -- =====================================================================
 -- TABELAS DAS LOCADORAS (todas com tenant_id + RLS)
 -- =====================================================================
@@ -100,6 +109,7 @@ CREATE TABLE usuarios (
     senha_hash    VARCHAR(255) NOT NULL,
     perfil        VARCHAR(10)  NOT NULL DEFAULT 'operador' CHECK (perfil IN ('admin', 'operador')),
     ativo         BOOLEAN      NOT NULL DEFAULT TRUE,
+    trocar_senha  BOOLEAN      NOT NULL DEFAULT FALSE,   -- senha temporária: precisa trocar no próximo acesso
     ultimo_acesso TIMESTAMPTZ,
     criado_em     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT usuarios_tenant_id_uk UNIQUE (tenant_id, id),
@@ -430,6 +440,9 @@ GRANT SELECT, INSERT ON empresa, categorias TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE ON usuarios TO locgestor_plataforma;
 GRANT SELECT ON clientes, locacoes TO locgestor_plataforma;
 GRANT EXECUTE ON FUNCTION app_tenant_id(), provisionar_dados_padrao(TEXT) TO locgestor_plataforma;
+
+-- Proteção do login (as duas áreas)
+GRANT SELECT, INSERT, DELETE ON login_tentativas TO locgestor_app, locgestor_plataforma;
 
 -- Não há sequências (as chaves são uuidv7), mas se alguma for criada o app poderá usá-la
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO locgestor_app, locgestor_plataforma;

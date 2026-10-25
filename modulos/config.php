@@ -145,6 +145,9 @@ function config_senha(): void
 {
     layout_start('Configurações', 'config');
     config_abas('senha');
+    if (!empty(user()['trocar_senha'])) {
+        echo '<div class="flash flash-aviso">Você entrou com uma senha temporária. Por segurança, defina uma senha nova para continuar.</div>';
+    }
     ?>
     <div class="card" style="max-width:480px">
         <h2>Trocar minha senha</h2>

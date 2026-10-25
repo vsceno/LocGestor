@@ -46,10 +46,16 @@ function login_entrar(): void
     $login = strtolower(post('login'));
     $senha = $_POST['senha'] ?? '';
 
+    $chaves = login_chaves($login);
+    if (login_bloqueado($chaves)) {
+        login_recusar_por_excesso();
+    }
+
     $u = $login !== '' && is_string($senha) && $senha !== ''
         ? one('SELECT id, nome, login, senha_hash, ativo FROM plataforma_usuarios WHERE login = :l', ['l' => $login])
         : null;
     if ($u === null || !$u['ativo'] || !password_verify($senha, $u['senha_hash'])) {
+        login_falhou($chaves);
         usleep(random_int(600000, 1000000));
         log_app('AVISO', 'Login da plataforma recusado.');
         throw new UserError('Dados de acesso inválidos.');
@@ -60,6 +66,7 @@ function login_entrar(): void
           ['h' => password_hash($senha, PASSWORD_DEFAULT), 'id' => $u['id']]);
     }
     q('UPDATE plataforma_usuarios SET ultimo_acesso = now() WHERE id = :id', ['id' => $u['id']]);
+    login_sucesso($chaves);
 
     session_regenerate_id(true);
     $_SESSION = ['usuario' => ['id' => $u['id'], 'nome' => $u['nome'], 'login' => $u['login'], 'perfil' => 'suporte']];
