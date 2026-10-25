@@ -264,7 +264,7 @@ function relatorios_ver(): void
         relatorio_csv($chave, $rel, $linhas, $totais);
     }
     if (get('imprimir') === '1') {
-        relatorio_impressao($rel, $linhas, $totais, $subtitulo);
+        relatorio_impressao($rel, $linhas, $totais, $subtitulo, url('relatorios', $params));
         return;
     }
 
@@ -336,17 +336,11 @@ function relatorio_tabela(array $rel, array $linhas, array $totais): void
     <?php
 }
 
-function relatorio_impressao(array $rel, array $linhas, array $totais, string $subtitulo): void
+function relatorio_impressao(array $rel, array $linhas, array $totais, string $subtitulo, string $voltar): void
 {
-    $emp = empresa();
-    print_start($rel['titulo']);
-    ?>
-    <div class="cabecalho">
-        <div><h1><?= e($emp['nome_fantasia'] ?: $emp['razao_social']) ?></h1><p class="muted"><?= e($rel['descricao']) ?></p></div>
-        <div class="doc"><h1><?= e($rel['titulo']) ?></h1><p class="muted"><?= e($subtitulo) ?></p>
-            <p class="muted">Emitido em <?= e(dt(date('Y-m-d H:i'), true)) ?></p></div>
-    </div>
-    <?php
+    print_start($rel['titulo'], $voltar);
+    cabecalho_impressao($rel['titulo'], '', $subtitulo);
+    echo '<p class="muted">' . e($rel['descricao']) . '</p>';
     relatorio_tabela($rel, $linhas, $totais);
     print_end();
 }

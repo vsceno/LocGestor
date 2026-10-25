@@ -612,26 +612,6 @@ function data_extenso(string $d): string
     return date('j', $ts) . ' de ' . MESES[(int) date('n', $ts)] . ' de ' . date('Y', $ts);
 }
 
-function cabecalho_impressao(string $titulo, array $loc): void
-{
-    $emp = empresa();
-    ?>
-    <div class="cabecalho">
-        <div>
-            <h1><?= e($emp['nome_fantasia'] ?: $emp['razao_social']) ?></h1>
-            <p><?= e($emp['razao_social']) ?><?= $emp['cnpj'] !== '' ? ' · CNPJ ' . e(doc_formatar($emp['cnpj'])) : '' ?><?= $emp['ie'] !== '' ? ' · IE ' . e($emp['ie']) : '' ?></p>
-            <p class="muted"><?= e(trim($emp['endereco'] . ' · ' . $emp['cidade'] . '/' . $emp['uf'] . ($emp['cep'] !== '' ? ' · CEP ' . $emp['cep'] : ''), ' ·/')) ?></p>
-            <p class="muted"><?= e(trim($emp['telefone'] . ' · ' . $emp['email'], ' ·')) ?></p>
-        </div>
-        <div class="doc">
-            <h1><?= e($titulo) ?></h1>
-            <p>Nº <strong><?= e($loc['numero']) ?></strong></p>
-            <p class="muted">Emitido em <?= e(dt(today())) ?></p>
-        </div>
-    </div>
-    <?php
-}
-
 function locatario_impressao(array $loc): void
 {
     $c = one('SELECT * FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
@@ -643,7 +623,7 @@ function locatario_impressao(array $loc): void
         <tr><th><?= $c['tipo'] === 'PJ' ? 'CNPJ' : 'CPF' ?></th><td><?= e(doc_formatar($c['cpf_cnpj'])) ?></td>
             <th style="width:18%"><?= $c['tipo'] === 'PJ' ? 'Insc. estadual' : 'RG' ?></th><td><?= e($c['rg_ie']) ?></td></tr>
         <tr><th>Endereço</th><td colspan="3"><?= e($end) ?><?= $c['cidade'] !== '' ? ' · ' . e($c['cidade'] . '/' . $c['uf']) : '' ?><?= $c['cep'] !== '' ? ' · CEP ' . e($c['cep']) : '' ?></td></tr>
-        <tr><th>Telefone</th><td><?= e(trim($c['telefone'] . ' ' . $c['celular'])) ?></td><th>E-mail</th><td><?= e($c['email']) ?></td></tr>
+        <tr><th>Telefone</th><td><?= implode(' · ', array_map(fn($t) => '<span class="nowrap">' . e($t) . '</span>', array_filter([$c['telefone'], $c['celular']]))) ?></td><th>E-mail</th><td><?= e($c['email']) ?></td></tr>
     </table>
     <?php
 }
@@ -658,8 +638,8 @@ function locacoes_contrato(): void
                    WHERE li.locacao_id = :id ORDER BY p.descricao', ['id' => $loc['id']]);
     $subtotal = 0.0;
 
-    print_start('Contrato de locação nº ' . $loc['numero']);
-    cabecalho_impressao('Contrato de locação', $loc);
+    print_start('Contrato de locação nº ' . $loc['numero'], url_locacao($loc));
+    cabecalho_impressao('Contrato de locação', 'Nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
     <h2>Período e local</h2>
@@ -674,7 +654,7 @@ function locacoes_contrato(): void
             <th class="num">Valor de reposição (un.)</th><th class="num">Subtotal previsto</th></tr></thead>
         <tbody>
         <?php foreach ($itens as $it): $sub = $it['quantidade'] * $it['valor_diaria'] * $dias; $subtotal += $sub; ?>
-            <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td><?= e($it['codigo']) ?></td>
+            <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
                 <td><?= e($it['descricao']) ?></td><td class="num"><?= money($it['valor_diaria']) ?></td>
                 <td class="num"><?= money($it['valor_reposicao']) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
@@ -718,8 +698,8 @@ function locacoes_fatura(): void
                   ['id' => $loc['id']]);
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
-    print_start('Fatura de locação nº ' . $loc['numero']);
-    cabecalho_impressao('Fatura de locação', $loc);
+    print_start('Fatura de locação nº ' . $loc['numero'], url_locacao($loc));
+    cabecalho_impressao('Fatura de locação', 'Nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
     <h2>Período</h2>

@@ -183,9 +183,11 @@ function e($v): string
     return htmlspecialchars((string) ($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/** 1234.5 → "R$ 1.234,50"; negativo → "-R$ 692,65" */
 function money($v): string
 {
-    return 'R$ ' . number_format((float) $v, 2, ',', '.');
+    $v = round((float) $v, 2);
+    return ($v < 0 ? '-' : '') . 'R$ ' . number_format(abs($v), 2, ',', '.');
 }
 
 function num($v, int $casas = 0): string

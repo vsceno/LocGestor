@@ -172,9 +172,14 @@ function layout_end(array $scripts = []): void
 <?php
 }
 
-/** Página para impressão em A4 (contrato, fatura, relatórios). */
-function print_start(string $titulo): void
+/**
+ * Página para impressão em A4 (contrato, fatura, relatórios).
+ * $voltar: para onde o botão Voltar leva. Essas páginas abrem em aba nova,
+ * onde não há histórico, por isso o botão é um link e não history.back().
+ */
+function print_start(string $titulo, string $voltar = ''): void
 {
+    $voltar = $voltar !== '' ? $voltar : url_inicio();
     ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -187,10 +192,50 @@ function print_start(string $titulo): void
 <body>
 <div class="barra-impressao">
     <button type="button" onclick="window.print()">Imprimir</button>
-    <button type="button" onclick="history.back()">Voltar</button>
+    <a href="<?= e($voltar) ?>">Voltar</a>
 </div>
 <div class="folha">
 <?php
+}
+
+/**
+ * Cabeçalho das páginas de impressão: dados da locadora logada à esquerda e,
+ * à direita, um quadro com o título do documento, o número/período e a data de emissão.
+ */
+function cabecalho_impressao(string $titulo, string $destaque = '', string $info = ''): void
+{
+    $emp = empresa();
+    $doc = array_filter([
+        $emp['cnpj'] !== '' ? 'CNPJ ' . doc_formatar($emp['cnpj']) : '',
+        $emp['ie'] !== '' ? 'IE ' . $emp['ie'] : '',
+    ]);
+    $cidade = array_filter([
+        trim($emp['cidade'] . ($emp['uf'] !== '' ? '/' . $emp['uf'] : ''), '/'),
+        $emp['cep'] !== '' ? 'CEP ' . $emp['cep'] : '',
+    ]);
+    $contato = array_filter([$emp['telefone'], $emp['email']]);
+    // Cada informação fica inteira na linha (nada de "CEP 60325-" numa linha e "001" na outra)
+    $linha = fn(array $partes) => implode(' · ', array_map(fn($p) => '<span class="nowrap">' . e($p) . '</span>', $partes));
+    ?>
+    <header class="cabecalho">
+        <div class="emitente">
+            <div class="emitente-nome"><?= e($emp['nome_fantasia'] ?: $emp['razao_social']) ?></div>
+            <?php if ($emp['nome_fantasia'] !== '' && $emp['nome_fantasia'] !== $emp['razao_social']): ?>
+                <div class="emitente-razao"><?= e($emp['razao_social']) ?></div>
+            <?php endif; ?>
+            <?php if ($doc): ?><div><?= $linha($doc) ?></div><?php endif; ?>
+            <?php if ($emp['endereco'] !== ''): ?><div><?= e($emp['endereco']) ?></div><?php endif; ?>
+            <?php if ($cidade): ?><div><?= $linha($cidade) ?></div><?php endif; ?>
+            <?php if ($contato): ?><div><?= $linha($contato) ?></div><?php endif; ?>
+        </div>
+        <div class="doc">
+            <div class="doc-titulo"><?= e($titulo) ?></div>
+            <?php if ($destaque !== ''): ?><div class="doc-numero"><?= e($destaque) ?></div><?php endif; ?>
+            <?php if ($info !== ''): ?><div class="doc-info"><?= e($info) ?></div><?php endif; ?>
+            <div class="doc-info">Emitido em <?= e(date('d/m/Y')) ?></div>
+        </div>
+    </header>
+    <?php
 }
 
 function print_end(): void

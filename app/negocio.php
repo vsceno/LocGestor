@@ -798,8 +798,9 @@ function empresa_salvar(array $d): void
         'cidade'          => trim((string) ($d['cidade'] ?? '')),
         'uf'              => strtoupper(trim((string) ($d['uf'] ?? ''))),
         'cep'             => trim((string) ($d['cep'] ?? '')),
-        'termos_contrato' => trim((string) ($d['termos_contrato'] ?? '')),
-        'obs_fatura'      => trim((string) ($d['obs_fatura'] ?? '')),
+        // O navegador envia as quebras de linha do <textarea> como \r\n: guarda só \n
+        'termos_contrato' => trim(str_replace(["\r\n", "\r"], "\n", (string) ($d['termos_contrato'] ?? ''))),
+        'obs_fatura'      => trim(str_replace(["\r\n", "\r"], "\n", (string) ($d['obs_fatura'] ?? ''))),
     ];
     $erros = [];
     if (mb_strlen($e['razao_social']) < 3 || mb_strlen($e['razao_social']) > 150) {

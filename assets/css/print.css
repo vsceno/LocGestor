@@ -39,7 +39,15 @@ body {
     font-weight: 600;
     cursor: pointer;
 }
-.barra-impressao button + button { background: #fff; color: var(--texto); border-color: #fff; }
+.barra-impressao a {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid #fff;
+    background: #fff;
+    color: var(--texto);
+    font-weight: 600;
+    text-decoration: none;
+}
 
 /* Folha A4 na tela */
 .folha {
@@ -62,8 +70,30 @@ th { background: #f2f3f5; font-size: 9pt; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 tfoot td { font-weight: 700; }
 
-.cabecalho { display: flex; justify-content: space-between; gap: 8mm; border-bottom: 2px solid var(--texto); padding-bottom: 3mm; margin-bottom: 4mm; }
-.cabecalho .doc { text-align: right; }
+/* Cabeçalho: locadora à esquerda, quadro do documento à direita */
+.cabecalho {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8mm;
+    align-items: start;
+    border-bottom: 2px solid var(--texto);
+    padding-bottom: 4mm;
+    margin-bottom: 5mm;
+}
+.emitente { font-size: 9.5pt; line-height: 1.5; color: var(--texto-2); }
+.emitente-nome { font-size: 17pt; font-weight: 700; line-height: 1.2; color: var(--texto); margin-bottom: 1.5mm; }
+.emitente-razao { font-weight: 600; color: var(--texto); }
+.doc {
+    min-width: 50mm;
+    text-align: center;
+    border: 1.5px solid var(--texto);
+    border-radius: 2mm;
+    padding: 3mm 5mm;
+}
+.doc-titulo { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+.doc-numero { font-size: 20pt; font-weight: 700; line-height: 1.2; color: var(--laranja); margin: 1mm 0; white-space: nowrap; }
+.doc-info { font-size: 8.5pt; color: var(--texto-2); white-space: nowrap; }
+.nowrap { white-space: nowrap; }
 .muted { color: var(--texto-2); }
 .clausulas { white-space: pre-line; font-size: 9.5pt; text-align: justify; }
 .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 15mm; margin-top: 18mm; text-align: center; }
@@ -79,8 +109,9 @@ tfoot td { font-weight: 700; }
     h2, table, .assinaturas { break-inside: avoid; }
 }
 
-@media (max-width: 760px) {
+/* Só na tela: a área útil de uma folha A4 (~700px) é menor que 760px e não pode cair nesta regra */
+@media screen and (max-width: 760px) {
     .folha { padding: 8mm; min-height: 0; margin: 8px auto; }
-    .cabecalho { flex-direction: column; }
-    .cabecalho .doc { text-align: left; }
+    .cabecalho { grid-template-columns: minmax(0, 1fr); }
+    .doc { justify-self: start; }
 }
