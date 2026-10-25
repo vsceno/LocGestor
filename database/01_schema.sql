@@ -98,6 +98,10 @@ CLÁUSULA 4ª - DAS AVARIAS E EXTRAVIOS: Em caso de dano, perda, furto ou roubo,
 CLÁUSULA 5ª - DA SUBLOCAÇÃO: É vedado ao LOCATÁRIO sublocar, ceder, emprestar ou transferir a terceiros os bens locados, bem como retirá-los do local de uso informado sem autorização por escrito da LOCADORA.',
     obs_fatura      TEXT         NOT NULL DEFAULT
 'Locação de bens móveis - operação não sujeita ao ISS (LC 116/2003, item 3.01 vetado; Súmula Vinculante 31 do STF). Confirme o enquadramento com seu contador.',
+    -- PIX para cobrança (BR Code): chave, nome (até 25) e cidade (até 15) do recebedor. Vazia = desligado.
+    pix_chave       VARCHAR(77)  NOT NULL DEFAULT '',
+    pix_nome        VARCHAR(25)  NOT NULL DEFAULT '',
+    pix_cidade      VARCHAR(15)  NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id)
 );
 

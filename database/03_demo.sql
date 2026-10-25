@@ -50,7 +50,8 @@ BEGIN
 
     UPDATE empresa SET nome_fantasia = 'Alfa Locações', cnpj = '11444777000161', ie = '06.123456-7',
            telefone = '(85) 3222-1000', email = 'contato@alfalocacoes.com.br',
-           endereco = 'Av. Bezerra de Menezes, 1500 - São Gerardo', cidade = 'Fortaleza', uf = 'CE', cep = '60325-001';
+           endereco = 'Av. Bezerra de Menezes, 1500 - São Gerardo', cidade = 'Fortaleza', uf = 'CE', cep = '60325-001',
+           pix_chave = '11444777000161', pix_nome = 'ALFA LOCACOES', pix_cidade = 'FORTALEZA';
 
     -- admin / admin123  (hash gerado com: php -r "echo password_hash('admin123', PASSWORD_DEFAULT);")
     INSERT INTO usuarios (nome, login, senha_hash, perfil)

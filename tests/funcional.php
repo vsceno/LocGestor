@@ -206,6 +206,7 @@ register_shutdown_function(function () use ($base, $inicio) {
         }
         $q("DELETE FROM tenants WHERE slug LIKE 'teste-%'");
         $q("UPDATE tenants SET status = 'ativa' WHERE slug IN ('alfa-locacoes', 'beta-eventos')");
+        $q("UPDATE empresa SET pix_chave = '', pix_nome = '', pix_cidade = '' WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'beta-eventos')");
         $q('DELETE FROM login_tentativas');
         db('COMMIT');
         echo "\n(Limpeza concluída: dados de teste removidos.)\n";
@@ -345,6 +346,38 @@ $r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar'
 $pg = $alfa->get('index.php?p=locacoes&a=ver&n=' . num_locacao($r))['corpo'];
 ok(!str_contains($pg, 'https://wa.me/') && str_contains($pg, 'btn-whats') && str_contains($pg, 'desativado')
    && str_contains($pg, 'Cadastre o celular do cliente'), 'cliente sem telefone: botões desativados, com a orientação');
+
+// =====================================================================
+secao('PIX (BR Code copia e cola + QR Code)');
+require_once __DIR__ . '/../app/pix.php';
+ok(pix_crc16('123456789') === '29B1', 'CRC16-CCITT confere com o valor padrão de verificação (29B1)');
+ok(pix_payload('123e4567-e12b-12d1-a456-426655440000', 'Fulano de Tal', 'BRASILIA')
+   === '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-4266554400005204000053039865802BR5913Fulano de Tal6008BRASILIA62070503***63041D3D',
+   'código idêntico ao exemplo do manual do Banco Central');
+$crcValido = fn(string $p) => strlen($p) > 8 && pix_crc16(substr($p, 0, -4)) === substr($p, -4);
+preg_match('/data-pix="([^"]+)"/', $alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo'], $m);
+$payload = html_entity_decode($m[1] ?? '', ENT_QUOTES, 'UTF-8');
+ok(str_contains($payload, '0114114447770001615') && str_contains($payload, '5406120.00') && str_contains($payload, '0506LOC' . $N) && $crcValido($payload),
+   "fatura nº $N: PIX com a chave da Alfa, valor do saldo (120.00), identificação LOC$N e CRC válido");
+$linksSaldo = $links($alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo'])['5585997015566'] ?? [];
+ok((bool) array_filter($linksSaldo, fn($t) => str_contains($t, 'PIX Copia e Cola') && str_contains($t, $payload)),
+   'cobrança pelo WhatsApp leva o código PIX copia e cola');
+ok(str_contains($alfa->get('index.php?p=locacoes&a=ver&n=141')['corpo'], 'data-pix="'), 'locação aberta com saldo mostra o QR Code');
+// Beta sem chave PIX: nada de QR, e o admin vê o aviso para configurar
+$nBeta = dbv("SELECT l.numero FROM locacoes l JOIN vw_locacao_valores v ON v.locacao_id = l.id
+               WHERE l.tenant_id = :t AND l.status = 'aberta' AND v.valor_atual > v.valor_pago ORDER BY l.numero LIMIT 1", ['t' => $betaId]);
+$pb = $beta->get("index.php?p=locacoes&a=ver&n=$nBeta")['corpo'];
+ok(!str_contains($pb, 'data-pix=') && str_contains($pb, 'Cadastre a chave PIX'), 'locadora sem chave PIX: sem QR Code, com orientação ao admin');
+// Validação da chave em Configurações (na Beta; a limpeza devolve a chave vazia)
+$empBeta = db('SELECT * FROM empresa WHERE tenant_id = :t', ['t' => $betaId])->fetch();
+$form = array_intersect_key($empBeta, array_flip(['razao_social', 'nome_fantasia', 'cnpj', 'ie', 'telefone', 'email', 'endereco',
+                                                    'cidade', 'uf', 'cep', 'termos_contrato', 'obs_fatura']));
+$beta->enviar('index.php?p=config', 'index.php?p=config&a=empresa_salvar', $form + ['pix_chave' => 'chave-errada']);
+ok(str_contains($beta->mensagem('index.php?p=config'), 'Chave PIX inválida'), 'chave PIX inválida é recusada');
+$beta->enviar('index.php?p=config', 'index.php?p=config&a=empresa_salvar', $form + ['pix_chave' => '(85) 99999-0000', 'pix_nome' => 'Beta Eventos e Locações Ltda']);
+$pixBeta = db('SELECT pix_chave, pix_nome, pix_cidade FROM empresa WHERE tenant_id = :t', ['t' => $betaId])->fetch();
+ok($pixBeta['pix_chave'] === '+5585999990000' && $pixBeta['pix_nome'] === 'Beta Eventos e Locacoes L' && $pixBeta['pix_cidade'] === 'Fortaleza',
+   'celular vira +5585999990000; nome sem acento cortado em 25; cidade da empresa', json_encode($pixBeta, JSON_UNESCAPED_UNICODE));
 
 // =====================================================================
 secao('Isolamento pelas telas e pela API');

@@ -317,6 +317,7 @@ function locacoes_ver(): void
                       ['id' => $loc['id']]);
     $cliente = one('SELECT id, telefone, celular FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
     $whats = whatsapp_locacao($loc);
+    $pix = locacao_pix($loc);
 
     layout_start('Locação nº ' . $loc['numero'], 'locacoes');
     ?>
@@ -366,6 +367,19 @@ function locacoes_ver(): void
                     ? 'Abre o WhatsApp com a mensagem pronta; confira e toque em enviar.'
                     : 'Cadastre o celular do cliente para usar o WhatsApp.' ?></p>
             </div>
+            <?php if ($pix !== null): ?>
+            <div class="card">
+                <h2>Cobrar por PIX</h2>
+                <?= pix_bloco($pix) ?>
+                <p class="muted" style="margin:10px 0 0">Quando o pagamento cair na conta, registre-o abaixo em "Receber pagamento" (forma PIX).</p>
+            </div>
+            <?php elseif ($saldo > 0.004 && empty(empresa()['pix_chave']) && is_admin()): ?>
+            <div class="card">
+                <h2>Cobrar por PIX</h2>
+                <p class="muted" style="margin:0">Cadastre a chave PIX da locadora em
+                    <a href="<?= e(url('config')) ?>">Configurações</a> para mostrar aqui o QR Code com o valor do saldo.</p>
+            </div>
+            <?php endif; ?>
             <div class="card">
                 <h2>Receber pagamento</h2>
                 <form method="post" action="<?= e(url('locacoes', ['a' => 'receber'])) ?>" class="form">
@@ -482,7 +496,7 @@ function locacoes_ver(): void
         </div>
     </div>
     <?php
-    layout_end();
+    layout_end($pix !== null ? ['assets/vendor/qrcode.js', 'assets/js/pix.js'] : []);
 }
 
 function locacoes_receber(): void
@@ -716,6 +730,7 @@ function locacoes_fatura(): void
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
     $whats = whatsapp_locacao($loc)['links'];
+    $pix = locacao_pix($loc);
     print_start('Fatura de locação nº ' . $loc['numero'], url_locacao($loc),
                 botao_whatsapp($whats['saldo'] ?? $whats['resumo'] ?? null, isset($whats['saldo']) ? 'Cobrar saldo no WhatsApp' : 'Enviar resumo no WhatsApp'));
     cabecalho_impressao('Fatura de locação', 'Nº ' . $loc['numero']);
@@ -748,8 +763,9 @@ function locacoes_fatura(): void
             <tr><td colspan="5" class="num">Saldo a pagar</td><td class="num"><?= money(max(0, $saldo)) ?></td></tr>
         </tfoot>
     </table>
+    <?php if ($pix !== null): ?><?= pix_bloco($pix) ?><?php endif; ?>
     <div class="obs-fiscal"><?= nl2br(e($emp['obs_fatura'])) ?></div>
     <p class="muted" style="margin-top:4mm">Este documento é uma fatura de locação de bens móveis e não substitui nota fiscal quando exigida.</p>
     <?php
-    print_end();
+    print_end($pix !== null ? ['assets/vendor/qrcode.js', 'assets/js/pix.js'] : []);
 }

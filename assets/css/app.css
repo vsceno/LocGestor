@@ -372,6 +372,16 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 .relatorios-lista a:hover .card { border-color: var(--laranja); }
 .relatorios-lista .card { height: 100%; margin: 0; }
 
+/* PIX: QR Code + copia e cola */
+.pix { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.pix-qr { width: 168px; height: 168px; flex: 0 0 auto; background: #fff; border: 1px solid var(--borda); border-radius: 6px; padding: 4px; }
+.pix-qr svg { width: 100%; height: 100%; display: block; }
+.pix-info { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pix-ajuda { font-size: .82rem; color: var(--texto-2); }
+.pix-codigo { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: .75rem; padding: 6px 8px;
+              border: 1px solid var(--borda-forte); border-radius: 6px; resize: none; word-break: break-all; }
+.pix-copiar { align-self: flex-start; }
+
 /* Locação: total previsto e resumo da devolução */
 .total-previsto { font-size: 1.1rem; margin: 4px 0 14px; }
 .total-previsto strong { color: var(--laranja-escuro); font-size: 1.35rem; }

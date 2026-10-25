@@ -59,6 +59,21 @@ function config_index(): void
             <label>Observação fiscal impressa na fatura<textarea name="obs_fatura" rows="3"><?= e($v('obs_fatura')) ?></textarea>
                 <span class="ajuda">Confirme o texto com o seu contador. Esta versão não emite NF-e.</span></label>
         </div>
+        <div class="card">
+            <h2>PIX para cobrança</h2>
+            <p class="muted">Com a chave preenchida, a locação e a fatura mostram um QR Code e o "PIX copia e cola" com o
+                valor do saldo, e a cobrança pelo WhatsApp já leva o código. O pagamento cai direto na conta da locadora;
+                registre o recebimento na locação quando o dinheiro entrar.</p>
+            <div class="linha">
+                <label>Chave PIX<input type="text" name="pix_chave" value="<?= e($v('pix_chave')) ?>" maxlength="77" autocomplete="off"
+                       placeholder="CPF, CNPJ, e-mail, +55 celular ou chave aleatória">
+                    <span class="ajuda">Deixe vazia para não oferecer PIX.</span></label>
+                <label>Nome do recebedor<input type="text" name="pix_nome" value="<?= e($v('pix_nome')) ?>" maxlength="25">
+                    <span class="ajuda">Até 25 letras, sem acentos. Vazio: usa o nome da empresa.</span></label>
+                <label>Cidade do recebedor<input type="text" name="pix_cidade" value="<?= e($v('pix_cidade')) ?>" maxlength="15">
+                    <span class="ajuda">Até 15 letras. Vazio: usa a cidade da empresa.</span></label>
+            </div>
+        </div>
         <button class="btn">Salvar</button>
     </form>
     <?php

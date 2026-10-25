@@ -801,6 +801,9 @@ function empresa_salvar(array $d): void
         // O navegador envia as quebras de linha do <textarea> como \r\n: guarda só \n
         'termos_contrato' => trim(str_replace(["\r\n", "\r"], "\n", (string) ($d['termos_contrato'] ?? ''))),
         'obs_fatura'      => trim(str_replace(["\r\n", "\r"], "\n", (string) ($d['obs_fatura'] ?? ''))),
+        'pix_chave'       => trim((string) ($d['pix_chave'] ?? '')),
+        'pix_nome'        => pix_texto((string) ($d['pix_nome'] ?? ''), 25),
+        'pix_cidade'      => pix_texto((string) ($d['pix_cidade'] ?? ''), 15),
     ];
     $erros = [];
     if (mb_strlen($e['razao_social']) < 3 || mb_strlen($e['razao_social']) > 150) {
@@ -823,11 +826,64 @@ function empresa_salvar(array $d): void
     if ($e['termos_contrato'] === '') {
         $erros[] = 'O texto do contrato não pode ficar vazio.';
     }
+    if ($e['pix_chave'] !== '') {
+        $chave = pix_chave_normalizar($e['pix_chave']);
+        if ($chave === null) {
+            $erros[] = 'Chave PIX inválida (use CPF, CNPJ, e-mail, celular com DDD ou a chave aleatória).';
+        } else {
+            $e['pix_chave'] = $chave;
+            // Sem nome/cidade próprios, usa os da empresa (o banco exige os dois)
+            $e['pix_nome'] = $e['pix_nome'] ?: pix_texto($e['nome_fantasia'] ?: $e['razao_social'], 25);
+            $e['pix_cidade'] = $e['pix_cidade'] ?: pix_texto($e['cidade'], 15);
+            if ($e['pix_cidade'] === '') {
+                $erros[] = 'Informe a cidade do recebedor PIX (ou a cidade da empresa).';
+            }
+        }
+    }
     if ($erros) {
         throw new UserError(implode(' ', $erros));
     }
     $sets = implode(', ', array_map(fn($k) => "$k = :$k", array_keys($e)));
     q("UPDATE empresa SET $sets", $e); // sem WHERE de propósito: o RLS restringe à linha da locadora logada
+}
+
+/**
+ * Valida e padroniza a chave PIX como o banco espera; null se inválida.
+ * CPF/CNPJ: só dígitos (com dígitos verificadores válidos); celular: +55DDDNÚMERO;
+ * e-mail e chave aleatória: em minúsculas.
+ */
+function pix_chave_normalizar(string $chave): ?string
+{
+    $chave = trim($chave);
+    if (is_uuid($chave)) {
+        return strtolower($chave);
+    }
+    if (str_contains($chave, '@')) {
+        return filter_var($chave, FILTER_VALIDATE_EMAIL) && strlen($chave) <= 77 ? strtolower($chave) : null;
+    }
+    $d = so_digitos($chave);
+    if (str_starts_with($chave, '+')) {
+        return preg_match('/^55\d{10,11}$/', $d) ? '+' . $d : null;
+    }
+    if ((strlen($d) === 11 || strlen($d) === 14) && doc_valido($d)) {
+        return $d;
+    }
+    // 10 ou 11 dígitos que não são CPF: celular/telefone sem o +55
+    return (strlen($d) === 10 || strlen($d) === 11) ? '+55' . $d : null;
+}
+
+/** PIX do saldo da locação: ['payload' => copia e cola, 'valor' => saldo]; null sem saldo ou sem chave. */
+function locacao_pix(array $loc): ?array
+{
+    $emp = empresa();
+    $saldo = round($loc['status'] === 'cancelada' ? 0 : $loc['valor_atual'] - $loc['valor_pago'], 2);
+    if (($emp['pix_chave'] ?? '') === '' || $saldo <= 0) {
+        return null;
+    }
+    return [
+        'valor'   => $saldo,
+        'payload' => pix_payload($emp['pix_chave'], $emp['pix_nome'], $emp['pix_cidade'], $saldo, 'LOC' . $loc['numero']),
+    ];
 }
 
 /** Respeita tenants.limite_usuarios, contando só os usuários ativos. */
@@ -997,9 +1053,12 @@ function whatsapp_locacao(array $loc): array
             . 'Se precisar de mais dias, fale com a gente para prorrogar.');
     }
     if ($saldo > 0.004) {
+        $pix = locacao_pix($loc);
         $msgs['saldo'] = whatsapp_url($num, "$oi\n\nConsta um saldo de *" . money($saldo) . "* da *locação nº $n* "
             . '(total ' . money($loc['valor_atual']) . ', pago ' . money($loc['valor_pago']) . ").\n\n"
-            . 'Formas de pagamento: ' . implode(', ', FORMAS_PGTO) . '. Obrigado!');
+            . ($pix !== null
+                ? "Para pagar por PIX, copie o código abaixo e cole na opção *PIX Copia e Cola* do app do seu banco:\n\n{$pix['payload']}\n\nObrigado!"
+                : 'Formas de pagamento: ' . implode(', ', FORMAS_PGTO) . '. Obrigado!'));
     }
     return ['numero' => $num, 'links' => $msgs];
 }

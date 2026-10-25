@@ -11,6 +11,7 @@ const AREA = 'locadora';
 
 require __DIR__ . '/app/bootstrap.php';
 require __DIR__ . '/app/layout.php';
+require __DIR__ . '/app/pix.php';
 require __DIR__ . '/app/negocio.php';
 
 // Senha temporária: até trocá-la, o usuário só acessa a tela de troca de senha (e o Sair)

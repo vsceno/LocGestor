@@ -11,7 +11,10 @@ parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação 
 (impressão e CSV para o Excel), usuários com perfis e **WhatsApp**: botões que abrem o WhatsApp do atendente com a
 mensagem pronta (resumo da locação, lembrete de devolução, cobrança do saldo, confirmação de reserva), inclusive
 na lista de devoluções atrasadas e próximas do painel. Sem custo e sem cadastro: usa links `wa.me` com o celular do
-cliente; o envio é feito pelo atendente (um toque).
+cliente; o envio é feito pelo atendente (um toque). **PIX**: com a chave da locadora cadastrada em *Configurações*,
+a locação e a fatura mostram um QR Code e o "copia e cola" com o valor do saldo (padrão BR Code do Banco Central),
+e a cobrança pelo WhatsApp já leva o código. Sem API do banco, o recebimento é registrado pelo atendente quando o
+dinheiro cai. **Antes de usar com clientes, pague um PIX de teste de R$ 0,01 lendo o QR Code com o app do seu banco.**
 
 **Para o dono do SaaS:** painel da plataforma para cadastrar, suspender e reativar locadoras.
 
@@ -223,7 +226,7 @@ locgestor/
 ├── modulos_plataforma/    login e locadoras (tenants) do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução) e graficos.js
-├── assets/vendor/         chart.umd.js (Chart.js 4.4.1 local)
+├── assets/vendor/         chart.umd.js (Chart.js 4.4.1) e qrcode.js (QR Code do PIX), locais
 ├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
 │                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
 ├── tests/                 isolamento.php (isolamento entre locadoras) e funcional.php (pelas telas)
@@ -353,12 +356,14 @@ mudanças pelos arquivos de `database/migrations/`, em ordem (cada um pode ser r
 
 ```bat
 psql -U postgres -d locgestor -f database\migrations\001_seguranca_login.sql
+psql -U postgres -d locgestor -f database\migrations\002_pix.sql
 php tests\isolamento.php
 ```
 
 | Migração | O que faz |
 |---|---|
 | `001_seguranca_login.sql` | tabela `login_tentativas` (limite de login) e coluna `usuarios.trocar_senha` (senha temporária) |
+| `002_pix.sql` | colunas `pix_chave`, `pix_nome` e `pix_cidade` na `empresa` (cobrança por PIX) |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -451,7 +456,7 @@ Não implementado nesta versão:
 - **edição de plano e limite** de uma locadora já criada no painel da plataforma (hoje: pelo banco);
 - **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail;
 - envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
-- **cobrança** da assinatura das locadoras (planos e faturamento do SaaS);
+- **cobrança** da assinatura das locadoras (planos e faturamento do SaaS) e **baixa automática** do PIX (precisa da API do banco);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** (fotos de avaria, documentos do cliente);
 
@@ -460,6 +465,6 @@ Sugestões de próximos passos, em ordem:
 1. Exigir senha no PostgreSQL (seção 10.5) e copiar os backups para fora do computador.
 2. Ampliar os testes funcionais a cada tela nova (o GitHub já roda os atuais a cada push).
 3. Lembretes automáticos por API do WhatsApp e PDF gerado no servidor (exige liberar o Composer).
-4. Cobrança por PIX com baixa automática no caixa.
+4. Baixa automática do PIX no caixa (exige a API PIX do banco da locadora; o QR Code e o copia e cola já existem).
 5. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).
 6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.

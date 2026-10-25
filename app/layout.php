@@ -112,6 +112,20 @@ function botao_whatsapp(?string $url, string $rotulo, bool $pequeno = false): st
          . icone('mensagem') . e($rotulo) . '</a>';
 }
 
+/**
+ * Bloco "Pague com PIX": QR Code (desenhado por assets/js/pix.js com assets/vendor/qrcode.js)
+ * e o código copia e cola. A página precisa carregar esses dois scripts.
+ */
+function pix_bloco(array $pix): string
+{
+    return '<div class="pix" data-pix="' . e($pix['payload']) . '">'
+         . '<div class="pix-qr" role="img" aria-label="QR Code PIX de ' . e(money($pix['valor'])) . '"></div>'
+         . '<div class="pix-info"><strong>Pague com PIX: ' . e(money($pix['valor'])) . '</strong>'
+         . '<span class="pix-ajuda">Aponte a câmera do app do banco para o QR Code ou use o PIX Copia e Cola:</span>'
+         . '<textarea class="pix-codigo" readonly rows="3" aria-label="Código PIX copia e cola">' . e($pix['payload']) . '</textarea>'
+         . '<button type="button" class="btn btn-sec btn-peq pix-copiar">Copiar código</button></div></div>';
+}
+
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {
@@ -255,10 +269,14 @@ function cabecalho_impressao(string $titulo, string $destaque = '', string $info
     <?php
 }
 
-function print_end(): void
+/** $scripts: JS extras da página de impressão (ex.: QR Code do PIX). */
+function print_end(array $scripts = []): void
 {
     ?>
 </div>
+<?php foreach ($scripts as $s): ?>
+<script src="<?= e(asset($s)) ?>"></script>
+<?php endforeach; ?>
 </body>
 </html>
 <?php

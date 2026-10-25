@@ -110,11 +110,22 @@ tfoot td { font-weight: 700; }
 .assinaturas div { border-top: 1px solid var(--texto); padding-top: 1.5mm; font-size: 9.5pt; }
 .obs-fiscal { margin-top: 6mm; padding: 3mm; border: 1px dashed var(--borda); font-size: 9pt; color: var(--texto-2); }
 
+/* PIX na fatura */
+.pix { display: flex; gap: 6mm; align-items: center; margin-top: 6mm; padding: 4mm; border: 1.5px solid var(--texto); border-radius: 2mm; break-inside: avoid; }
+.pix-qr { width: 38mm; height: 38mm; flex: 0 0 auto; }
+.pix-qr svg { width: 100%; height: 100%; display: block; }
+.pix-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.5mm; }
+.pix-info strong { font-size: 12pt; }
+.pix-ajuda { font-size: 9pt; color: var(--texto-2); }
+.pix-codigo { width: 100%; font-family: Consolas, monospace; font-size: 8pt; border: 1px solid var(--borda); padding: 1.5mm;
+              resize: none; word-break: break-all; overflow: hidden; }
+.pix-copiar { align-self: flex-start; padding: 3px 10px; border: 1px solid var(--borda); background: #fff; border-radius: 4px; cursor: pointer; }
+
 @page { size: A4; margin: 12mm; }
 
 @media print {
     body { background: #fff; }
-    .barra-impressao { display: none; }
+    .barra-impressao, .pix-copiar { display: none; }
     .folha { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
     h2, table, .assinaturas { break-inside: avoid; }
 }
