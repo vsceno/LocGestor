@@ -197,6 +197,19 @@ BEGIN
     VALUES (CURRENT_DATE - 1, 'E', 'Locação', 'Adiantamento locação nº ' || v_num || ' - Serralheria Cariri ME',
             200.00, 'Cartão de crédito', v_loc, v_admin);
 
+    -- Preço semanal/mensal (vale para locações novas; as anteriores ficaram com o preço da época)
+    UPDATE produtos pr SET valor_semanal = x.sem, valor_mensal = x.mes
+      FROM (VALUES ('AND-001', 17.50, 52.00), ('ESC-300', 6.00, 18.00),
+                   ('GER-6K', 450.00, 1400.00), ('COM-SAP', 350.00, 1100.00)) AS x(cod, sem, mes)
+     WHERE pr.codigo = x.cod;
+
+    -- Kit: andaime completo para 1 andar
+    INSERT INTO kits (codigo, nome, obs) VALUES ('KIT-AND', 'Andaime completo (1 andar, 4 painéis)', 'Painéis e escoras para montar uma torre.')
+    RETURNING id INTO v_devol;
+    INSERT INTO kit_itens (kit_id, produto_id, quantidade)
+    SELECT v_devol, id, x.q FROM produtos
+      JOIN (VALUES ('AND-001', 4), ('ESC-300', 4)) AS x(cod, q) ON x.cod = produtos.codigo;
+
     -- Reserva futura: Francisco das Chagas, daqui a 7 dias, por 3 dias
     v_cli := (SELECT id FROM clientes WHERE cpf_cnpj = '12345678909');
     INSERT INTO reservas (numero, cliente_id, data_inicio, data_fim, obs, usuario_id)

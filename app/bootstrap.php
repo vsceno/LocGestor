@@ -687,6 +687,7 @@ function traduzir_erro_banco(PDOException $e): string
     $duplicados = [
         'clientes_cpf_cnpj_uk' => 'Já existe um cliente com este CPF/CNPJ.',
         'produtos_codigo_uk'   => 'Já existe um produto com este código.',
+        'kits_codigo_uk'       => 'Já existe um kit com este código.',
         'usuarios_login_uk'    => 'Já existe um usuário com este login.',
         'categorias_nome_uk'   => 'Já existe uma categoria com este nome.',
         'tenants_slug_uk'      => 'Já existe uma locadora com este identificador.',

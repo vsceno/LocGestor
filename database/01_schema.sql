@@ -200,6 +200,8 @@ CREATE TABLE produtos (
     unidade         VARCHAR(10)   NOT NULL DEFAULT 'UN',
     qtd_total       INTEGER       NOT NULL DEFAULT 0 CHECK (qtd_total >= 0),
     valor_diaria    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_diaria >= 0),
+    valor_semanal   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),   -- 0 = não oferece
+    valor_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),    -- 0 = não oferece
     valor_reposicao NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_reposicao >= 0),
     ncm             VARCHAR(8)    NOT NULL DEFAULT '',   -- preparado para futura NF-e de remessa/retorno (NFePHP)
     obs             TEXT          NOT NULL DEFAULT '',
@@ -272,7 +274,7 @@ CREATE INDEX locacoes_status_idx  ON locacoes (tenant_id, status, data_prev_devo
 CREATE INDEX locacoes_saida_idx   ON locacoes (tenant_id, data_saida);
 CREATE INDEX locacoes_cliente_idx ON locacoes (tenant_id, cliente_id);
 
--- valor_diaria fica congelado no momento da locação (mudar o preço do produto não afeta locações já feitas)
+-- valor_diaria/semanal/mensal ficam congelados no momento da locação (mudar o preço do produto não afeta locações já feitas)
 CREATE TABLE locacao_itens (
     id              uuid PRIMARY KEY DEFAULT uuidv7(),
     tenant_id       uuid          NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
@@ -281,6 +283,8 @@ CREATE TABLE locacao_itens (
     quantidade      INTEGER       NOT NULL CHECK (quantidade > 0),
     qtd_devolvida   INTEGER       NOT NULL DEFAULT 0,
     valor_diaria    NUMERIC(12,2) NOT NULL CHECK (valor_diaria >= 0),
+    valor_semanal   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),
+    valor_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),
     CONSTRAINT locacao_itens_tenant_id_uk UNIQUE (tenant_id, id),
     CONSTRAINT locacao_itens_devolvida_ck CHECK (qtd_devolvida BETWEEN 0 AND quantidade),
     CONSTRAINT locacao_itens_locacao_fk   FOREIGN KEY (tenant_id, locacao_id) REFERENCES locacoes (tenant_id, id) ON DELETE CASCADE,
@@ -390,6 +394,32 @@ CREATE TABLE vistoria_fotos (
 );
 CREATE INDEX vistoria_fotos_vistoria_idx ON vistoria_fotos (tenant_id, vistoria_id);
 
+-- Kits: atalho de cadastro. Na locação/reserva o kit vira os itens dele (estoque e preço continuam por produto).
+CREATE TABLE kits (
+    id        uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    codigo    VARCHAR(30)  NOT NULL,
+    nome      VARCHAR(150) NOT NULL,
+    obs       TEXT         NOT NULL DEFAULT '',
+    ativo     BOOLEAN      NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT kits_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT kits_codigo_uk    UNIQUE (tenant_id, codigo)
+);
+
+CREATE TABLE kit_itens (
+    id         uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id  uuid    NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    kit_id     uuid    NOT NULL,
+    produto_id uuid    NOT NULL,
+    quantidade INTEGER NOT NULL CHECK (quantidade > 0),
+    CONSTRAINT kit_itens_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT kit_itens_produto_uk   UNIQUE (tenant_id, kit_id, produto_id),
+    CONSTRAINT kit_itens_kit_fk       FOREIGN KEY (tenant_id, kit_id) REFERENCES kits (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT kit_itens_produto_fk   FOREIGN KEY (tenant_id, produto_id) REFERENCES produtos (tenant_id, id)
+);
+CREATE INDEX kit_itens_produto_idx ON kit_itens (tenant_id, produto_id);
+
 -- Numeração própria de cada locadora ('locacao', 'reserva', ...)
 CREATE TABLE tenant_sequencias (
     tenant_id   uuid        NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
@@ -409,7 +439,7 @@ BEGIN
     FOREACH t IN ARRAY ARRAY['empresa', 'usuarios', 'clientes', 'categorias', 'produtos',
                              'reservas', 'reserva_itens', 'locacoes', 'locacao_itens',
                              'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias',
-                             'vistorias', 'vistoria_itens', 'vistoria_fotos']
+                             'vistorias', 'vistoria_itens', 'vistoria_fotos', 'kits', 'kit_itens']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -446,6 +476,22 @@ $$
         ('Eventos');
 $$;
 
+-- Preço de 1 unidade por p_dias (mínimo 1): meses de 30 dias, depois semanas de 7, depois diárias.
+-- As diárias que sobram nunca passam do preço da semana, e o que sobra do mês nunca passa do preço do mês.
+-- Nunca custa mais que só diárias. Semanal/mensal = 0: não oferecido.
+CREATE FUNCTION preco_periodo(p_dias INTEGER, p_diaria NUMERIC, p_semanal NUMERIC, p_mensal NUMERIC)
+RETURNS NUMERIC LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
+$$
+    SELECT LEAST(d * p_diaria, m * p_mensal + CASE WHEN p_mensal > 0 THEN LEAST(s, p_mensal) ELSE s END)
+      FROM (SELECT d, m,
+                   CASE WHEN p_semanal > 0 THEN (r / 7) * p_semanal + LEAST((r % 7) * p_diaria, p_semanal)
+                        ELSE r * p_diaria END AS s
+              FROM (SELECT d,
+                           CASE WHEN p_mensal > 0 THEN d / 30 ELSE 0 END AS m,
+                           CASE WHEN p_mensal > 0 THEN d % 30 ELSE d END AS r
+                      FROM (SELECT GREATEST(1, p_dias) AS d) a) b) c
+$$;
+
 -- =====================================================================
 -- VIEWS (security_invoker = true é OBRIGATÓRIO: sem isso o RLS é ignorado)
 -- =====================================================================
@@ -461,7 +507,7 @@ SELECT li.tenant_id,
  GROUP BY li.tenant_id, li.produto_id;
 
 -- Valores de cada locação.
---   valor_previsto: período combinado (mínimo 1 diária) + acréscimo - desconto
+--   valor_previsto: período combinado (mínimo 1 diária, preco_periodo) + acréscimo - desconto
 --   valor_atual:    já apurado nas devoluções (itens + multa + avaria)
 --                   + se aberta, itens pendentes cobrados até hoje (mínimo 1 diária)
 --                   + acréscimo - desconto.  Locação cancelada vale 0.
@@ -475,17 +521,16 @@ SELECT l.tenant_id,
        CASE WHEN l.status = 'cancelada' THEN 0
             ELSE COALESCE(dv.valor_itens, 0)
                + COALESCE(dv.multa_avaria, 0)
-               + CASE WHEN l.status = 'aberta'
-                      THEN COALESCE(it.diaria_pendente, 0) * GREATEST(1, CURRENT_DATE - l.data_saida)
-                      ELSE 0 END
+               + CASE WHEN l.status = 'aberta' THEN COALESCE(it.pendente_hoje, 0) ELSE 0 END
                + l.acrescimo - l.desconto
        END::NUMERIC(12,2) AS valor_atual,
        COALESCE(cx.pago, 0)::NUMERIC(12,2) AS valor_pago
   FROM locacoes l
   LEFT JOIN LATERAL (
-        SELECT SUM(li.quantidade * li.valor_diaria
-                   * GREATEST(1, l.data_prev_devolucao - l.data_saida))  AS previsto_itens,
-               SUM((li.quantidade - li.qtd_devolvida) * li.valor_diaria) AS diaria_pendente
+        SELECT SUM(li.quantidade * preco_periodo(l.data_prev_devolucao - l.data_saida,
+                                                 li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS previsto_itens,
+               SUM((li.quantidade - li.qtd_devolvida) * preco_periodo(CURRENT_DATE - l.data_saida,
+                                                 li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS pendente_hoje
           FROM locacao_itens li
          WHERE li.tenant_id = l.tenant_id AND li.locacao_id = l.id
        ) it ON TRUE
@@ -508,10 +553,11 @@ SELECT l.tenant_id,
 -- =====================================================================
 GRANT USAGE ON SCHEMA public TO locgestor_app, locgestor_plataforma;
 
-REVOKE EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT), provisionar_dados_padrao(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT), provisionar_dados_padrao(TEXT),
+                           preco_periodo(INTEGER, NUMERIC, NUMERIC, NUMERIC) FROM PUBLIC;
 
 -- Sistema das locadoras (index.php)
-GRANT SELECT, INSERT, UPDATE, DELETE ON clientes, categorias, produtos, reservas, reserva_itens, caixa
+GRANT SELECT, INSERT, UPDATE, DELETE ON clientes, categorias, produtos, reservas, reserva_itens, caixa, kits, kit_itens
       TO locgestor_app;
 GRANT SELECT, INSERT, UPDATE ON locacoes, locacao_itens, devolucoes, devolucao_itens, tenant_sequencias, usuarios
       TO locgestor_app;
@@ -521,7 +567,7 @@ GRANT SELECT, INSERT ON vistorias, vistoria_itens, vistoria_fotos TO locgestor_a
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores TO locgestor_app;
 -- tenants não tem RLS: o app só lê as colunas necessárias ao login e ao limite de usuários
 GRANT SELECT (id, slug, nome, status, plano, limite_usuarios, vencimento, carencia_dias) ON tenants TO locgestor_app;
-GRANT EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT) TO locgestor_app;
+GRANT EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT), preco_periodo(INTEGER, NUMERIC, NUMERIC, NUMERIC) TO locgestor_app;
 
 -- Painel da plataforma (plataforma.php). Nas tabelas das locadoras vale o mesmo RLS do app.
 GRANT SELECT, INSERT, UPDATE ON tenants TO locgestor_plataforma;

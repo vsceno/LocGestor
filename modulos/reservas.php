@@ -158,7 +158,8 @@ function reserva_form(?array $r): void
         <div class="card">
             <div class="card-titulo">
                 <h2>Itens reservados</h2>
-                <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button>
+                <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
+                    <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
             </div>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
@@ -192,12 +193,12 @@ function reservas_salvar(): void
 function reservas_ver(): void
 {
     $r = reserva_da_url();
-    $itens = all('SELECT ri.quantidade, p.codigo, p.descricao, p.unidade, p.valor_diaria
+    $itens = all('SELECT ri.quantidade, p.codigo, p.descricao, p.unidade, p.valor_diaria, p.valor_semanal, p.valor_mensal
                     FROM reserva_itens ri JOIN produtos p ON p.id = ri.produto_id
                    WHERE ri.reserva_id = :id ORDER BY p.descricao', ['id' => $r['id']]);
     $locacao = val('SELECT numero FROM locacoes WHERE reserva_id = :id LIMIT 1', ['id' => $r['id']]);
     $dias = max(1, days_between($r['data_inicio'], $r['data_fim']));
-    $estimado = array_sum(array_map(fn($i) => $i['quantidade'] * $i['valor_diaria'] * $dias, $itens));
+    $estimado = array_sum(array_map(fn($i) => $i['quantidade'] * preco_item($i, $dias), $itens));
 
     layout_start('Reserva nº ' . $r['numero'], 'reservas');
     ?>
@@ -207,7 +208,7 @@ function reservas_ver(): void
             <dl class="dados">
                 <dt>Cliente</dt><dd><a href="<?= e(url('clientes', ['a' => 'ver', 'id' => $r['cliente_id']])) ?>"><?= e($r['cliente_nome']) ?></a></dd>
                 <dt>Retirada</dt><dd><?= e(dt($r['data_inicio'])) ?></dd>
-                <dt>Devolução</dt><dd><?= e(dt($r['data_fim'])) ?> (<?= num($dias) ?> diária(s))</dd>
+                <dt>Devolução</dt><dd><?= e(dt($r['data_fim'])) ?> (<?= num($dias) ?> dia(s))</dd>
                 <dt>Valor estimado</dt><dd><?= money($estimado) ?> <span class="muted">(pelas diárias atuais)</span></dd>
                 <?php if ($locacao): ?><dt>Locação</dt><dd><a href="<?= e(url('locacoes', ['a' => 'ver', 'n' => $locacao])) ?>">nº <?= e($locacao) ?></a></dd><?php endif; ?>
                 <?php if ($r['obs'] !== ''): ?><dt>Observações</dt><dd><?= nl2br(e($r['obs'])) ?></dd><?php endif; ?>
@@ -237,11 +238,11 @@ function reservas_ver(): void
         <h2>Itens reservados</h2>
         <div class="tabela-wrap">
             <table class="tabela">
-                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Diária atual</th></tr></thead>
+                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço atual</th></tr></thead>
                 <tbody>
                 <?php foreach ($itens as $i): ?>
                     <tr><td><code><?= e($i['codigo']) ?></code></td><td><?= e($i['descricao']) ?></td>
-                        <td class="num"><?= num($i['quantidade']) ?> <?= e($i['unidade']) ?></td><td class="num"><?= money($i['valor_diaria']) ?></td></tr>
+                        <td class="num"><?= num($i['quantidade']) ?> <?= e($i['unidade']) ?></td><td class="num"><?= precos_html($i) ?></td></tr>
                 <?php endforeach; ?>
                 </tbody>
             </table>

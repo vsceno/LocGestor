@@ -265,6 +265,7 @@ code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: .9e
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .acoes form { margin: 0; }
+.acoes #kit-sel { width: auto; max-width: 260px; }
 
 /* Formulários */
 .form label { display: block; font-size: .85rem; font-weight: 600; color: var(--texto-2); margin-bottom: 12px; }

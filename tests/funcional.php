@@ -227,6 +227,8 @@ register_shutdown_function(function () use ($base, $inicio) {
         foreach ($arqs as $a) {
             @unlink("$pasta/$a");
         }
+        $q("DELETE FROM kits WHERE codigo LIKE 'TESTE-%'");
+        $q("DELETE FROM produtos WHERE codigo LIKE 'TESTE-%'");
         $q("DELETE FROM caixa WHERE descricao LIKE 'TESTE%' AND criado_em >= :i", ['i' => $inicio]);
         $q("DELETE FROM clientes WHERE nome LIKE 'TESTE%'");
         $q("DELETE FROM usuarios WHERE login LIKE 'teste.%'");
@@ -348,6 +350,105 @@ $ct = $alfa->get("index.php?p=locacoes&a=contrato&n=$N")['corpo'];
 ok(str_contains(texto($ct), 'Valor previsto R$ 845,00') && str_contains($ct, 'CLÁUSULA 5ª') && str_contains($ct, "index.php?p=locacoes&amp;a=ver&amp;n=$N\">Voltar"),
    'contrato: valor previsto, cláusulas e botão Voltar para a locação');
 ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']), 'Total da locação R$ 520,00'), 'fatura com total de R$ 520,00');
+
+// =====================================================================
+secao('Preço semanal/mensal e kits');
+// A regra existe no banco (view) e no PHP (telas): as duas têm de dar o mesmo valor
+require_once __DIR__ . '/../app/negocio.php';
+$difs = [];
+foreach ([[45, 225, 700], [10, 50, 150], [3.5, 17.5, 52], [12, 0, 200], [12, 60, 0], [7.33, 40.1, 99.9], [0, 0, 0]] as [$pd, $ps, $pm]) {
+    $sql = db('SELECT d, preco_periodo(d, :a, :b, :c) AS v FROM generate_series(0, 400) d', ['a' => $pd, 'b' => $ps, 'c' => $pm])->fetchAll();
+    foreach ($sql as $l) {
+        if (abs((float) $l['v'] - preco_periodo((int) $l['d'], $pd, $ps, $pm)) > 0.001) {
+            $difs[] = "$pd/$ps/$pm d={$l['d']}: banco {$l['v']}, PHP " . preco_periodo((int) $l['d'], $pd, $ps, $pm);
+        }
+    }
+}
+ok(!$difs, 'preco_periodo: banco e PHP iguais de 0 a 400 dias em 7 tabelas de preço', implode('; ', array_slice($difs, 0, 3)));
+ok(preco_periodo(10, 10, 50, 150) == 80 && preco_periodo(35, 10, 50, 150) == 200 && preco_periodo(6, 10, 50, 150) == 50
+   && preco_periodo(29, 10, 50, 150) == 150 && preco_periodo(5, 10, 50, 150) == 50 && preco_periodo(4, 10, 50, 150) == 40,
+   'regra: 10 dias = semana + 3 diárias; 35 = mês + semana; sobra de dias não passa da semana nem do mês');
+
+$catSem = dbv('SELECT categoria_id FROM produtos WHERE id = :id', ['id' => $AND]);
+$prodSem = ['codigo' => 'TESTE-SEM', 'descricao' => 'TESTE produto semanal', 'unidade' => 'UN', 'qtd_total' => '5',
+            'valor_diaria' => '0', 'valor_semanal' => '50,00', 'valor_mensal' => '', 'ativo' => '1', 'categoria_id' => $catSem];
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar', $prodSem);
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=novo'), 'informe também a diária'), 'semanal sem diária é recusado');
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['valor_diaria' => '10,00', 'valor_mensal' => '40,00'] + $prodSem);
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=novo'), 'mensal não pode ser menor que o semanal'), 'mensal menor que semanal é recusado');
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['valor_diaria' => '10,00', 'valor_mensal' => '150,00'] + $prodSem);
+$SEM = $produto($alfaId, 'TESTE-SEM');
+ok($SEM && db('SELECT valor_diaria, valor_semanal, valor_mensal FROM produtos WHERE id = :id', ['id' => $SEM])->fetch(PDO::FETCH_NUM) === ['10.00', '50.00', '150.00'],
+   'produto com diária R$ 10, semana R$ 50 e mês R$ 150 cadastrado');
+$pg = texto($alfa->get('index.php?p=produtos&q=TESTE-SEM')['corpo']);
+ok(str_contains($pg, 'R$ 10,00/dia R$ 50,00/semana R$ 150,00/mês'), 'lista de produtos mostra a tabela de preços');
+
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(-10), 'data_prev_devolucao' => dia(25),
+    'produto_id' => [$SEM], 'quantidade' => ['2'], 'diaria' => [''],
+]);
+$NS = num_locacao($r);
+$v = $NS ? $valores($NS, $alfaId) : null;
+ok($v && $v['valor_previsto'] === '400.00' && $v['valor_atual'] === '160.00',
+   "locação nº $NS de 35 dias: previsto 2 × (mês + semana) = R$ 400,00 (só diárias: R$ 700); até hoje (10 dias) R$ 160,00", json_encode($v));
+// Preço novo no cadastro não muda locação já feita (diária, semana e mês ficam congelados)
+$alfa->enviar("index.php?p=produtos&a=editar&id=$SEM", 'index.php?p=produtos&a=salvar',
+              ['id' => $SEM, 'valor_diaria' => '20,00', 'valor_semanal' => '100,00', 'valor_mensal' => '300,00'] + $prodSem);
+$v2 = $valores($NS, $alfaId);
+ok(dbv('SELECT valor_semanal FROM produtos WHERE id = :id', ['id' => $SEM]) === '100.00' && $v2['valor_previsto'] === '400.00'
+   && $v2['valor_atual'] === '160.00', 'mudar o preço do produto não altera a locação feita', json_encode($v2));
+$tl = texto($alfa->get("index.php?p=locacoes&a=ver&n=$NS")['corpo']);
+ok(str_contains($tl, 'R$ 10,00/dia R$ 50,00/semana R$ 150,00/mês R$ 160,00'), 'detalhe: tabela congelada e valor até hoje R$ 160,00 (cálculo do PHP = view)');
+$ct = texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NS")['corpo']);
+ok(str_contains($ct, 'Subtotal R$ 400,00') && str_contains($ct, 'Valor previsto R$ 400,00') && str_contains($ct, '(35 dia(s))'),
+   'contrato: subtotal do PHP igual ao previsto da view (R$ 400,00)');
+$ISEM = dbv('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $v['id']]);
+$devForm = $alfa->get("index.php?p=locacoes&a=devolucao&n=$NS")['corpo'];
+ok(str_contains($devForm, 'data-semanal="50.00"') && str_contains($devForm, 'data-mensal="150.00"'), 'devolução recebe semana e mês para o cálculo na tela');
+$alfa->enviar("index.php?p=locacoes&a=devolucao&n=$NS", 'index.php?p=locacoes&a=devolver',
+              ['id' => $v['id'], 'data' => dia(0), "qtd[$ISEM]" => '2']);
+$v3 = $valores($NS, $alfaId);
+ok($v3['status'] === 'devolvida' && $v3['valor_atual'] === '160.00'
+   && dbv('SELECT valor FROM devolucao_itens WHERE locacao_item_id = :i', ['i' => $ISEM]) === '160.00',
+   'devolução em 10 dias: R$ 160,00 gravado no item', json_encode($v3));
+
+// Kits
+$kit = ['codigo' => 'teste-kit', 'nome' => 'TESTE kit andaime', 'obs' => '', 'ativo' => '1',
+        'produto_id' => [$SEM, $AND, '', $SEM], 'quantidade' => ['1', '3', '1', '1']];
+$r = $alfa->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', $kit);
+$KIT = dbv("SELECT id FROM kits WHERE tenant_id = :t AND codigo = 'TESTE-KIT'", ['t' => $alfaId]);
+ok($KIT && db('SELECT produto_id, quantidade FROM kit_itens WHERE kit_id = :k ORDER BY quantidade', ['k' => $KIT])->fetchAll(PDO::FETCH_NUM)
+   === [[$SEM, 2], [$AND, 3]], 'kit criado: linha vazia ignorada e produto repetido somado (2 + 3 itens)');
+$alfa->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['nome' => 'TESTE outro'] + $kit);
+ok($alfa->mensagem('index.php?p=produtos&a=kit_novo') === 'Já existe um kit com este código.', 'código de kit repetido é recusado');
+$alfa->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['codigo' => 'TESTE-VAZIO', 'produto_id' => ['']] + $kit);
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=kit_novo'), 'pelo menos um item'), 'kit sem itens é recusado');
+$nova = $alfa->get('index.php?p=locacoes&a=nova')['corpo'];
+ok(str_contains($nova, 'id="kit-sel"') && str_contains($nova, htmlspecialchars(json_encode([['p' => $AND, 'q' => 3], ['p' => $SEM, 'q' => 2]]), ENT_QUOTES)),
+   'nova locação oferece o kit com a composição para o JavaScript');
+ok(str_contains($alfa->get('index.php?p=reservas&a=nova')['corpo'], 'TESTE-KIT'), 'nova reserva também oferece o kit');
+$r = $alfa->enviar("index.php?p=produtos&a=kit_editar&id=$KIT", 'index.php?p=produtos&a=kit_salvar',
+                   ['id' => $KIT, 'produto_id' => [$AND], 'quantidade' => ['4'], 'ativo' => ''] + $kit);
+ok(db('SELECT produto_id, quantidade FROM kit_itens WHERE kit_id = :k', ['k' => $KIT])->fetchAll(PDO::FETCH_NUM) === [[$AND, 4]]
+   && !str_contains($alfa->get('index.php?p=locacoes&a=nova')['corpo'], 'TESTE-KIT'), 'kit editado (composição trocada) e inativo some da locação');
+// Isolamento dos kits
+ok(!str_contains($beta->get('index.php?p=produtos&a=kits')['corpo'], 'TESTE-KIT')
+   && $beta->get("index.php?p=produtos&a=kit_editar&id=$KIT")['codigo'] === 404, 'Beta não vê nem abre o kit da Alfa (404)');
+$beta->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['id' => $KIT, 'produto_id' => [$MES_BETA], 'quantidade' => ['1']] + $kit);
+$m = $beta->mensagem('index.php?p=produtos&a=kit_novo');
+ok(str_contains($m, 'Kit não encontrado.') && dbv('SELECT nome FROM kits WHERE id = :k', ['k' => $KIT]) === 'TESTE kit andaime', 'Beta não altera o kit da Alfa', $m);
+$beta->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['produto_id' => [$AND], 'quantidade' => ['1']] + $kit);
+$m = $beta->mensagem('index.php?p=produtos&a=kit_novo');
+ok(str_contains($m, 'Produto não encontrado na composição do kit.') && dbv("SELECT count(*) FROM kits WHERE tenant_id = :t", ['t' => $betaId]) == 0,
+   'Beta não monta kit com produto da Alfa', $m);
+$beta->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_excluir', ['id' => $KIT]);
+$m = $beta->mensagem('index.php?p=produtos&a=kit_novo');
+ok(str_contains($m, 'Kit não encontrado.') && dbv('SELECT count(*) FROM kits WHERE id = :k', ['k' => $KIT]) == 1, 'Beta não exclui o kit da Alfa', $m);
+$alfa->enviar("index.php?p=produtos&a=kit_editar&id=$KIT", 'index.php?p=produtos&a=kit_excluir', ['id' => $KIT]);
+ok(dbv('SELECT count(*) FROM kits WHERE id = :k', ['k' => $KIT]) == 0 && dbv('SELECT count(*) FROM kit_itens WHERE kit_id = :k', ['k' => $KIT]) == 0
+   && dbv('SELECT count(*) FROM produtos WHERE id = :p', ['p' => $AND]) == 1, 'Alfa exclui o kit (itens juntos; produtos ficam)');
 
 // =====================================================================
 secao('WhatsApp (links wa.me com a mensagem pronta)');

@@ -216,7 +216,7 @@ Com a demonstração carregada:
 
 | Empresa | Usuário | Senha | Conteúdo |
 |---|---|---|---|
-| `alfa-locacoes` | `admin` | `admin123` | construção civil, ~12 meses de histórico, 3 locações abertas (1 atrasada) e 1 reserva |
+| `alfa-locacoes` | `admin` | `admin123` | construção civil, ~12 meses de histórico, 3 locações abertas (1 atrasada), 1 reserva, preços semanais/mensais e 1 kit |
 | `beta-eventos` | `admin` | `admin123` | eventos, poucos dados. Tem cliente com o **mesmo CPF** e produto com o **mesmo código** da Alfa |
 
 **Troque essas senhas** (ou não carregue a demonstração) em qualquer ambiente acessível por outras pessoas.
@@ -304,18 +304,25 @@ O isolamento **não depende de o programador lembrar do `WHERE tenant_id`**. Que
 
 ## 6. Regra de cobrança
 
-- A locação é cobrada **por diária**, com **mínimo de 1 diária**.
-- **Dias** de um item = `max(1, data da devolução − data de saída)`. Saída e devolução no mesmo dia = 1 diária.
-- **Valor do item** = quantidade × diária × dias. A diária fica **congelada** na locação: mudar o preço do produto
-  não altera locações já feitas.
+- Cada produto tem **diária** e, se quiser, **preço da semana** (7 dias) e **do mês** (30 dias). Mínimo de 1 dia.
+- **Dias** de um item = `max(1, data da devolução − data de saída)`. Saída e devolução no mesmo dia = 1 dia.
+- **Preço de 1 unidade por N dias** (função `preco_periodo`, igual no banco, no PHP e no JavaScript):
+  meses inteiros × mês + semanas inteiras do que sobra × semana + diárias do resto, com dois limites: as diárias
+  que sobram **nunca passam do preço da semana**, e o que sobra do mês **nunca passa do preço do mês**.
+  O total nunca é maior que só diárias. Sem semana/mês cadastrados, é a conta antiga: diária × dias.
+  Ex.: diária R$ 10, semana R$ 50, mês R$ 150 → 4 dias R$ 40; 6 dias R$ 50; 10 dias R$ 80; 29 dias R$ 150; 35 dias R$ 200.
+- **Valor do item** = quantidade × preço do período. Diária, semana e mês ficam **congelados** na locação: mudar o
+  preço do produto não altera locações já feitas. Na tela da locação dá para ajustar só a diária daquele item.
 - **Devolução parcial:** cada lote é cobrado pelos dias até a data em que voltou. Os itens que ficam na rua
   continuam correndo.
 - **Valores da locação** (view `vw_locacao_valores`):
-  - **previsto** = Σ(qtd × diária × max(1, prevista − saída)) + acréscimo − desconto;
+  - **previsto** = Σ(qtd × preço de (prevista − saída) dias) + acréscimo − desconto;
   - **até hoje / final** = Σ itens devolvidos + Σ(multa + avaria) + pendentes até hoje (se aberta)
     + acréscimo − desconto. Locação cancelada vale zero;
   - **pago** = entradas no caixa da locação − estornos.
-- **Exemplo:** 2 betoneiras (R$ 45) + 5 carrinhos (R$ 5), saída há 4 dias, previsão em 3 dias, acréscimo R$ 50,
+- **Kits** (*Produtos › Kits*): pacote de produtos (ex.: andaime completo). Na locação e na reserva, **Adicionar kit**
+  inclui os itens de uma vez (somando a quem já está na lista); estoque e preço continuam sendo os de cada produto.
+- **Exemplo** (só diárias): 2 betoneiras (R$ 45) + 5 carrinhos (R$ 5), saída há 4 dias, previsão em 3 dias, acréscimo R$ 50,
   desconto R$ 10 → previsto (90 + 25) × 7 + 50 − 10 = **R$ 845,00**. Devolvendo tudo hoje com avaria de R$ 20:
   115 × 4 + 20 + 50 − 10 = **R$ 520,00**.
 - **Disponibilidade** de um produto num período = estoque − itens na rua que ocupam o período (inclusive os
@@ -391,6 +398,7 @@ psql -U postgres -d locgestor -f database\migrations\001_seguranca_login.sql
 psql -U postgres -d locgestor -f database\migrations\002_pix.sql
 psql -U postgres -d locgestor -f database\migrations\003_planos_assinatura.sql
 psql -U postgres -d locgestor -f database\migrations\004_vistorias.sql
+psql -U postgres -d locgestor -f database\migrations\005_precos_kits.sql
 php tests\isolamento.php
 ```
 
@@ -400,6 +408,7 @@ php tests\isolamento.php
 | `002_pix.sql` | colunas `pix_chave`, `pix_nome` e `pix_cidade` na `empresa` (cobrança por PIX) |
 | `003_planos_assinatura.sql` | tabelas `planos` e `assinatura_pagamentos`; plano, vencimento e carência em `tenants` |
 | `004_vistorias.sql` | tabelas `vistorias`, `vistoria_itens` e `vistoria_fotos` (checklist, fotos e assinatura) |
+| `005_precos_kits.sql` | preço semanal/mensal (`produtos`, `locacao_itens`), função `preco_periodo`, view de valores e tabelas `kits`/`kit_itens` |
 
 ### 10.2 Proteções do login (já ativas)
 

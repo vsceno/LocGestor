@@ -201,7 +201,7 @@ function locacoes_nova(): void
     }
 
     $clientes = all("SELECT nome, cpf_cnpj FROM clientes WHERE ativo AND NOT bloqueado ORDER BY lower(nome)");
-    $produtos = all('SELECT id, codigo, descricao, unidade, valor_diaria FROM produtos WHERE ativo ORDER BY descricao');
+    $produtos = all('SELECT id, codigo, descricao, unidade, valor_diaria, valor_semanal, valor_mensal FROM produtos WHERE ativo ORDER BY descricao');
 
     layout_start('Nova locação', 'locacoes');
     ?>
@@ -239,8 +239,10 @@ function locacoes_nova(): void
         <div class="card">
             <div class="card-titulo">
                 <h2>Itens</h2>
-                <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button>
+                <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
+                    <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
             </div>
+            <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
                     <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Diária (R$)</th>
@@ -302,7 +304,8 @@ function locacoes_ver(): void
     $atraso = $aberta ? days_between($loc['data_prev_devolucao'], today()) : 0;
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
-    $itens = all("SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, p.codigo, p.descricao, p.unidade,
+    $itens = all("SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal,
+                         p.codigo, p.descricao, p.unidade,
                          COALESCE((SELECT SUM(di.valor) FROM devolucao_itens di WHERE di.locacao_item_id = li.id), 0) AS valor_devolvido
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id ORDER BY p.descricao", ['id' => $loc['id']]);
@@ -329,10 +332,10 @@ function locacoes_ver(): void
     ?>
     <div class="kpis">
         <div class="kpi azul"><span>Valor previsto</span><strong><?= money($loc['valor_previsto']) ?></strong>
-            <small><?= num(max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']))) ?> diária(s) combinadas</small></div>
+            <small><?= num(max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']))) ?> dia(s) combinados</small></div>
         <div class="kpi"><span><?= $aberta ? 'Até hoje' : ($loc['status'] === 'devolvida' ? 'Valor final' : 'Valor (cancelada)') ?></span>
             <strong><?= money($loc['valor_atual']) ?></strong>
-            <?php if ($aberta): ?><small><?= num($diasHoje) ?> diária(s) até hoje</small><?php endif; ?></div>
+            <?php if ($aberta): ?><small><?= num($diasHoje) ?> dia(s) até hoje</small><?php endif; ?></div>
         <div class="kpi verde"><span>Pago</span><strong><?= money($loc['valor_pago']) ?></strong></div>
         <div class="kpi <?= $saldo > 0.004 ? 'vermelho' : 'verde' ?>"><span>Saldo</span><strong><?= money($saldo) ?></strong></div>
     </div>
@@ -440,18 +443,18 @@ function locacoes_ver(): void
         <div class="tabela-wrap">
             <table class="tabela">
                 <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Devolvida</th><th class="num">Pendente</th>
-                    <th class="num">Diária</th><th class="num"><?= $aberta ? 'Valor até hoje' : 'Valor' ?></th></tr></thead>
+                    <th class="num">Preço</th><th class="num"><?= $aberta ? 'Valor até hoje' : 'Valor' ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($itens as $it):
                     $pend = $it['quantidade'] - $it['qtd_devolvida'];
-                    $valor = $it['valor_devolvido'] + ($aberta ? $pend * $it['valor_diaria'] * $diasHoje : 0); ?>
+                    $valor = $it['valor_devolvido'] + ($aberta ? $pend * preco_item($it, $diasHoje) : 0); ?>
                     <tr>
                         <td><code><?= e($it['codigo']) ?></code></td>
                         <td><?= e($it['descricao']) ?></td>
                         <td class="num"><?= num($it['quantidade']) ?> <span class="muted"><?= e($it['unidade']) ?></span></td>
                         <td class="num"><?= num($it['qtd_devolvida']) ?></td>
                         <td class="num"><?= $pend > 0 ? '<span class="selo ' . ($atraso > 0 ? 'vermelho' : 'amarelo') . '">' . num($pend) . '</span>' : '0' ?></td>
-                        <td class="num"><?= money($it['valor_diaria']) ?></td>
+                        <td class="num"><?= precos_html($it) ?></td>
                         <td class="num"><?= $loc['status'] === 'cancelada' ? '—' : money($valor) ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -572,7 +575,7 @@ function locacoes_devolucao(): void
         flash('Esta locação não está em aberto.', 'aviso');
         redirect(url_locacao($loc));
     }
-    $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, p.descricao, p.unidade
+    $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.unidade
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id AND li.quantidade > li.qtd_devolvida ORDER BY p.descricao', ['id' => $loc['id']]);
     // O que já foi apurado em devoluções anteriores (itens + multas + avarias)
@@ -585,7 +588,7 @@ function locacoes_devolucao(): void
     // Sugestão inicial (sem JavaScript): tudo devolvido hoje
     $desta = 0.0;
     foreach ($itens as $it) {
-        $desta += ($it['quantidade'] - $it['qtd_devolvida']) * $it['valor_diaria'] * $dias;
+        $desta += ($it['quantidade'] - $it['qtd_devolvida']) * preco_item($it, $dias);
     }
     $saldoSugerido = max(0, $apurado + $desta + $loc['acrescimo'] - $loc['desconto'] - $loc['valor_pago']);
     $qtdOld = (array) old('qtd', []);
@@ -606,22 +609,23 @@ function locacoes_devolucao(): void
                 </label>
                 <div><span class="muted">Saída</span><br><strong><?= e(dt($loc['data_saida'])) ?></strong></div>
                 <div><span class="muted">Prevista</span><br><strong><?= e(dt($loc['data_prev_devolucao'])) ?></strong></div>
-                <div><span class="muted">Diárias</span><br><strong id="dev-dias"><?= num($dias) ?></strong> <span id="dev-atraso" class="alerta"></span></div>
+                <div><span class="muted">Dias</span><br><strong id="dev-dias"><?= num($dias) ?></strong> <span id="dev-atraso" class="alerta"></span></div>
             </div>
         </div>
         <div class="card">
             <h2>Itens a devolver</h2>
             <div class="tabela-wrap">
                 <table class="tabela">
-                    <thead><tr><th>Produto</th><th class="num">Pendente</th><th class="num">Devolver agora</th><th class="num">Diária</th><th class="num">Valor</th></tr></thead>
+                    <thead><tr><th>Produto</th><th class="num">Pendente</th><th class="num">Devolver agora</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
                     <tbody>
                     <?php foreach ($itens as $it): $pend = $it['quantidade'] - $it['qtd_devolvida']; ?>
-                        <tr class="linha-dev" data-diaria="<?= e($it['valor_diaria']) ?>">
+                        <tr class="linha-dev" data-diaria="<?= e($it['valor_diaria']) ?>" data-semanal="<?= e($it['valor_semanal']) ?>"
+                            data-mensal="<?= e($it['valor_mensal']) ?>">
                             <td><?= e($it['descricao']) ?></td>
                             <td class="num"><?= num($pend) ?> <span class="muted"><?= e($it['unidade']) ?></span></td>
                             <td class="num"><input type="number" name="qtd[<?= e($it['id']) ?>]" class="qtd-dev" min="0" max="<?= $pend ?>" step="1"
                                                    value="<?= e($qtdOld[$it['id']] ?? $pend) ?>" style="width:80px" aria-label="Quantidade a devolver"></td>
-                            <td class="num"><?= money($it['valor_diaria']) ?></td>
+                            <td class="num"><?= precos_html($it) ?></td>
                             <td class="num valor-dev">—</td>
                         </tr>
                     <?php endforeach; ?>
@@ -703,7 +707,7 @@ function locacoes_contrato(): void
     $loc = locacao_da_url();
     $emp = empresa();
     $dias = max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']));
-    $itens = all('SELECT li.quantidade, li.valor_diaria, p.codigo, p.descricao, p.unidade, p.valor_reposicao
+    $itens = all('SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.codigo, p.descricao, p.unidade, p.valor_reposicao
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id ORDER BY p.descricao', ['id' => $loc['id']]);
     $subtotal = 0.0;
@@ -718,17 +722,17 @@ function locacoes_contrato(): void
     <h2>Período e local</h2>
     <table>
         <tr><th style="width:22%">Saída</th><td><?= e(dt($loc['data_saida'])) ?></td>
-            <th style="width:22%">Devolução prevista</th><td><?= e(dt($loc['data_prev_devolucao'])) ?> (<?= num($dias) ?> diária(s))</td></tr>
+            <th style="width:22%">Devolução prevista</th><td><?= e(dt($loc['data_prev_devolucao'])) ?> (<?= num($dias) ?> dia(s))</td></tr>
         <?php if ($loc['local_uso'] !== ''): ?><tr><th>Local de uso</th><td colspan="3"><?= e($loc['local_uso']) ?></td></tr><?php endif; ?>
     </table>
     <h2>Bens locados</h2>
     <table>
-        <thead><tr><th class="num">Qtd.</th><th>Un.</th><th>Código</th><th>Descrição</th><th class="num">Diária</th>
+        <thead><tr><th class="num">Qtd.</th><th>Un.</th><th>Código</th><th>Descrição</th><th class="num">Preço (un.)</th>
             <th class="num">Valor de reposição (un.)</th><th class="num">Subtotal previsto</th></tr></thead>
         <tbody>
-        <?php foreach ($itens as $it): $sub = $it['quantidade'] * $it['valor_diaria'] * $dias; $subtotal += $sub; ?>
+        <?php foreach ($itens as $it): $sub = $it['quantidade'] * preco_item($it, $dias); $subtotal += $sub; ?>
             <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
-                <td><?= e($it['descricao']) ?></td><td class="num"><?= money($it['valor_diaria']) ?></td>
+                <td><?= e($it['descricao']) ?></td><td class="num"><?= precos_html($it) ?></td>
                 <td class="num"><?= money($it['valor_reposicao']) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
@@ -766,13 +770,14 @@ function locacoes_fatura(): void
     $aberta = $loc['status'] === 'aberta';
     $diasHoje = max(1, days_between($loc['data_saida'], today()));
     // Itens já devolvidos (com os dias efetivos) + pendentes cobrados até hoje
-    $linhas = all('SELECT d.data, di.quantidade, di.dias, di.valor, li.valor_diaria, p.descricao, p.unidade
+    $linhas = all('SELECT d.data, di.quantidade, di.dias, di.valor, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.unidade
                      FROM devolucao_itens di
                      JOIN devolucoes d ON d.id = di.devolucao_id
                      JOIN locacao_itens li ON li.id = di.locacao_item_id
                      JOIN produtos p ON p.id = li.produto_id
                     WHERE d.locacao_id = :id ORDER BY d.data, p.descricao', ['id' => $loc['id']]);
-    $pendentes = $aberta ? all('SELECT li.quantidade - li.qtd_devolvida AS quantidade, li.valor_diaria, p.descricao, p.unidade
+    $pendentes = $aberta ? all('SELECT li.quantidade - li.qtd_devolvida AS quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal,
+                                       p.descricao, p.unidade
                                   FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                                  WHERE li.locacao_id = :id AND li.quantidade > li.qtd_devolvida ORDER BY p.descricao',
                                ['id' => $loc['id']]) : [];
@@ -792,16 +797,16 @@ function locacoes_fatura(): void
        · situação: <strong><?= e($aberta ? 'em aberto (valores até ' . dt(today()) . ')' : $loc['status']) ?></strong></p>
     <h2>Discriminação</h2>
     <table>
-        <thead><tr><th>Devolução</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Diárias</th><th class="num">Diária</th><th class="num">Valor</th></tr></thead>
+        <thead><tr><th>Devolução</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Dias</th><th class="num">Preço (un.)</th><th class="num">Valor</th></tr></thead>
         <tbody>
         <?php foreach ($linhas as $l): ?>
             <tr><td><?= e(dt($l['data'])) ?></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($l['dias']) ?></td><td class="num"><?= money($l['valor_diaria']) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
+                <td class="num"><?= num($l['dias']) ?></td><td class="num"><?= precos_html($l) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
         <?php endforeach; ?>
         <?php foreach ($pendentes as $l): ?>
             <tr><td><em>pendente</em></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($diasHoje) ?></td><td class="num"><?= money($l['valor_diaria']) ?></td>
-                <td class="num"><?= money($l['quantidade'] * $l['valor_diaria'] * $diasHoje) ?></td></tr>
+                <td class="num"><?= num($diasHoje) ?></td><td class="num"><?= precos_html($l) ?></td>
+                <td class="num"><?= money($l['quantidade'] * preco_item($l, $diasHoje)) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>

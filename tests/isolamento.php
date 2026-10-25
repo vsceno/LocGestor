@@ -40,6 +40,8 @@ const TABELAS = [
     'vistorias'         => 'id',
     'vistoria_itens'    => 'id',
     'vistoria_fotos'    => 'id',
+    'kits'              => 'id',
+    'kit_itens'         => 'id',
 ];
 const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores'];
 

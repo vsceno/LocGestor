@@ -82,6 +82,7 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true): vo
             <option value="">— escolha —</option>
             <?php foreach ($produtos as $p): ?>
                 <option value="<?= e($p['id']) ?>" data-diaria="<?= e($p['valor_diaria']) ?>"
+                    data-semanal="<?= e($p['valor_semanal'] ?? 0) ?>" data-mensal="<?= e($p['valor_mensal'] ?? 0) ?>"
                     <?= $p['id'] === $ln['produto_id'] ? 'selected' : '' ?>><?= e($p['codigo'] . ' — ' . $p['descricao']) ?></option>
             <?php endforeach; ?>
         </select></td>
@@ -96,6 +97,25 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true): vo
         <td><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
     </tr>
     <?php
+}
+
+/**
+ * Seletor "adicionar kit" da tabela de itens (nova locação e reserva). O app.js expande o kit
+ * nas linhas dos produtos (somando a quem já está na lista). Sem kits cadastrados, não aparece.
+ */
+function kit_seletor_html(array $kits): string
+{
+    if (!$kits) {
+        return '';
+    }
+    $ops = '<option value="">— kit —</option>';
+    foreach ($kits as $id => $k) {
+        $ops .= '<option value="' . e($id) . '" data-itens="' . e(json_encode($k['itens'])) . '">'
+              . e($k['codigo'] . ' — ' . $k['nome']) . '</option>';
+    }
+    return '<select id="kit-sel" aria-label="Kit">' . $ops . '</select>'
+         . '<input type="number" id="kit-qtd" value="1" min="1" max="1000" step="1" style="width:70px" aria-label="Quantidade de kits">'
+         . '<button type="button" class="btn btn-sec btn-peq" id="add-kit">+ Adicionar kit</button>';
 }
 
 /**

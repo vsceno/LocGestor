@@ -10,6 +10,44 @@
 declare(strict_types=1);
 
 // =====================================================================
+// PREÇO POR PERÍODO
+// =====================================================================
+
+/**
+ * Preço de 1 unidade por $dias (mínimo 1): meses de 30 dias, depois semanas de 7, depois diárias.
+ * As diárias que sobram nunca passam do preço da semana, e o que sobra do mês nunca passa do mês;
+ * o total nunca passa de só diárias. Semanal/mensal 0 = não oferecido.
+ * A mesma regra está na função preco_periodo() do banco e em LG.precoPeriodo (app.js): mude as três juntas.
+ */
+function preco_periodo(int $dias, float $diaria, float $semanal = 0, float $mensal = 0): float
+{
+    $d = max(1, $dias);
+    $m = $mensal > 0 ? intdiv($d, 30) : 0;
+    $r = $mensal > 0 ? $d % 30 : $d;
+    $s = $semanal > 0 ? intdiv($r, 7) * $semanal + min(($r % 7) * $diaria, $semanal) : $r * $diaria;
+    return round(min($d * $diaria, $m * $mensal + ($mensal > 0 ? min($s, $mensal) : $s)), 2);
+}
+
+/** Preço de um item (linha com valor_diaria/semanal/mensal) por $dias. */
+function preco_item(array $it, int $dias): float
+{
+    return preco_periodo($dias, (float) $it['valor_diaria'], (float) ($it['valor_semanal'] ?? 0), (float) ($it['valor_mensal'] ?? 0));
+}
+
+/** Tabela de preços para célula de tabela: "R$ 45,00/dia<br>R$ 225,00/semana<br>R$ 700,00/mês". */
+function precos_html(array $it): string
+{
+    $partes = [money($it['valor_diaria']) . '/dia'];
+    if ((float) ($it['valor_semanal'] ?? 0) > 0) {
+        $partes[] = money($it['valor_semanal']) . '/semana';
+    }
+    if ((float) ($it['valor_mensal'] ?? 0) > 0) {
+        $partes[] = money($it['valor_mensal']) . '/mês';
+    }
+    return implode('<br>', array_map('e', $partes));
+}
+
+// =====================================================================
 // DISPONIBILIDADE DE ESTOQUE
 // =====================================================================
 
@@ -205,6 +243,8 @@ function produto_salvar(array $d, ?string $id = null): string
         'unidade'         => strtoupper(trim($d['unidade'] ?? 'UN')),
         'qtd_total'       => filter_var($d['qtd_total'] ?? '', FILTER_VALIDATE_INT),
         'valor_diaria'    => parse_money($d['valor_diaria'] ?? ''),
+        'valor_semanal'   => parse_money($d['valor_semanal'] ?? ''),
+        'valor_mensal'    => parse_money($d['valor_mensal'] ?? ''),
         'valor_reposicao' => parse_money($d['valor_reposicao'] ?? ''),
         'ncm'             => so_digitos($d['ncm'] ?? ''),
         'obs'             => trim($d['obs'] ?? ''),
@@ -228,8 +268,17 @@ function produto_salvar(array $d, ?string $id = null): string
     if ($p['qtd_total'] === false || $p['qtd_total'] < 0 || $p['qtd_total'] > 1000000) {
         $erros[] = 'Quantidade em estoque inválida.';
     }
-    if ($p['valor_diaria'] < 0 || $p['valor_reposicao'] < 0 || $p['valor_diaria'] > 9999999999 || $p['valor_reposicao'] > 9999999999) {
-        $erros[] = 'Valores não podem ser negativos.';
+    foreach (['valor_diaria', 'valor_semanal', 'valor_mensal', 'valor_reposicao'] as $k) {
+        if ($p[$k] < 0 || $p[$k] > 9999999999) {
+            $erros[] = 'Valores não podem ser negativos.';
+            break;
+        }
+    }
+    if (($p['valor_semanal'] > 0 || $p['valor_mensal'] > 0) && $p['valor_diaria'] <= 0) {
+        $erros[] = 'Para usar preço semanal ou mensal, informe também a diária (usada nos dias que sobram).';
+    }
+    if ($p['valor_semanal'] > 0 && $p['valor_mensal'] > 0 && $p['valor_mensal'] < $p['valor_semanal']) {
+        $erros[] = 'O preço mensal não pode ser menor que o semanal.';
     }
     if ($p['ncm'] !== '' && strlen($p['ncm']) !== 8) {
         $erros[] = 'NCM deve ter 8 dígitos.';
@@ -269,6 +318,71 @@ function categoria_salvar(string $nome, ?string $id = null): void
     } elseif (val('UPDATE categorias SET nome = :n WHERE id = :id RETURNING id', ['n' => $nome, 'id' => $id]) === null) {
         throw new UserError('Categoria não encontrada.');
     }
+}
+
+// =====================================================================
+// KITS (pacote de produtos: na locação/reserva vira os itens que o compõem)
+// =====================================================================
+
+/** Valida e grava um kit com seus itens (produto_id[] e quantidade[]). $id = null cria. Devolve o id. */
+function kit_salvar(array $d, ?string $id = null): string
+{
+    $k = [
+        'codigo' => strtoupper(trim($d['codigo'] ?? '')),
+        'nome'   => trim($d['nome'] ?? ''),
+        'obs'    => trim($d['obs'] ?? ''),
+        'ativo'  => !empty($d['ativo']) ? 'true' : 'false',
+    ];
+    if (!preg_match('/^[A-Z0-9][A-Z0-9._\/-]{0,29}$/', $k['codigo'])) {
+        throw new UserError('Código inválido (até 30 caracteres: letras, números, ponto, hífen, barra).');
+    }
+    if (mb_strlen($k['nome']) < 2 || mb_strlen($k['nome']) > 150) {
+        throw new UserError('Informe o nome do kit (2 a 150 caracteres).');
+    }
+    if (mb_strlen($k['obs']) > 2000) {
+        throw new UserError('Observações muito longas (máximo de 2.000 caracteres).');
+    }
+    $itens = itens_do_form($d, 'composição do kit');
+
+    return tx(function () use ($k, $id, $itens) {
+        $achados = (int) val('SELECT count(*) FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
+                             ['ids' => '{' . implode(',', array_keys($itens)) . '}']);
+        if ($achados !== count($itens)) {
+            throw new UserError('Produto não encontrado na composição do kit.');
+        }
+        if ($id === null) {
+            $id = (string) val('INSERT INTO kits (codigo, nome, obs, ativo) VALUES (:codigo, :nome, :obs, :ativo) RETURNING id', $k);
+        } else {
+            if (val('UPDATE kits SET codigo = :codigo, nome = :nome, obs = :obs, ativo = :ativo WHERE id = :id RETURNING id',
+                    $k + ['id' => $id]) === null) {
+                throw new UserError('Kit não encontrado.');
+            }
+            q('DELETE FROM kit_itens WHERE kit_id = :id', ['id' => $id]);
+        }
+        foreach ($itens as $pid => $it) {
+            q('INSERT INTO kit_itens (kit_id, produto_id, quantidade) VALUES (:k, :p, :q)', ['k' => $id, 'p' => $pid, 'q' => $it['qtd']]);
+        }
+        return $id;
+    });
+}
+
+/**
+ * Kits ativos para o seletor da locação/reserva: [id => [codigo, nome, itens => [[p => produto_id, q => qtd]]]].
+ * Itens de produto inativo ficam de fora (não podem ser alugados); kit sem nenhum item ativo não aparece.
+ */
+function kits_para_form(): array
+{
+    $kits = [];
+    foreach (all('SELECT k.id, k.codigo, k.nome, ki.produto_id, ki.quantidade
+                    FROM kits k
+                    JOIN kit_itens ki ON ki.kit_id = k.id
+                    JOIN produtos p ON p.id = ki.produto_id
+                   WHERE k.ativo AND p.ativo
+                   ORDER BY k.nome, p.descricao') as $r) {
+        $kits[$r['id']] ??= ['codigo' => $r['codigo'], 'nome' => $r['nome'], 'itens' => []];
+        $kits[$r['id']]['itens'][] = ['p' => $r['produto_id'], 'q' => (int) $r['quantidade']];
+    }
+    return $kits;
 }
 
 // =====================================================================
@@ -432,7 +546,7 @@ function locacao_criar(array $d): array
         // Trava os produtos e confere o estoque com os dados já travados
         produtos_travar(array_keys($itens));
         $cadastro = [];
-        foreach (all('SELECT id, descricao, valor_diaria, ativo FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
+        foreach (all('SELECT id, descricao, valor_diaria, valor_semanal, valor_mensal, ativo FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
                      ['ids' => '{' . implode(',', array_keys($itens)) . '}']) as $p) {
             $cadastro[$p['id']] = $p;
         }
@@ -458,8 +572,11 @@ function locacao_criar(array $d): array
             ['n' => $numero, 'c' => $cliente['id'], 's' => $saida, 'p' => $prev, 'local' => $local,
              'desc' => $desconto, 'acr' => $acrescimo, 'obs' => $obs, 'res' => $reservaId, 'u' => uid()]);
         foreach ($itens as $pid => $it) {
-            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria) VALUES (:l, :p, :q, :d)',
-              ['l' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria']]);
+            // Semanal e mensal vêm do cadastro (o formulário só permite ajustar a diária)
+            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal)
+               VALUES (:l, :p, :q, :d, :s, :m)',
+              ['l' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria'],
+               's' => $cadastro[$pid]['valor_semanal'], 'm' => $cadastro[$pid]['valor_mensal']]);
         }
         if ($reservaId !== null) {
             q("UPDATE reservas SET status = 'convertida' WHERE id = :id", ['id' => $reservaId]);
@@ -506,7 +623,7 @@ function devolucao_registrar(string $locacaoId, array $d): array
             throw new UserError('A data da devolução deve estar entre a saída (' . dt($loc['data_saida']) . ') e hoje.');
         }
 
-        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, p.descricao
+        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao
                         FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                        WHERE li.locacao_id = :id ORDER BY p.descricao FOR UPDATE OF li', ['id' => $locacaoId]);
         $dias = max(1, days_between($loc['data_saida'], $data));
@@ -522,7 +639,7 @@ function devolucao_registrar(string $locacaoId, array $d): array
                 throw new UserError("Não é possível devolver $q de {$it['descricao']}: só há $pendente pendente(s).");
             }
             if ($q > 0) {
-                $devolver[] = ['item' => $it, 'qtd' => $q, 'valor' => round($q * $it['valor_diaria'] * $dias, 2)];
+                $devolver[] = ['item' => $it, 'qtd' => $q, 'valor' => round($q * preco_item($it, $dias), 2)];
             }
         }
         // Itens que não pertencem a esta locação não são aceitos
