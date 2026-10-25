@@ -317,6 +317,36 @@ ok(str_contains(texto($ct), 'Valor previsto R$ 845,00') && str_contains($ct, 'CL
 ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']), 'Total da locação R$ 520,00'), 'fatura com total de R$ 520,00');
 
 // =====================================================================
+secao('WhatsApp (links wa.me com a mensagem pronta)');
+/** Links wa.me da página: [numero => [textos decodificados]] */
+$links = function (string $html): array {
+    preg_match_all('#href="https://wa\.me/(\d+)\?text=([^"]*)"#', $html, $m, PREG_SET_ORDER);
+    $r = [];
+    foreach ($m as $x) {
+        $r[$x[1]][] = rawurldecode(html_entity_decode($x[2], ENT_QUOTES, 'UTF-8'));
+    }
+    return $r;
+};
+$pg = $alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo'];
+$l = $links($pg)['5585997015566'] ?? [];
+ok(count($l) === 2 && str_contains($pg, 'Enviar resumo') && str_contains($pg, 'Cobrar saldo') && !str_contains($pg, 'Lembrete de devolução'),
+   "locação nº $N (devolvida, com saldo): resumo e cobrança para o celular 55 85 99701-5566, sem lembrete");
+ok(isset($l[1]) && str_contains($l[1], 'Olá, Maria!') && str_contains($l[1], "*locação nº $N*") && str_contains($l[1], 'R$ 120,00'),
+   'mensagem de cobrança: saudação pelo primeiro nome, número da locação e saldo de R$ 120,00');
+$atr = $links($alfa->get('index.php?p=locacoes&a=ver&n=141')['corpo'])['5585981002000'] ?? [];
+ok((bool) array_filter($atr, fn($t) => str_contains($t, 'Olá, Construtora Jaguaribe Ltda!') && str_contains($t, 'está *atrasada* desde')),
+   'lembrete da locação atrasada (cliente PJ): razão social e aviso de atraso');
+ok(isset($links($alfa->get('index.php?p=locacoes&aba=atrasadas')['corpo'])['5585981002000']), 'aba Atrasadas tem o botão de lembrete por linha');
+$linksBeta = $links($beta->get('index.php?p=dashboard')['corpo']);
+ok(!isset($linksBeta['5585981002000']), 'painel da Beta não oferece lembrete para cliente da Alfa');
+$r = $alfa->enviar('index.php?p=clientes&a=novo', 'index.php?p=clientes&a=salvar', ['tipo' => 'PF', 'nome' => 'TESTE Sem Telefone', 'ativo' => '1']);
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+                   ['cliente' => 'TESTE Sem Telefone', 'data_saida' => dia(0), 'data_prev_devolucao' => dia(1), 'produto_id' => [$CAR], 'quantidade' => ['1']]);
+$pg = $alfa->get('index.php?p=locacoes&a=ver&n=' . num_locacao($r))['corpo'];
+ok(!str_contains($pg, 'https://wa.me/') && str_contains($pg, 'btn-whats') && str_contains($pg, 'desativado')
+   && str_contains($pg, 'Cadastre o celular do cliente'), 'cliente sem telefone: botões desativados, com a orientação');
+
+// =====================================================================
 secao('Isolamento pelas telas e pela API');
 $r = $beta->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
     'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(1), 'produto_id' => [$MES_BETA], 'quantidade' => ['5'],

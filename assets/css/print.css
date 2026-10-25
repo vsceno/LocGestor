@@ -39,7 +39,17 @@ body {
     font-weight: 600;
     cursor: pointer;
 }
-.barra-impressao a {
+.barra-impressao .btn-whats {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #128c7e;
+    border-color: #128c7e;
+    color: #fff;
+}
+.barra-impressao .btn-whats.desativado { background: #4a5163; border-color: #4a5163; color: #c9cdd6; cursor: not-allowed; }
+.barra-impressao .ico { width: 16px; height: 16px; }
+.barra-impressao a, .barra-impressao span {
     padding: 7px 16px;
     border-radius: 6px;
     border: 1px solid #fff;

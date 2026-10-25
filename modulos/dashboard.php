@@ -56,7 +56,7 @@ function dashboard_index(): void
                      WHERE d.data >= date_trunc('month', CURRENT_DATE) - INTERVAL '11 months'
                      GROUP BY p.descricao ORDER BY faturado DESC LIMIT 8");
 
-    $devolucoes = all("SELECT l.numero, l.data_prev_devolucao, l.status, c.nome AS cliente, c.celular, c.telefone,
+    $devolucoes = all("SELECT l.id, l.numero, l.data_prev_devolucao, l.status, c.nome AS cliente, c.celular, c.telefone,
                               (SELECT SUM(li.quantidade - li.qtd_devolvida) FROM locacao_itens li WHERE li.locacao_id = l.id) AS pendentes
                          FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
                         WHERE l.status = 'aberta' AND l.data_prev_devolucao <= CURRENT_DATE + 7
@@ -112,15 +112,16 @@ function dashboard_index(): void
             <div class="card-titulo"><h2>Devoluções atrasadas e próximas</h2><a href="<?= e(url('locacoes')) ?>">ver todas</a></div>
             <div class="tabela-wrap">
                 <table class="tabela">
-                    <thead><tr><th>Nº</th><th>Cliente</th><th>Prevista</th><th>Situação</th><th class="num">Itens</th></tr></thead>
+                    <thead><tr><th>Nº</th><th>Cliente</th><th>Prevista</th><th>Situação</th><th class="num">Itens</th><th></th></tr></thead>
                     <tbody>
                     <?php foreach ($devolucoes as $l): ?>
                         <tr><td><a href="<?= e(url('locacoes', ['a' => 'ver', 'n' => $l['numero']])) ?>"><?= e($l['numero']) ?></a></td>
-                            <td><?= e($l['cliente']) ?><br><span class="muted"><?= e($l['celular'] ?: $l['telefone']) ?></span></td>
+                            <td><?= e($l['cliente']) ?><br><span class="muted nowrap"><?= e($l['celular'] ?: $l['telefone']) ?></span></td>
                             <td><?= e(dt($l['data_prev_devolucao'])) ?></td><td><?= selo_status_locacao($l) ?></td>
-                            <td class="num"><?= num($l['pendentes']) ?></td></tr>
+                            <td class="num"><?= num($l['pendentes']) ?></td>
+                            <td><?= botao_whatsapp(whatsapp_locacao(locacao_buscar($l['id']))['links']['lembrete'] ?? null, 'Lembrete', true) ?></td></tr>
                     <?php endforeach; ?>
-                    <?php if (!$devolucoes): ?><tr><td colspan="5" class="vazio">Nenhuma devolução para os próximos 7 dias.</td></tr><?php endif; ?>
+                    <?php if (!$devolucoes): ?><tr><td colspan="6" class="vazio">Nenhuma devolução para os próximos 7 dias.</td></tr><?php endif; ?>
                     </tbody>
                 </table>
             </div>

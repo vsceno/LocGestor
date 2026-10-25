@@ -219,6 +219,7 @@ function reservas_ver(): void
             <?php if ($r['status'] === 'ativa'): ?>
                 <div class="acoes">
                     <a class="btn" href="<?= e(url('locacoes', ['a' => 'nova', 'reserva' => $r['id']])) ?>">Retirar → locação</a>
+                    <?= botao_whatsapp(whatsapp_reserva($r), 'Confirmar no WhatsApp') ?>
                     <a class="btn btn-sec" href="<?= e(url('reservas', ['a' => 'editar', 'n' => $r['numero']])) ?>">Editar</a>
                     <form method="post" action="<?= e(url('reservas', ['a' => 'cancelar'])) ?>" data-confirmar="Cancelar a reserva nº <?= e($r['numero']) ?>?">
                         <?= csrf_field() ?>

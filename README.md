@@ -8,7 +8,10 @@ próprio PostgreSQL (Row Level Security).
 
 **Para a locadora:** clientes, produtos e categorias, locação com disponibilidade em tempo real, devolução total ou
 parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4, painel com gráficos, 8 relatórios
-(impressão e CSV para o Excel) e usuários com perfis.
+(impressão e CSV para o Excel), usuários com perfis e **WhatsApp**: botões que abrem o WhatsApp do atendente com a
+mensagem pronta (resumo da locação, lembrete de devolução, cobrança do saldo, confirmação de reserva), inclusive
+na lista de devoluções atrasadas e próximas do painel. Sem custo e sem cadastro: usa links `wa.me` com o celular do
+cliente; o envio é feito pelo atendente (um toque).
 
 **Para o dono do SaaS:** painel da plataforma para cadastrar, suspender e reativar locadoras.
 
@@ -446,7 +449,8 @@ Não implementado nesta versão:
 
 - emissão de **NF-e** (remessa/retorno) e certificado A1 por locadora;
 - **edição de plano e limite** de uma locadora já criada no painel da plataforma (hoje: pelo banco);
-- **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail ou WhatsApp;
+- **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail;
+- envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
 - **cobrança** da assinatura das locadoras (planos e faturamento do SaaS);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** (fotos de avaria, documentos do cliente);
@@ -455,7 +459,7 @@ Sugestões de próximos passos, em ordem:
 
 1. Exigir senha no PostgreSQL (seção 10.5) e copiar os backups para fora do computador.
 2. Ampliar os testes funcionais a cada tela nova (o GitHub já roda os atuais a cada push).
-3. Envio de contrato/fatura e lembretes de devolução por WhatsApp; PDF gerado no servidor.
+3. Lembretes automáticos por API do WhatsApp e PDF gerado no servidor (exige liberar o Composer).
 4. Cobrança por PIX com baixa automática no caixa.
 5. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).
 6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.

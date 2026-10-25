@@ -920,3 +920,99 @@ function senha_trocar(string $atual, string $nova, string $confirma): void
       ['h' => password_hash($nova, PASSWORD_DEFAULT), 'id' => uid()]);
     $_SESSION['usuario']['trocar_senha'] = false;
 }
+
+// =====================================================================
+// WHATSAPP (links wa.me: abrem o WhatsApp do atendente com a mensagem pronta;
+// nada é enviado pelo servidor e o número não passa pelos logs do sistema)
+// =====================================================================
+
+/** Número no formato do wa.me (55 + DDD + número), a partir do celular ou do telefone. null se não houver. */
+function whatsapp_numero(array $cliente): ?string
+{
+    foreach ([$cliente['celular'] ?? '', $cliente['telefone'] ?? ''] as $tel) {
+        $d = ltrim(so_digitos($tel), '0');
+        if (strlen($d) === 10 || strlen($d) === 11) {
+            return '55' . $d;
+        }
+        if ((strlen($d) === 12 || strlen($d) === 13) && str_starts_with($d, '55')) {
+            return $d;
+        }
+    }
+    return null;
+}
+
+function whatsapp_url(?string $numero, string $mensagem): ?string
+{
+    return $numero === null ? null : 'https://wa.me/' . $numero . '?text=' . rawurlencode($mensagem);
+}
+
+/** Como chamar o cliente: primeiro nome (PF) ou a razão social (PJ). */
+function whatsapp_saudacao(array $cliente): string
+{
+    $nome = trim($cliente['nome'] ?? '');
+    $chamar = ($cliente['tipo'] ?? 'PF') === 'PJ' ? $nome : (explode(' ', $nome)[0] ?? $nome);
+    $loja = empresa()['nome_fantasia'] ?: empresa()['razao_social'];
+    return "Olá, $chamar! Aqui é da *$loja*.";
+}
+
+/** "2 Betoneira 400 L, 5 Carrinho de mão 60 L" (só os pendentes, se $pendentes). */
+function whatsapp_itens(string $locacaoId, bool $pendentes = false): string
+{
+    $cond = $pendentes ? 'AND li.quantidade > li.qtd_devolvida' : '';
+    $qtd = $pendentes ? 'li.quantidade - li.qtd_devolvida' : 'li.quantidade';
+    return (string) val("SELECT string_agg(($qtd) || ' ' || p.descricao, ', ' ORDER BY p.descricao)
+                           FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
+                          WHERE li.locacao_id = :id $cond", ['id' => $locacaoId]);
+}
+
+/** Mensagens prontas para uma locação: resumo, lembrete de devolução e cobrança do saldo. */
+function whatsapp_locacao(array $loc): array
+{
+    $cli = one('SELECT nome, tipo, celular, telefone FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
+    $num = whatsapp_numero($cli);
+    $oi = whatsapp_saudacao($cli);
+    $n = $loc['numero'];
+    $saldo = $loc['status'] === 'cancelada' ? 0 : $loc['valor_atual'] - $loc['valor_pago'];
+    $msgs = [];
+
+    $msgs['resumo'] = whatsapp_url($num, "$oi\n\nResumo da sua *locação nº $n*:\n"
+        . '• Itens: ' . whatsapp_itens($loc['id']) . "\n"
+        . '• Saída: ' . dt($loc['data_saida']) . "\n"
+        . '• Devolução prevista: ' . dt($loc['data_prev_devolucao']) . "\n"
+        . '• Valor previsto: ' . money($loc['valor_previsto'])
+        . ($loc['valor_pago'] > 0 ? "\n• Pago: " . money($loc['valor_pago']) : '')
+        . "\n\nQualquer dúvida, estamos à disposição.");
+
+    if ($loc['status'] === 'aberta') {
+        $prev = $loc['data_prev_devolucao'];
+        $atraso = days_between($prev, today());
+        $quando = match (true) {
+            $atraso > 0  => 'está *atrasada* desde ' . dt($prev) . " ($atraso dia(s)). As diárias continuam sendo cobradas até a devolução.",
+            $atraso === 0 => 'está prevista para *hoje*, ' . dt($prev) . '.',
+            $atraso === -1 => 'está prevista para *amanhã*, ' . dt($prev) . '.',
+            default      => 'está prevista para ' . dt($prev) . '.',
+        };
+        $msgs['lembrete'] = whatsapp_url($num, "$oi\n\nLembrete: a devolução da *locação nº $n* "
+            . '(' . whatsapp_itens($loc['id'], true) . ") $quando\n\n"
+            . 'Se precisar de mais dias, fale com a gente para prorrogar.');
+    }
+    if ($saldo > 0.004) {
+        $msgs['saldo'] = whatsapp_url($num, "$oi\n\nConsta um saldo de *" . money($saldo) . "* da *locação nº $n* "
+            . '(total ' . money($loc['valor_atual']) . ', pago ' . money($loc['valor_pago']) . ").\n\n"
+            . 'Formas de pagamento: ' . implode(', ', FORMAS_PGTO) . '. Obrigado!');
+    }
+    return ['numero' => $num, 'links' => $msgs];
+}
+
+/** Confirmação de reserva. */
+function whatsapp_reserva(array $r): ?string
+{
+    $cli = one('SELECT nome, tipo, celular, telefone FROM clientes WHERE id = :id', ['id' => $r['cliente_id']]);
+    $itens = (string) val("SELECT string_agg(ri.quantidade || ' ' || p.descricao, ', ' ORDER BY p.descricao)
+                             FROM reserva_itens ri JOIN produtos p ON p.id = ri.produto_id WHERE ri.reserva_id = :id",
+                          ['id' => $r['id']]);
+    return whatsapp_url(whatsapp_numero($cli), whatsapp_saudacao($cli)
+        . "\n\nSua *reserva nº {$r['numero']}* está confirmada:\n• Itens: $itens\n"
+        . '• Retirada: ' . dt($r['data_inicio']) . "\n• Devolução: " . dt($r['data_fim'])
+        . "\n\nAté lá!");
+}

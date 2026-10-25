@@ -256,6 +256,11 @@ code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: .9e
 .btn-perigo { background: var(--vermelho); border-color: var(--vermelho); }
 .btn-perigo:hover { background: #a51b18; border-color: #a51b18; }
 .btn-peq { padding: 4px 9px; font-size: .8rem; }
+.btn .ico { width: 16px; height: 16px; }
+/* WhatsApp: verde escuro (contraste suficiente com texto branco) */
+.btn-whats { background: #128c7e; border-color: #128c7e; }
+.btn-whats:hover { background: #0e6f64; border-color: #0e6f64; }
+.btn-whats.desativado { background: #eef0f4; border-color: var(--borda); color: var(--texto-2); cursor: not-allowed; }
 .btn-bloco { width: 100%; }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

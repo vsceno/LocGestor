@@ -119,8 +119,10 @@ function locacoes_index(): void
         </form>
         <div class="tabela-wrap">
             <table class="tabela">
+                <?php $comLembrete = in_array($aba, ['abertas', 'atrasadas', 'hoje'], true); ?>
                 <thead><tr><th>Nº</th><th>Cliente</th><th>Saída</th><th>Devolução prevista</th><th>Situação</th>
-                    <th class="num">Itens na rua</th><th class="num">Valor</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead>
+                    <th class="num">Itens na rua</th><th class="num">Valor</th><th class="num">Pago</th><th class="num">Saldo</th>
+                    <?php if ($comLembrete): ?><th></th><?php endif; ?></tr></thead>
                 <tbody>
                 <?php foreach ($locs as $l): $saldo = $l['status'] === 'cancelada' ? 0 : $l['valor_atual'] - $l['valor_pago']; ?>
                     <tr>
@@ -133,10 +135,13 @@ function locacoes_index(): void
                         <td class="num"><?= money($l['valor_atual']) ?></td>
                         <td class="num"><?= money($l['valor_pago']) ?></td>
                         <td class="num<?= $saldo > 0.004 ? ' alerta' : '' ?>"><?= money($saldo) ?></td>
+                        <?php if ($comLembrete): ?>
+                            <td><?= botao_whatsapp(whatsapp_locacao(locacao_buscar($l['id']))['links']['lembrete'] ?? null, 'Lembrete', true) ?></td>
+                        <?php endif; ?>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (!$locs): ?>
-                    <tr><td colspan="9" class="vazio">Nenhuma locação nesta aba.</td></tr>
+                    <tr><td colspan="<?= $comLembrete ? 10 : 9 ?>" class="vazio">Nenhuma locação nesta aba.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -311,6 +316,7 @@ function locacoes_ver(): void
     $pagamentos = all('SELECT data, tipo, descricao, valor, forma FROM caixa WHERE locacao_id = :id ORDER BY data, criado_em',
                       ['id' => $loc['id']]);
     $cliente = one('SELECT id, telefone, celular FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
+    $whats = whatsapp_locacao($loc);
 
     layout_start('Locação nº ' . $loc['numero'], 'locacoes');
     ?>
@@ -349,6 +355,17 @@ function locacoes_ver(): void
 
         <div>
             <?php if ($loc['status'] !== 'cancelada'): ?>
+            <div class="card">
+                <h2>WhatsApp do cliente</h2>
+                <div class="acoes">
+                    <?= botao_whatsapp($whats['links']['resumo'] ?? null, 'Enviar resumo') ?>
+                    <?php if (array_key_exists('lembrete', $whats['links'])): ?><?= botao_whatsapp($whats['links']['lembrete'], 'Lembrete de devolução') ?><?php endif; ?>
+                    <?php if (array_key_exists('saldo', $whats['links'])): ?><?= botao_whatsapp($whats['links']['saldo'], 'Cobrar saldo') ?><?php endif; ?>
+                </div>
+                <p class="muted" style="margin:8px 0 0"><?= $whats['numero'] !== null
+                    ? 'Abre o WhatsApp com a mensagem pronta; confira e toque em enviar.'
+                    : 'Cadastre o celular do cliente para usar o WhatsApp.' ?></p>
+            </div>
             <div class="card">
                 <h2>Receber pagamento</h2>
                 <form method="post" action="<?= e(url('locacoes', ['a' => 'receber'])) ?>" class="form">
@@ -698,7 +715,9 @@ function locacoes_fatura(): void
                   ['id' => $loc['id']]);
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
-    print_start('Fatura de locação nº ' . $loc['numero'], url_locacao($loc));
+    $whats = whatsapp_locacao($loc)['links'];
+    print_start('Fatura de locação nº ' . $loc['numero'], url_locacao($loc),
+                botao_whatsapp($whats['saldo'] ?? $whats['resumo'] ?? null, isset($whats['saldo']) ? 'Cobrar saldo no WhatsApp' : 'Enviar resumo no WhatsApp'));
     cabecalho_impressao('Fatura de locação', 'Nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
