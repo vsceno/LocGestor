@@ -12,6 +12,7 @@ const AREA = 'locadora';
 require __DIR__ . '/app/bootstrap.php';
 require __DIR__ . '/app/layout.php';
 require __DIR__ . '/app/pix.php';
+require __DIR__ . '/app/arquivos.php';
 require __DIR__ . '/app/negocio.php';
 
 // Senha temporária: até trocá-la, o usuário só acessa a tela de troca de senha (e o Sair)
@@ -21,7 +22,7 @@ if (!empty(user()['trocar_senha']) && get('p') !== 'login'
 }
 
 executar_rota(
-    ['login', 'dashboard', 'clientes', 'produtos', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api'],
+    ['login', 'dashboard', 'clientes', 'produtos', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api', 'arquivos'],
     __DIR__ . '/modulos',
     'dashboard'
 );

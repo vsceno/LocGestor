@@ -110,6 +110,20 @@ tfoot td { font-weight: 700; }
 .assinaturas div { border-top: 1px solid var(--texto); padding-top: 1.5mm; font-size: 9.5pt; }
 .obs-fiscal { margin-top: 6mm; padding: 3mm; border: 1px dashed var(--borda); font-size: 9pt; color: var(--texto-2); }
 
+/* Vistoria: fotos em grade e assinatura */
+.fotos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; }
+.fotos figure { margin: 0; break-inside: avoid; }
+.fotos img { width: 100%; height: 52mm; object-fit: cover; border: 1px solid var(--borda); }
+.fotos figcaption { font-size: 8pt; color: var(--texto-2); text-align: center; }
+.assinatura-impressa img { max-width: 90mm; max-height: 28mm; display: block; border-bottom: 1px solid var(--texto); }
+.assinatura-impressa p { margin-top: 1.5mm; }
+/* Contrato: assinatura feita na tela, sobre a linha do locatário */
+/* a linha continua sendo a borda do bloco (igual à da locadora); a imagem fica logo acima dela */
+.assinaturas div.assinado { position: relative; }
+.assinaturas div.assinado img { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+                                max-width: 100%; max-height: 20mm; }
+.assinaturas small { display: block; font-size: 7.5pt; color: var(--texto-2); margin-top: 1mm; }
+
 /* PIX na fatura */
 .pix { display: flex; gap: 6mm; align-items: center; margin-top: 6mm; padding: 4mm; border: 1.5px solid var(--texto); border-radius: 2mm; break-inside: avoid; }
 .pix-qr { width: 38mm; height: 38mm; flex: 0 0 auto; }

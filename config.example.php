@@ -29,4 +29,7 @@ return [
     'suporte_contato' => '',
     'timezone' => 'America/Fortaleza',
     'per_page' => 20,
+    // Pasta das fotos de vistoria e assinaturas. Padrão: storage/ dentro do projeto
+    // (bloqueada por .htaccess). Em produção, prefira uma pasta FORA da pasta do site.
+    // 'pasta_arquivos' => 'C:/laragon/arquivos/locgestor',
 ];

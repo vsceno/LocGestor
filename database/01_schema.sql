@@ -343,6 +343,53 @@ CREATE TABLE caixa (
 CREATE INDEX caixa_data_idx    ON caixa (tenant_id, data);
 CREATE INDEX caixa_locacao_idx ON caixa (tenant_id, locacao_id);
 
+-- Vistorias de retirada/devolução: estado de cada item, fotos e assinatura do cliente.
+-- É prova do estado do equipamento: o app só lê e insere (não altera nem apaga).
+CREATE TABLE vistorias (
+    id                 uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id          uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    locacao_id         uuid         NOT NULL,
+    tipo               VARCHAR(10)  NOT NULL CHECK (tipo IN ('retirada', 'devolucao')),
+    obs                TEXT         NOT NULL DEFAULT '',
+    assinante_nome     VARCHAR(100) NOT NULL DEFAULT '',
+    assinatura_arquivo VARCHAR(120) NOT NULL DEFAULT '',   -- '' = não assinada
+    assinado_em        TIMESTAMPTZ,
+    usuario_id         uuid,
+    criado_em          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT vistorias_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT vistorias_locacao_fk   FOREIGN KEY (tenant_id, locacao_id) REFERENCES locacoes (tenant_id, id),
+    CONSTRAINT vistorias_usuario_fk   FOREIGN KEY (tenant_id, usuario_id) REFERENCES usuarios (tenant_id, id)
+);
+CREATE INDEX vistorias_locacao_idx ON vistorias (tenant_id, locacao_id);
+
+CREATE TABLE vistoria_itens (
+    id              uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id       uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    vistoria_id     uuid         NOT NULL,
+    locacao_item_id uuid         NOT NULL,
+    estado          VARCHAR(12)  NOT NULL CHECK (estado IN ('ok', 'avariado', 'sujo', 'incompleto')),
+    obs             VARCHAR(200) NOT NULL DEFAULT '',
+    CONSTRAINT vistoria_itens_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT vistoria_itens_vistoria_fk  FOREIGN KEY (tenant_id, vistoria_id) REFERENCES vistorias (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT vistoria_itens_item_fk      FOREIGN KEY (tenant_id, locacao_item_id) REFERENCES locacao_itens (tenant_id, id)
+);
+CREATE INDEX vistoria_itens_vistoria_idx ON vistoria_itens (tenant_id, vistoria_id);
+
+-- arquivo: caminho relativo na pasta de arquivos (tenant/ano/nome-aleatório.jpg)
+CREATE TABLE vistoria_fotos (
+    id          uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id   uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    vistoria_id uuid         NOT NULL,
+    arquivo     VARCHAR(120) NOT NULL,
+    tamanho     INTEGER      NOT NULL CHECK (tamanho > 0),
+    largura     INTEGER      NOT NULL,
+    altura      INTEGER      NOT NULL,
+    criado_em   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT vistoria_fotos_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT vistoria_fotos_vistoria_fk  FOREIGN KEY (tenant_id, vistoria_id) REFERENCES vistorias (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX vistoria_fotos_vistoria_idx ON vistoria_fotos (tenant_id, vistoria_id);
+
 -- Numeração própria de cada locadora ('locacao', 'reserva', ...)
 CREATE TABLE tenant_sequencias (
     tenant_id   uuid        NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
@@ -361,7 +408,8 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY['empresa', 'usuarios', 'clientes', 'categorias', 'produtos',
                              'reservas', 'reserva_itens', 'locacoes', 'locacao_itens',
-                             'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias']
+                             'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias',
+                             'vistorias', 'vistoria_itens', 'vistoria_fotos']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -468,6 +516,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON clientes, categorias, produtos, reservas
 GRANT SELECT, INSERT, UPDATE ON locacoes, locacao_itens, devolucoes, devolucao_itens, tenant_sequencias, usuarios
       TO locgestor_app;
 GRANT SELECT, UPDATE ON empresa TO locgestor_app;
+-- Vistorias são prova: só leitura e inclusão
+GRANT SELECT, INSERT ON vistorias, vistoria_itens, vistoria_fotos TO locgestor_app;
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores TO locgestor_app;
 -- tenants não tem RLS: o app só lê as colunas necessárias ao login e ao limite de usuários
 GRANT SELECT (id, slug, nome, status, plano, limite_usuarios, vencimento, carencia_dias) ON tenants TO locgestor_app;

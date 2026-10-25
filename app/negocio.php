@@ -1075,3 +1075,114 @@ function whatsapp_reserva(array $r): ?string
         . '• Retirada: ' . dt($r['data_inicio']) . "\n• Devolução: " . dt($r['data_fim'])
         . "\n\nAté lá!");
 }
+
+// =====================================================================
+// VISTORIAS (checklist de retirada/devolução com fotos e assinatura)
+// =====================================================================
+
+const ESTADOS_VISTORIA = ['ok' => 'OK', 'avariado' => 'Avariado', 'sujo' => 'Sujo', 'incompleto' => 'Incompleto'];
+
+/**
+ * Registra a vistoria. $d: estado[locacao_item_id], obs_item[locacao_item_id], obs,
+ * assinante_nome, assinatura (data:image/png;base64,...). Fotos vêm de $_FILES['fotos'].
+ * Retirada: uma por locação. Devolução: quantas forem precisas (devoluções parciais).
+ * Vistoria é prova: depois de gravada não se altera nem se apaga.
+ */
+function vistoria_registrar(string $locacaoId, string $tipo, array $d): string
+{
+    if (!in_array($tipo, ['retirada', 'devolucao'], true)) {
+        throw new UserError('Tipo de vistoria inválido.');
+    }
+    $loc = one('SELECT id, numero, status FROM locacoes WHERE id = :id', ['id' => $locacaoId]);
+    if ($loc === null) {
+        throw new UserError('Locação não encontrada.');
+    }
+    if ($loc['status'] === 'cancelada') {
+        throw new UserError('Locação cancelada não recebe vistoria.');
+    }
+    if ($tipo === 'retirada' && val("SELECT 1 FROM vistorias WHERE locacao_id = :id AND tipo = 'retirada'", ['id' => $locacaoId])) {
+        throw new UserError('Esta locação já tem vistoria de retirada.');
+    }
+
+    // Estado de cada item (todos os itens da locação precisam ser avaliados)
+    $itens = all('SELECT li.id, p.descricao FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id WHERE li.locacao_id = :id',
+                 ['id' => $locacaoId]);
+    $estados = (array) ($d['estado'] ?? []);
+    $obsItens = (array) ($d['obs_item'] ?? []);
+    $avaliados = [];
+    foreach ($itens as $it) {
+        $estado = (string) ($estados[$it['id']] ?? '');
+        if (!isset(ESTADOS_VISTORIA[$estado])) {
+            throw new UserError("Informe o estado de {$it['descricao']}.");
+        }
+        $avaliados[] = ['id' => $it['id'], 'estado' => $estado, 'obs' => mb_substr(trim((string) ($obsItens[$it['id']] ?? '')), 0, 200)];
+    }
+    $obs = mb_substr(trim((string) ($d['obs'] ?? '')), 0, 2000);
+
+    // Assinatura (opcional): exige o nome de quem assinou
+    $assinante = mb_substr(trim((string) ($d['assinante_nome'] ?? '')), 0, 100);
+    $assinaturaBytes = null;
+    $dataUrl = (string) ($d['assinatura'] ?? '');
+    if ($dataUrl !== '') {
+        if (!preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $dataUrl, $m) || strlen($m[1]) > 700000) {
+            throw new UserError('Assinatura inválida. Limpe e assine de novo.');
+        }
+        $img = imagem_regravar((string) base64_decode($m[1], true), 900, true);
+        if (assinatura_vazia($img['gd'])) {
+            throw new UserError('A assinatura está em branco. Peça para o cliente assinar na área indicada.');
+        }
+        if (mb_strlen($assinante) < 3) {
+            throw new UserError('Informe o nome de quem assinou.');
+        }
+        $assinaturaBytes = $img['bytes'];
+    }
+
+    $fotos = uploads('fotos');
+    if (count($fotos) > FOTOS_POR_VISTORIA) {
+        throw new UserError('Envie no máximo ' . FOTOS_POR_VISTORIA . ' fotos por vistoria.');
+    }
+
+    // Arquivos primeiro; se o banco falhar, eles são apagados (nada fica órfão no disco)
+    $gravados = [];
+    try {
+        $registrosFotos = [];
+        foreach ($fotos as $f) {
+            if ($f['erro'] === UPLOAD_ERR_INI_SIZE || $f['erro'] === UPLOAD_ERR_FORM_SIZE || $f['tamanho'] > FOTO_BYTES_MAX) {
+                throw new UserError("A foto {$f['nome']} é grande demais (máximo de 15 MB).");
+            }
+            if ($f['erro'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp'])) {
+                throw new UserError("Não foi possível receber a foto {$f['nome']}. Tente de novo.");
+            }
+            $img = imagem_regravar((string) file_get_contents($f['tmp']), FOTO_LADO_MAX);
+            $rel = arquivo_gravar($img['bytes'], 'jpg');
+            $gravados[] = $rel;
+            $registrosFotos[] = ['arquivo' => $rel, 'tamanho' => strlen($img['bytes']), 'largura' => $img['largura'], 'altura' => $img['altura']];
+        }
+        $relAssinatura = '';
+        if ($assinaturaBytes !== null) {
+            $relAssinatura = arquivo_gravar($assinaturaBytes, 'png');
+            $gravados[] = $relAssinatura;
+        }
+
+        return tx(function () use ($locacaoId, $tipo, $obs, $assinante, $relAssinatura, $avaliados, $registrosFotos) {
+            $id = (string) val('INSERT INTO vistorias (locacao_id, tipo, obs, assinante_nome, assinatura_arquivo, assinado_em, usuario_id)
+                                VALUES (:l, :t, :o, :n, :a, CASE WHEN :a2 = \'\' THEN NULL ELSE now() END, :u) RETURNING id',
+                ['l' => $locacaoId, 't' => $tipo, 'o' => $obs, 'n' => $relAssinatura !== '' ? $assinante : '',
+                 'a' => $relAssinatura, 'a2' => $relAssinatura, 'u' => uid()]);
+            foreach ($avaliados as $it) {
+                q('INSERT INTO vistoria_itens (vistoria_id, locacao_item_id, estado, obs) VALUES (:v, :i, :e, :o)',
+                  ['v' => $id, 'i' => $it['id'], 'e' => $it['estado'], 'o' => $it['obs']]);
+            }
+            foreach ($registrosFotos as $f) {
+                q('INSERT INTO vistoria_fotos (vistoria_id, arquivo, tamanho, largura, altura) VALUES (:v, :a, :t, :w, :h)',
+                  ['v' => $id, 'a' => $f['arquivo'], 't' => $f['tamanho'], 'w' => $f['largura'], 'h' => $f['altura']]);
+            }
+            return $id;
+        });
+    } catch (Throwable $e) {
+        foreach ($gravados as $rel) {
+            arquivo_apagar($rel);
+        }
+        throw $e;
+    }
+}

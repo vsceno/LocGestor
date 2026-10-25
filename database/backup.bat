@@ -22,6 +22,8 @@ if not defined PGPORT set PGPORT=5432
 rem Fora da pasta do site: backup nunca pode ser baixado pelo navegador
 if not defined BACKUP_DIR set "BACKUP_DIR=C:\laragon\backups\locgestor"
 if not defined MANTER set MANTER=30
+rem Fotos de vistoria e assinaturas (mesma pasta de 'pasta_arquivos' do config.php)
+if not defined PASTA_ARQUIVOS set "PASTA_ARQUIVOS=%~dp0..\storage"
 
 rem --- pg_dump do Laragon (a versão mais nova encontrada, igual à do servidor) ---
 for /d %%d in (C:\laragon\bin\postgresql\*) do if exist "%%d\bin\pg_dump.exe" set "PATH=%%d\bin;%PATH%"
@@ -42,7 +44,16 @@ if errorlevel 1 goto erro
 rem Mantém só os %MANTER% mais recentes
 powershell -NoProfile -Command "Get-ChildItem -LiteralPath '%BACKUP_DIR%' -Filter 'locgestor_*.dump' | Sort-Object LastWriteTime -Descending | Select-Object -Skip %MANTER% | Remove-Item -Force"
 
-for %%f in ("%ARQ%") do echo [%date% %time%] OK %%~nxf (%%~zf bytes)>> "%BACKUP_DIR%\backup.log"
+rem Arquivos (fotos/assinaturas) não estão no banco: espelha a pasta (copia só o que mudou).
+rem robocopy devolve 0 a 7 quando dá certo; 8 ou mais é falha.
+set "ARQS=sem pasta de arquivos"
+if exist "%PASTA_ARQUIVOS%" (
+    robocopy "%PASTA_ARQUIVOS%" "%BACKUP_DIR%\arquivos" /MIR /R:2 /W:2 /XF .htaccess /NFL /NDL /NJH /NJS /NP >nul
+    if errorlevel 8 goto erro
+    set "ARQS=arquivos espelhados"
+)
+
+for %%f in ("%ARQ%") do echo [%date% %time%] OK %%~nxf (%%~zf bytes), %ARQS%>> "%BACKUP_DIR%\backup.log"
 echo Backup gravado em %ARQ%
 endlocal
 exit /b 0

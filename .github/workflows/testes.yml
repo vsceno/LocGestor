@@ -42,7 +42,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: pdo_pgsql, pgsql, mbstring, curl
+          extensions: pdo_pgsql, pgsql, mbstring, curl, gd, exif
           coverage: none
 
       - name: Sintaxe de todos os arquivos PHP

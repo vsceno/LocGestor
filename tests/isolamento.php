@@ -37,6 +37,9 @@ const TABELAS = [
     'devolucao_itens'   => 'id',
     'caixa'             => 'id',
     'tenant_sequencias' => 'nome',
+    'vistorias'         => 'id',
+    'vistoria_itens'    => 'id',
+    'vistoria_fotos'    => 'id',
 ];
 const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores'];
 
@@ -382,6 +385,9 @@ deve_falhar($pdo, 'SELECT em plataforma_usuarios', 'SELECT * FROM plataforma_usu
 deve_falhar($pdo, 'SELECT em planos (dado da plataforma)', 'SELECT * FROM planos', [], '42501');
 deve_falhar($pdo, 'SELECT em assinatura_pagamentos (mensalidades de todas as locadoras)', 'SELECT * FROM assinatura_pagamentos', [], '42501');
 deve_falhar($pdo, 'UPDATE do próprio vencimento em tenants', "UPDATE tenants SET vencimento = CURRENT_DATE + 999", [], '42501');
+// Vistoria é prova: o sistema só inclui e lê
+deve_falhar($pdo, 'UPDATE em vistorias (prova não se altera)', "UPDATE vistorias SET obs = 'x'", [], '42501');
+deve_falhar($pdo, 'DELETE em vistoria_fotos (prova não se apaga)', 'DELETE FROM vistoria_fotos', [], '42501');
 
 // =====================================================================
 teste('T-ISO-08  Mesmo CPF e mesmo código de produto em locadoras diferentes');

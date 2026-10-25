@@ -318,6 +318,12 @@ function locacoes_ver(): void
     $cliente = one('SELECT id, telefone, celular FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
     $whats = whatsapp_locacao($loc);
     $pix = locacao_pix($loc);
+    $vistorias = all("SELECT v.id, v.tipo, v.criado_em, v.assinante_nome, v.assinatura_arquivo <> '' AS assinada, u.nome AS usuario,
+                             (SELECT count(*) FROM vistoria_fotos f WHERE f.vistoria_id = v.id) AS fotos,
+                             (SELECT count(*) FROM vistoria_itens i WHERE i.vistoria_id = v.id AND i.estado <> 'ok') AS problemas
+                        FROM vistorias v LEFT JOIN usuarios u ON u.id = v.usuario_id
+                       WHERE v.locacao_id = :id ORDER BY v.criado_em", ['id' => $loc['id']]);
+    $temRetirada = (bool) array_filter($vistorias, fn($v) => $v['tipo'] === 'retirada');
 
     layout_start('Locação nº ' . $loc['numero'], 'locacoes');
     ?>
@@ -449,6 +455,39 @@ function locacoes_ver(): void
                         <td class="num"><?= $loc['status'] === 'cancelada' ? '—' : money($valor) ?></td>
                     </tr>
                 <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-titulo">
+            <h2>Vistorias (checklist, fotos e assinatura)</h2>
+            <?php if ($loc['status'] !== 'cancelada'): ?>
+            <div class="acoes">
+                <?php if (!$temRetirada): ?><a class="btn" href="<?= e(url('locacoes', ['a' => 'vistoria', 'n' => $loc['numero'], 'tipo' => 'retirada'])) ?>">Vistoria de retirada</a><?php endif; ?>
+                <a class="btn btn-sec" href="<?= e(url('locacoes', ['a' => 'vistoria', 'n' => $loc['numero'], 'tipo' => 'devolucao'])) ?>">Vistoria de devolução</a>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php if (!$temRetirada && $loc['status'] === 'aberta'): ?>
+            <p class="flash flash-aviso" style="margin:0 0 12px">Ainda não há vistoria de retirada. Registre o estado dos equipamentos com fotos e a
+                assinatura do cliente: é a sua prova em caso de avaria.</p>
+        <?php endif; ?>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Tipo</th><th>Data</th><th>Feita por</th><th class="num">Fotos</th><th>Itens com problema</th><th>Assinatura</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($vistorias as $v): ?>
+                    <tr><td><?= $v['tipo'] === 'retirada' ? 'Retirada' : 'Devolução' ?></td>
+                        <td class="nowrap"><?= e(dt($v['criado_em'], true)) ?></td>
+                        <td><?= e($v['usuario'] ?? '') ?></td>
+                        <td class="num"><?= num($v['fotos']) ?></td>
+                        <td><?= (int) $v['problemas'] > 0 ? '<span class="selo vermelho">' . num($v['problemas']) . '</span>' : '<span class="selo verde">nenhum</span>' ?></td>
+                        <td><?= $v['assinada'] ? '<span class="selo verde">' . e($v['assinante_nome']) . '</span>' : '<span class="selo">sem assinatura</span>' ?></td>
+                        <td><a class="btn btn-sec btn-peq" href="<?= e(url('locacoes', ['a' => 'vistoria_ver', 'id' => $v['id']])) ?>" target="_blank">Ver / imprimir</a></td></tr>
+                <?php endforeach; ?>
+                <?php if (!$vistorias): ?><tr><td colspan="7" class="vazio">Nenhuma vistoria registrada.</td></tr><?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -668,6 +707,9 @@ function locacoes_contrato(): void
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id ORDER BY p.descricao', ['id' => $loc['id']]);
     $subtotal = 0.0;
+    // Assinatura do cliente feita na tela, na vistoria de retirada
+    $assinatura = one("SELECT id, assinante_nome, assinado_em FROM vistorias
+                        WHERE locacao_id = :id AND tipo = 'retirada' AND assinatura_arquivo <> ''", ['id' => $loc['id']]);
 
     print_start('Contrato de locação nº ' . $loc['numero'], url_locacao($loc));
     cabecalho_impressao('Contrato de locação', 'Nº ' . $loc['numero']);
@@ -702,7 +744,16 @@ function locacoes_contrato(): void
     <p style="margin-top:6mm"><?= e(($emp['cidade'] ?: '') . ($emp['cidade'] ? ', ' : '') . data_extenso($loc['data_saida'])) ?>.</p>
     <div class="assinaturas">
         <div>LOCADORA<br><?= e($emp['razao_social']) ?></div>
-        <div>LOCATÁRIO<br><?= e($loc['cliente_nome']) ?></div>
+        <div class="<?= $assinatura ? 'assinado' : '' ?>">
+            <?php if ($assinatura): ?>
+                <img src="<?= e(url('arquivos', ['a' => 'assinatura', 'id' => $assinatura['id']])) ?>" alt="Assinatura do locatário">
+            <?php endif; ?>
+            LOCATÁRIO<br><?= e($loc['cliente_nome']) ?>
+            <?php if ($assinatura): ?>
+                <small>Assinado eletronicamente por <?= e($assinatura['assinante_nome']) ?> em <?= e(dt($assinatura['assinado_em'], true)) ?>,
+                    na vistoria de retirada.</small>
+            <?php endif; ?>
+        </div>
     </div>
     <?php
     print_end();
@@ -768,4 +819,148 @@ function locacoes_fatura(): void
     <p class="muted" style="margin-top:4mm">Este documento é uma fatura de locação de bens móveis e não substitui nota fiscal quando exigida.</p>
     <?php
     print_end($pix !== null ? ['assets/vendor/qrcode.js', 'assets/js/pix.js'] : []);
+}
+
+// =====================================================================
+// VISTORIAS (checklist de retirada/devolução com fotos e assinatura)
+// =====================================================================
+function locacoes_vistoria(): void
+{
+    $loc = locacao_da_url();
+    $tipo = get('tipo') === 'retirada' ? 'retirada' : 'devolucao';
+    if ($loc['status'] === 'cancelada') {
+        pagina_erro(200, 'Locação cancelada não recebe vistoria.');
+    }
+    if ($tipo === 'retirada' && val("SELECT 1 FROM vistorias WHERE locacao_id = :id AND tipo = 'retirada'", ['id' => $loc['id']])) {
+        flash('Esta locação já tem vistoria de retirada.', 'aviso');
+        redirect(url_locacao($loc));
+    }
+    $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, p.codigo, p.descricao, p.unidade
+                    FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
+                   WHERE li.locacao_id = :id ORDER BY p.descricao', ['id' => $loc['id']]);
+    $estadoOld = (array) old('estado', []);
+    $obsOld = (array) old('obs_item', []);
+
+    layout_start(($tipo === 'retirada' ? 'Vistoria de retirada' : 'Vistoria de devolução') . ' · locação nº ' . $loc['numero'], 'locacoes');
+    ?>
+    <form method="post" action="<?= e(url('locacoes', ['a' => 'vistoria_salvar'])) ?>" class="form" enctype="multipart/form-data" id="form-vistoria">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= e($loc['id']) ?>">
+        <input type="hidden" name="tipo" value="<?= e($tipo) ?>">
+        <div class="card">
+            <h2><?= e($loc['cliente_nome']) ?></h2>
+            <p class="muted" style="margin:0">Confira cada equipamento junto com o cliente, fotografe o que for importante e peça a
+                assinatura no fim. Depois de salva, a vistoria não pode ser alterada.</p>
+        </div>
+        <div class="card">
+            <h2>Estado dos equipamentos</h2>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Equipamento</th><th class="num"><?= $tipo === 'retirada' ? 'Qtd.' : 'Devolvida / total' ?></th><th>Estado</th><th>Observação</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($itens as $it): ?>
+                        <tr><td><code><?= e($it['codigo']) ?></code> <?= e($it['descricao']) ?></td>
+                            <td class="num"><?= $tipo === 'retirada' ? num($it['quantidade']) : num($it['qtd_devolvida']) . ' / ' . num($it['quantidade']) ?> <?= e($it['unidade']) ?></td>
+                            <td><select name="estado[<?= e($it['id']) ?>]" aria-label="Estado de <?= e($it['descricao']) ?>">
+                                <?= options(ESTADOS_VISTORIA, $estadoOld[$it['id']] ?? 'ok') ?></select></td>
+                            <td><input type="text" name="obs_item[<?= e($it['id']) ?>]" value="<?= e($obsOld[$it['id']] ?? '') ?>" maxlength="200"
+                                       placeholder="ex.: risco na lateral" aria-label="Observação"></td></tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <label>Observações gerais<textarea name="obs" maxlength="2000"><?= e(old('obs')) ?></textarea></label>
+        </div>
+        <div class="card">
+            <h2>Fotos</h2>
+            <label>Tirar ou escolher fotos (até <?= FOTOS_POR_VISTORIA ?>)
+                <input type="file" name="fotos[]" id="fotos" accept="image/jpeg,image/png,image/webp" multiple>
+                <span class="ajuda">No celular, abre a câmera. As fotos são reduzidas antes do envio e os dados de localização são removidos.</span>
+            </label>
+            <div class="fotos-previa" id="fotos-previa"></div>
+        </div>
+        <div class="card">
+            <h2>Assinatura do cliente</h2>
+            <label>Nome de quem assina<input type="text" name="assinante_nome" maxlength="100"
+                   value="<?= e(old('assinante_nome', $tipo === 'retirada' ? $loc['cliente_nome'] : '')) ?>"></label>
+            <div class="assinatura-area">
+                <canvas id="assinatura-pad" width="900" height="260" aria-label="Área de assinatura: assine com o dedo ou o mouse"></canvas>
+                <span class="assinatura-linha">Assine acima da linha</span>
+            </div>
+            <input type="hidden" name="assinatura" id="assinatura">
+            <div class="acoes" style="margin-top:8px">
+                <button type="button" class="btn btn-sec btn-peq" id="assinatura-limpar">Limpar assinatura</button>
+                <span class="ajuda">Opcional, mas recomendada: é a concordância do cliente com o estado registrado.</span>
+            </div>
+        </div>
+        <div class="acoes">
+            <button type="submit" class="btn" id="vistoria-salvar">Salvar vistoria</button>
+            <a class="btn btn-sec" href="<?= e(url_locacao($loc)) ?>">Cancelar</a>
+        </div>
+    </form>
+    <?php
+    layout_end(['assets/js/vistoria.js']);
+}
+
+function locacoes_vistoria_salvar(): void
+{
+    $loc = locacao_do_post();
+    $tipo = post('tipo');
+    vistoria_registrar($loc['id'], $tipo, $_POST);
+    flash(($tipo === 'retirada' ? 'Vistoria de retirada' : 'Vistoria de devolução') . ' registrada.');
+    redirect(url_locacao($loc));
+}
+
+/** Vistoria para ver e imprimir (A4): itens, fotos e assinatura. */
+function locacoes_vistoria_ver(): void
+{
+    $id = get('id');
+    $v = is_uuid($id) ? one('SELECT v.*, u.nome AS usuario, l.numero, l.id AS locacao_id, c.nome AS cliente
+                               FROM vistorias v JOIN locacoes l ON l.id = v.locacao_id JOIN clientes c ON c.id = l.cliente_id
+                               LEFT JOIN usuarios u ON u.id = v.usuario_id WHERE v.id = :id', ['id' => $id]) : null;
+    if ($v === null) {
+        pagina_erro(404, 'Vistoria não encontrada.');
+    }
+    $itens = all('SELECT vi.estado, vi.obs, li.quantidade, p.codigo, p.descricao, p.unidade
+                    FROM vistoria_itens vi JOIN locacao_itens li ON li.id = vi.locacao_item_id JOIN produtos p ON p.id = li.produto_id
+                   WHERE vi.vistoria_id = :id ORDER BY p.descricao', ['id' => $v['id']]);
+    $fotos = all('SELECT id FROM vistoria_fotos WHERE vistoria_id = :id ORDER BY criado_em, id', ['id' => $v['id']]);
+    $titulo = $v['tipo'] === 'retirada' ? 'Vistoria de retirada' : 'Vistoria de devolução';
+
+    print_start("$titulo · locação nº {$v['numero']}", url('locacoes', ['a' => 'ver', 'n' => $v['numero']]));
+    cabecalho_impressao($titulo, 'Locação nº ' . $v['numero'], 'Feita em ' . dt($v['criado_em'], true));
+    ?>
+    <p><strong>Locatário:</strong> <?= e($v['cliente']) ?> · <strong>Responsável pela vistoria:</strong> <?= e($v['usuario'] ?? '') ?></p>
+    <h2>Estado dos equipamentos</h2>
+    <table>
+        <thead><tr><th>Código</th><th>Descrição</th><th class="num">Qtd.</th><th>Estado</th><th>Observação</th></tr></thead>
+        <tbody>
+        <?php foreach ($itens as $it): ?>
+            <tr><td><?= e($it['codigo']) ?></td><td><?= e($it['descricao']) ?></td><td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td>
+                <td><strong><?= e(ESTADOS_VISTORIA[$it['estado']] ?? $it['estado']) ?></strong></td><td><?= e($it['obs']) ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php if ($v['obs'] !== ''): ?><h2>Observações</h2><p><?= nl2br(e($v['obs'])) ?></p><?php endif; ?>
+    <?php if ($fotos): ?>
+        <h2>Fotos (<?= num(count($fotos)) ?>)</h2>
+        <div class="fotos">
+            <?php foreach ($fotos as $i => $f): ?>
+                <figure><img src="<?= e(url('arquivos', ['a' => 'foto', 'id' => $f['id']])) ?>" alt="Foto <?= $i + 1 ?> da vistoria" loading="lazy">
+                    <figcaption>Foto <?= $i + 1 ?></figcaption></figure>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+    <h2>Assinatura</h2>
+    <?php if ($v['assinatura_arquivo'] !== ''): ?>
+        <div class="assinatura-impressa">
+            <img src="<?= e(url('arquivos', ['a' => 'assinatura', 'id' => $v['id']])) ?>" alt="Assinatura de <?= e($v['assinante_nome']) ?>">
+            <p><?= e($v['assinante_nome']) ?><br><small class="muted">Assinado eletronicamente em <?= e(dt($v['assinado_em'], true)) ?>,
+                na tela do sistema, concordando com o estado registrado acima.</small></p>
+        </div>
+    <?php else: ?>
+        <p class="muted">Vistoria sem assinatura do cliente.</p>
+    <?php endif; ?>
+    <?php
+    print_end();
 }

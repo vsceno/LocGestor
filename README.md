@@ -44,7 +44,7 @@ salvo localmente (funciona sem internet).
 | Item | Versão | Observação |
 |---|---|---|
 | Windows + [Laragon](https://laragon.org) | qualquer recente | Apache |
-| PHP | 8.1 ou superior | extensões `pdo_pgsql` e `pgsql` ativas (Laragon: *Menu › PHP › Extensions*) |
+| PHP | 8.1 ou superior | extensões `pdo_pgsql`, `pgsql` e `gd` ativas (Laragon: *Menu › PHP › Extensions*); `exif` é opcional (endireita fotos de celular) |
 | PostgreSQL | **18** | usa `uuidv7()` nativo. Em versões anteriores, troque `uuidv7()` por `gen_random_uuid()` em `01_schema.sql` |
 | Git | qualquer | para clonar |
 
@@ -52,7 +52,7 @@ Confira no **Terminal do Laragon**:
 
 ```bat
 php -v
-php -m | findstr pgsql
+php -m | findstr "pgsql gd exif"
 psql --version
 ```
 
@@ -221,6 +221,20 @@ Com a demonstração carregada:
 
 **Troque essas senhas** (ou não carregue a demonstração) em qualquer ambiente acessível por outras pessoas.
 
+### Vistorias (checklist, fotos e assinatura)
+
+No detalhe da locação, **Vistoria de retirada** e **Vistoria de devolução** abrem um checklist com o estado de cada
+item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **assinatura do cliente na tela**
+(dedo, caneta ou mouse). Cada locação tem uma vistoria de retirada; as de devolução podem ser várias (devolução parcial).
+
+- A assinatura da retirada aparece no **contrato**, sobre a linha do locatário, com nome e data/hora.
+- A vistoria vira uma página A4 para imprimir ou salvar em PDF.
+- Vistoria registrada **não pode ser alterada nem apagada** (o banco não dá essa permissão ao sistema): é a prova.
+- O celular reduz as fotos antes de enviar; o servidor regrava todas (máx. 1600 px, JPEG), o que também remove os
+  metadados da câmera, como a localização GPS.
+- Os arquivos ficam em `storage/` (ou na pasta de `pasta_arquivos` do `config.php`), separados por locadora, e só
+  são entregues pelo sistema, para quem está logado na locadora dona. O acesso direto à pasta é bloqueado.
+
 ---
 
 ## 4. Estrutura do projeto
@@ -236,17 +250,19 @@ locgestor/
 │   ├── bootstrap.php      sessão, PDO, helpers, CSRF, formatação, validação, rotas e erros
 │   ├── tenant.php         contexto da locadora (único lugar que define app.tenant_id)
 │   ├── layout.php         menu, layout das telas e das páginas de impressão
+│   ├── arquivos.php       gravação e leitura de fotos/assinaturas (regrava toda imagem)
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
-│                          locacoes, reservas, caixa, relatorios, config, api
+│                          locacoes, reservas, caixa, relatorios, config, api, arquivos
 ├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
-├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução) e graficos.js
+├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução), graficos.js e vistoria.js (assinatura e fotos)
 ├── assets/vendor/         chart.umd.js (Chart.js 4.4.1) e qrcode.js (QR Code do PIX), locais
 ├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
 │                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
 ├── tests/                 isolamento.php (isolamento entre locadoras) e funcional.php (pelas telas)
 ├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push
+├── storage/               fotos e assinaturas das vistorias (não versionadas; acesso direto bloqueado)
 └── logs/                  app.log e php-erros.log (não versionados)
 ```
 
@@ -374,6 +390,7 @@ mudanças pelos arquivos de `database/migrations/`, em ordem (cada um pode ser r
 psql -U postgres -d locgestor -f database\migrations\001_seguranca_login.sql
 psql -U postgres -d locgestor -f database\migrations\002_pix.sql
 psql -U postgres -d locgestor -f database\migrations\003_planos_assinatura.sql
+psql -U postgres -d locgestor -f database\migrations\004_vistorias.sql
 php tests\isolamento.php
 ```
 
@@ -382,6 +399,7 @@ php tests\isolamento.php
 | `001_seguranca_login.sql` | tabela `login_tentativas` (limite de login) e coluna `usuarios.trocar_senha` (senha temporária) |
 | `002_pix.sql` | colunas `pix_chave`, `pix_nome` e `pix_cidade` na `empresa` (cobrança por PIX) |
 | `003_planos_assinatura.sql` | tabelas `planos` e `assinatura_pagamentos`; plano, vencimento e carência em `tenants` |
+| `004_vistorias.sql` | tabelas `vistorias`, `vistoria_itens` e `vistoria_fotos` (checklist, fotos e assinatura) |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -408,6 +426,10 @@ A partir daí, todo acesso por `http://` é redirecionado (301) para `https://`,
 **30** mais recentes em `C:\laragon\backups\locgestor` (fora da pasta do site, para nunca ficar acessível pelo
 navegador). Cada execução é anotada em `backup.log`, na mesma pasta.
 
+Fotos e assinaturas são arquivos, fora do banco: a cada execução a pasta `storage\` é **espelhada** em
+`C:\laragon\backups\locgestor\arquivos` (só o que mudou é copiado). Para restaurar, copie essa pasta de volta
+para `storage\` (ou para a pasta de `pasta_arquivos`).
+
 **Agendar todo dia às 23h** (PowerShell; já feito nesta instalação):
 
 ```powershell
@@ -418,7 +440,7 @@ $config  = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatte
 Register-ScheduledTask -TaskPath '\LocGestor\' -TaskName 'Backup diario' -Action $acao -Trigger $gatilho -Settings $config -Force
 ```
 
-Variáveis opcionais: `BACKUP_DIR` (outra pasta) e `MANTER` (quantos guardar). Se o `postgres` tiver senha
+Variáveis opcionais: `BACKUP_DIR` (outra pasta), `MANTER` (quantos guardar) e `PASTA_ARQUIVOS` (se mudou `pasta_arquivos`). Se o `postgres` tiver senha
 (seção 10.5), crie `%APPDATA%\postgresql\pgpass.conf` com a linha `localhost:5432:*:postgres:SENHA`.
 
 **Copie os backups para fora do computador** (pendrive, nuvem, outro servidor). Backup que fica só na mesma
@@ -475,7 +497,7 @@ Não implementado nesta versão:
 - envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
 - **cobrança automática** das mensalidades das locadoras (boleto/PIX/cartão com baixa sozinha; hoje o pagamento é registrado à mão) e **baixa automática** do PIX (precisa da API do banco);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
-- **anexos** (fotos de avaria, documentos do cliente);
+- **anexos** de documentos do cliente (fotos de avaria e assinatura já existem nas vistorias);
 
 Sugestões de próximos passos, em ordem:
 

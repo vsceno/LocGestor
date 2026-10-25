@@ -138,6 +138,27 @@ final class Navegador
         return $this->req($acao, ['_csrf' => $m[1] ?? ''] + $campos, $pagina);
     }
 
+    /** Como enviar(), mas em multipart (com arquivos). $campos já "achatados" (ex.: 'estado[uuid]' => 'ok'). */
+    public function enviarArquivos(string $pagina, string $acao, array $campos, array $arquivos): array
+    {
+        $tela = $this->req($pagina)['corpo'];
+        preg_match('/name="_csrf" value="([^"]+)"/', $tela, $m);
+        $c = curl_init($this->base . '/' . ltrim($acao, '/'));
+        $dados = ['_csrf' => $m[1] ?? ''] + $campos;
+        foreach (array_values($arquivos) as $i => $f) {
+            $dados["fotos[$i]"] = new CURLFile($f['caminho'], $f['tipo'], $f['nome']);
+        }
+        curl_setopt_array($c, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_COOKIEJAR => $this->cookies, CURLOPT_COOKIEFILE => $this->cookies, CURLOPT_TIMEOUT => 60,
+            CURLOPT_REFERER => $this->base . '/' . ltrim($pagina, '/'), CURLOPT_POST => true, CURLOPT_POSTFIELDS => $dados,
+        ]);
+        $r = curl_exec($c);
+        $tamCab = curl_getinfo($c, CURLINFO_HEADER_SIZE);
+        return ['codigo' => (int) curl_getinfo($c, CURLINFO_RESPONSE_CODE), 'local' => (string) curl_getinfo($c, CURLINFO_REDIRECT_URL),
+                'cabecalhos' => substr((string) $r, 0, $tamCab), 'corpo' => substr((string) $r, $tamCab)];
+    }
+
     /** Mensagens (flash) mostradas ao abrir $pagina. */
     public function mensagem(string $pagina): string
     {
@@ -196,6 +217,15 @@ register_shutdown_function(function () use ($base, $inicio) {
             $q('DELETE FROM reservas WHERE tenant_id = :t AND numero > :n', ['t' => $t['id'], 'n' => $t['res']]);
             $q("UPDATE tenant_sequencias SET ultimo = :n WHERE tenant_id = :t AND nome = 'locacao'", ['t' => $t['id'], 'n' => $t['loc']]);
             $q("UPDATE tenant_sequencias SET ultimo = :n WHERE tenant_id = :t AND nome = 'reserva'", ['t' => $t['id'], 'n' => $t['res']]);
+        }
+        // Vistorias criadas pelo teste: apaga os registros e os arquivos do disco
+        $pasta = rtrim((string) ($GLOBALS['config']['pasta_arquivos'] ?? __DIR__ . '/../storage'), '/\\');
+        $arqs = db("SELECT f.arquivo FROM vistoria_fotos f JOIN vistorias v ON v.id = f.vistoria_id WHERE v.criado_em >= :i
+                    UNION ALL SELECT assinatura_arquivo FROM vistorias WHERE criado_em >= :i2 AND assinatura_arquivo <> ''",
+                   ['i' => $inicio, 'i2' => $inicio])->fetchAll(PDO::FETCH_COLUMN);
+        $q('DELETE FROM vistorias WHERE criado_em >= :i', ['i' => $inicio]);
+        foreach ($arqs as $a) {
+            @unlink("$pasta/$a");
         }
         $q("DELETE FROM caixa WHERE descricao LIKE 'TESTE%' AND criado_em >= :i", ['i' => $inicio]);
         $q("DELETE FROM clientes WHERE nome LIKE 'TESTE%'");
@@ -348,6 +378,114 @@ $r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar'
 $pg = $alfa->get('index.php?p=locacoes&a=ver&n=' . num_locacao($r))['corpo'];
 ok(!str_contains($pg, 'https://wa.me/') && str_contains($pg, 'btn-whats') && str_contains($pg, 'desativado')
    && str_contains($pg, 'Cadastre o celular do cliente'), 'cliente sem telefone: botões desativados, com a orientação');
+
+// =====================================================================
+secao('Vistoria: checklist, fotos e assinatura');
+if (!function_exists('imagecreatetruecolor')) {
+    echo "  (pulado: a extensão gd do PHP é necessária para gerar as imagens de teste)\n";
+} else {
+    $tmp = sys_get_temp_dir();
+    $pastaArq = rtrim((string) ($config['pasta_arquivos'] ?? __DIR__ . '/../storage'), '/\\');
+    $contarArquivos = function () use ($pastaArq): int {
+        $n = 0;
+        if (is_dir($pastaArq)) {
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($pastaArq, FilesystemIterator::SKIP_DOTS)) as $f) {
+                $n += preg_match('/\.(jpg|png)$/', $f->getFilename()) ? 1 : 0;
+            }
+        }
+        return $n;
+    };
+    // Foto 2000x1500 com um bloco EXIF falso contendo um "GPS" marcador: precisa sumir no arquivo gravado
+    $img = imagecreatetruecolor(2000, 1500);
+    imagefilledrectangle($img, 0, 0, 2000, 1500, imagecolorallocate($img, 200, 120, 40));
+    ob_start(); imagejpeg($img); $jpeg = ob_get_clean();
+    $marca = 'GPSLatitude-SEGREDO-' . bin2hex(random_bytes(4));
+    $exif = "Exif\0\0" . $marca . str_repeat("\0", 16);
+    $jpegComExif = substr($jpeg, 0, 2) . "\xFF\xE1" . pack('n', strlen($exif) + 2) . $exif . substr($jpeg, 2);
+    file_put_contents("$tmp/teste-foto1.jpg", $jpegComExif);
+    $png = imagecreatetruecolor(400, 300);
+    ob_start(); imagepng($png); file_put_contents("$tmp/teste-foto2.png", ob_get_clean());
+    file_put_contents("$tmp/teste-falsa.jpg", "isto nao e uma imagem");
+    // Assinatura: traço escuro sobre branco; e uma "assinatura" em branco
+    $ass = imagecreatetruecolor(900, 260);
+    imagefill($ass, 0, 0, imagecolorallocate($ass, 255, 255, 255));
+    imagesetthickness($ass, 4);
+    imageline($ass, 80, 180, 820, 90, imagecolorallocate($ass, 10, 10, 10));
+    ob_start(); imagepng($ass); $assinatura = 'data:image/png;base64,' . base64_encode(ob_get_clean());
+    $branca = imagecreatetruecolor(900, 260);
+    imagefill($branca, 0, 0, imagecolorallocate($branca, 255, 255, 255));
+    ob_start(); imagepng($branca); $assinaturaBranca = 'data:image/png;base64,' . base64_encode(ob_get_clean());
+
+    $L141 = dbv('SELECT id FROM locacoes WHERE tenant_id = :t AND numero = 141', ['t' => $alfaId]);
+    $campos = ['id' => $L141, 'tipo' => 'retirada', 'obs' => 'TESTE vistoria', 'assinante_nome' => 'Responsável da Construtora'];
+    foreach (db('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $L141])->fetchAll(PDO::FETCH_COLUMN) as $k => $iid) {
+        $campos["estado[$iid]"] = $k === 0 ? 'avariado' : 'ok';
+        $campos["obs_item[$iid]"] = $k === 0 ? 'TESTE risco na lateral' : '';
+    }
+    $pgV = 'index.php?p=locacoes&a=vistoria&n=141&tipo=retirada';
+    $acaoV = 'index.php?p=locacoes&a=vistoria_salvar';
+    $fotos = [['caminho' => "$tmp/teste-foto1.jpg", 'tipo' => 'image/jpeg', 'nome' => 'foto1.jpg'],
+              ['caminho' => "$tmp/teste-foto2.png", 'tipo' => 'image/png', 'nome' => 'foto2.png']];
+    $antes = $contarArquivos();
+
+    // Erros: nada pode sobrar no disco
+    $alfa->enviarArquivos($pgV, $acaoV, $campos + ['assinatura' => $assinaturaBranca], $fotos);
+    ok(str_contains($alfa->mensagem($pgV), 'assinatura está em branco'), 'assinatura em branco é recusada');
+    $alfa->enviarArquivos($pgV, $acaoV, ['assinante_nome' => ''] + $campos + ['assinatura' => $assinatura], $fotos);
+    ok($alfa->mensagem($pgV) === 'Informe o nome de quem assinou.', 'assinatura sem o nome de quem assinou é recusada');
+    $alfa->enviarArquivos($pgV, $acaoV, $campos, [['caminho' => "$tmp/teste-falsa.jpg", 'tipo' => 'image/jpeg', 'nome' => 'falsa.jpg']]);
+    ok(str_contains($alfa->mensagem($pgV), 'não é uma imagem válida'), 'arquivo de texto disfarçado de .jpg é recusado');
+    $semEstado = array_filter($campos, fn($k) => !str_starts_with($k, 'estado['), ARRAY_FILTER_USE_KEY);
+    $alfa->enviarArquivos($pgV, $acaoV, $semEstado, $fotos);
+    ok(str_starts_with($alfa->mensagem($pgV), 'Informe o estado de'), 'sem o estado de cada equipamento, é recusada');
+    ok($contarArquivos() === $antes && dbv('SELECT count(*) FROM vistorias WHERE criado_em >= :i', ['i' => $inicio]) == 0,
+       'depois dos erros, nenhum arquivo nem registro ficou para trás');
+
+    // Vistoria completa
+    $r = $alfa->enviarArquivos($pgV, $acaoV, $campos + ['assinatura' => $assinatura], $fotos);
+    $vis = db("SELECT v.id, v.assinatura_arquivo, v.assinante_nome, (SELECT count(*) FROM vistoria_fotos f WHERE f.vistoria_id = v.id) AS fotos,
+                      (SELECT count(*) FROM vistoria_itens i WHERE i.vistoria_id = v.id) AS itens,
+                      (SELECT count(*) FROM vistoria_itens i WHERE i.vistoria_id = v.id AND i.estado = 'avariado') AS avariados
+                 FROM vistorias v WHERE v.locacao_id = :l AND v.tipo = 'retirada'", ['l' => $L141])->fetch();
+    ok(str_contains($r['local'], 'a=ver&n=141') && $vis && (int) $vis['fotos'] === 2 && (int) $vis['itens'] === 3 && (int) $vis['avariados'] === 1
+       && $vis['assinatura_arquivo'] !== '', 'vistoria de retirada gravada: 3 itens (1 avariado), 2 fotos e assinatura', json_encode($vis));
+    $foto = db('SELECT id, arquivo, largura, altura FROM vistoria_fotos WHERE vistoria_id = :v ORDER BY largura DESC LIMIT 1', ['v' => $vis['id']])->fetch();
+    $bytes = (string) @file_get_contents("$pastaArq/{$foto['arquivo']}");
+    ok($foto['largura'] == 1600 && $foto['altura'] == 1200 && str_starts_with($bytes, "\xFF\xD8"), 'foto 2000x1500 reduzida para 1600x1200 e regravada em JPEG');
+    ok($bytes !== '' && str_contains($jpegComExif, $marca) && !str_contains($bytes, $marca),
+       'metadados da foto (o "GPS" de teste) removidos no arquivo gravado');
+    ok(preg_match('#^' . $alfaId . '/\d{4}/[0-9a-f]{32}\.jpg$#', $foto['arquivo']) === 1, 'arquivo na pasta da locadora, com nome aleatório');
+
+    // Entrega dos arquivos: só para a própria locadora
+    $r = $alfa->req("index.php?p=arquivos&a=foto&id={$foto['id']}");
+    ok($r['codigo'] === 200 && str_contains($r['cabecalhos'], 'image/jpeg') && $r['corpo'] === $bytes, 'Alfa abre a foto (200, image/jpeg)');
+    ok($beta->req("index.php?p=arquivos&a=foto&id={$foto['id']}")['codigo'] === 404, 'Beta pedindo a foto da Alfa: 404');
+    ok($beta->req("index.php?p=arquivos&a=assinatura&id={$vis['id']}")['codigo'] === 404, 'Beta pedindo a assinatura da Alfa: 404');
+    ok((new Navegador($BASE))->req("index.php?p=arquivos&a=foto&id={$foto['id']}")['codigo'] === 303, 'sem login: redireciona ao login');
+    $direto = (new Navegador($BASE))->req("storage/{$foto['arquivo']}");
+    if (str_contains($direto['cabecalhos'], 'Development Server') || ($direto['codigo'] === 200 && !str_contains(strtolower($direto['cabecalhos']), 'apache'))) {
+        echo "  (pulado: servidor embutido do PHP não aplica o .htaccess da pasta storage)\n";
+    } else {
+        ok(in_array($direto['codigo'], [403, 404], true), "acesso direto à pasta storage é bloqueado ({$direto['codigo']})");
+    }
+    ok($beta->get("index.php?p=locacoes&a=vistoria_ver&id={$vis['id']}")['codigo'] === 404, 'Beta abrindo a vistoria da Alfa: 404');
+    $pv = $alfa->get("index.php?p=locacoes&a=vistoria_ver&id={$vis['id']}")['corpo'];
+    ok(substr_count($pv, 'p=arquivos&amp;a=foto') === 2 && str_contains($pv, 'p=arquivos&amp;a=assinatura') && str_contains(texto($pv), 'Avariado TESTE risco na lateral'),
+       'página da vistoria: itens, 2 fotos e assinatura');
+    $ct = $alfa->get('index.php?p=locacoes&a=contrato&n=141')['corpo'];
+    ok(str_contains($ct, "a=assinatura&amp;id={$vis['id']}") && str_contains(texto($ct), 'Assinado eletronicamente por Responsável da Construtora'),
+       'contrato mostra a assinatura do cliente');
+    $alfa->enviarArquivos($pgV, $acaoV, $campos + ['assinatura' => $assinatura], []);
+    ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=ver&n=141'), 'já tem vistoria de retirada'), 'segunda vistoria de retirada é recusada');
+    $r = $alfa->enviarArquivos('index.php?p=locacoes&a=vistoria&n=141&tipo=devolucao', $acaoV, ['tipo' => 'devolucao'] + $campos, []);
+    ok(dbv("SELECT count(*) FROM vistorias WHERE locacao_id = :l AND tipo = 'devolucao'", ['l' => $L141]) == 1, 'vistoria de devolução (sem fotos nem assinatura) aceita');
+    $dv = $alfa->get('index.php?p=locacoes&a=ver&n=141')['corpo'];
+    ok(str_contains($dv, 'Vistorias (checklist, fotos e assinatura)') && !str_contains($dv, '>Vistoria de retirada</a>'),
+       'detalhe lista as vistorias e não oferece outra de retirada');
+    foreach (["$tmp/teste-foto1.jpg", "$tmp/teste-foto2.png", "$tmp/teste-falsa.jpg"] as $f) {
+        @unlink($f);
+    }
+}
 
 // =====================================================================
 secao('PIX (BR Code copia e cola + QR Code)');

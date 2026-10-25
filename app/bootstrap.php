@@ -661,7 +661,7 @@ function tratar_erro_usuario(string $msg): never
     if (is_post()) {
         // Senhas nunca vão para a sessão; texto com codificação inválida também não volta ao formulário
         $dados = entrada_utf8_valida($_POST)
-            ? array_filter($_POST, fn($k) => $k !== '_csrf' && !str_contains((string) $k, 'senha'), ARRAY_FILTER_USE_KEY)
+            ? array_filter($_POST, fn($k) => $k !== '_csrf' && $k !== 'assinatura' && !str_contains((string) $k, 'senha'), ARRAY_FILTER_USE_KEY)
             : [];
         $_SESSION['old'] = $dados;
         flash($msg, 'erro');

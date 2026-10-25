@@ -10,3 +10,6 @@ desktop.ini
 *.zip
 /backups/
 *.sql.gz
+# Arquivos enviados (fotos de vistoria, assinaturas): nunca vão para o Git
+/storage/*
+!/storage/.htaccess
