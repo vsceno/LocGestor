@@ -353,18 +353,37 @@ ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo'])
 
 // =====================================================================
 secao('Preço semanal/mensal e kits');
-// A regra existe no banco (view) e no PHP (telas): as duas têm de dar o mesmo valor
+// A regra existe no banco (view), no PHP (telas) e no JavaScript (prévia): as três têm de dar o mesmo valor
 require_once __DIR__ . '/../app/negocio.php';
 $difs = [];
+$grade = [];
 foreach ([[45, 225, 700], [10, 50, 150], [3.5, 17.5, 52], [12, 0, 200], [12, 60, 0], [7.33, 40.1, 99.9], [0, 0, 0]] as [$pd, $ps, $pm]) {
     $sql = db('SELECT d, preco_periodo(d, :a, :b, :c) AS v FROM generate_series(0, 400) d', ['a' => $pd, 'b' => $ps, 'c' => $pm])->fetchAll();
     foreach ($sql as $l) {
+        $grade[] = [(int) $l['d'], $pd, $ps, $pm, (float) $l['v']];
         if (abs((float) $l['v'] - preco_periodo((int) $l['d'], $pd, $ps, $pm)) > 0.001) {
             $difs[] = "$pd/$ps/$pm d={$l['d']}: banco {$l['v']}, PHP " . preco_periodo((int) $l['d'], $pd, $ps, $pm);
         }
     }
 }
 ok(!$difs, 'preco_periodo: banco e PHP iguais de 0 a 400 dias em 7 tabelas de preço', implode('; ', array_slice($difs, 0, 3)));
+$node = trim((string) @shell_exec('node --version 2>' . (PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null')));
+if (str_starts_with($node, 'v')) {
+    $tmp = tempnam(sys_get_temp_dir(), 'lgp');
+    file_put_contents($tmp, json_encode(array_map(fn($g) => array_slice($g, 0, 4), $grade)));
+    $js = json_decode((string) shell_exec('node ' . escapeshellarg(__DIR__ . '/preco_periodo.js') . ' ' . escapeshellarg($tmp)), true);
+    @unlink($tmp);
+    $difs = [];
+    foreach ($grade as $i => $g) {
+        if (!is_array($js) || abs(($js[$i] ?? -1) - $g[4]) > 0.001) {
+            $difs[] = "$g[1]/$g[2]/$g[3] d=$g[0]: banco $g[4], JS " . json_encode($js[$i] ?? null);
+        }
+    }
+    ok(is_array($js) && count($js) === count($grade) && !$difs, 'preco_periodo: JavaScript (app.js) igual ao banco nos mesmos ' . count($grade) . ' casos',
+       implode('; ', array_slice($difs, 0, 3)));
+} else {
+    echo "  (pulado: Node.js não encontrado para conferir o cálculo do app.js)\n";
+}
 ok(preco_periodo(10, 10, 50, 150) == 80 && preco_periodo(35, 10, 50, 150) == 200 && preco_periodo(6, 10, 50, 150) == 50
    && preco_periodo(29, 10, 50, 150) == 150 && preco_periodo(5, 10, 50, 150) == 50 && preco_periodo(4, 10, 50, 150) == 40,
    'regra: 10 dias = semana + 3 diárias; 35 = mês + semana; sobra de dias não passa da semana nem do mês');
