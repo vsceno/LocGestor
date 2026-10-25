@@ -1,0 +1,85 @@
+# LocGestor - testes automáticos a cada push e pull request.
+# Instala o banco do zero (PostgreSQL 18), sobe o sistema com o servidor embutido do PHP
+# e roda os testes de isolamento entre locadoras e os testes funcionais pelas telas.
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    name: PHP ${{ matrix.php }} + PostgreSQL 18
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.4']   # versão mínima suportada e uma recente
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      # Senhas descartáveis, só deste teste (o banco morre junto com a execução)
+      SENHA_APP: app-ci-${{ github.run_id }}
+      SENHA_PLATAFORMA: plataforma-ci-${{ github.run_id }}
+      LOCGESTOR_SUPORTE_SENHA: suporte-ci-${{ github.run_id }}
+      LOCGESTOR_URL: http://localhost:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_pgsql, pgsql, mbstring, curl
+          coverage: none
+
+      - name: Sintaxe de todos os arquivos PHP
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Instalar o banco (papéis, estrutura, plataforma e demonstração)
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres -v senha_app="$SENHA_APP" -v senha_plataforma="$SENHA_PLATAFORMA" -f database/00_roles.sql
+          psql -v ON_ERROR_STOP=1 -d locgestor -f database/01_schema.sql
+          HASH=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$LOCGESTOR_SUPORTE_SENHA")
+          psql -v ON_ERROR_STOP=1 -d locgestor -v hash_suporte="$HASH" -f database/02_seed.sql
+          psql -v ON_ERROR_STOP=1 -d locgestor -f database/03_demo.sql
+
+      - name: Migrações (precisam rodar sem erro também num banco novo)
+        run: for f in database/migrations/*.sql; do psql -v ON_ERROR_STOP=1 -d locgestor -f "$f"; done
+
+      - name: Criar o config.php
+        run: |
+          php -r '$c = require "config.example.php";
+                  $c["db_app"]["password"] = getenv("SENHA_APP");
+                  $c["db_plataforma"]["password"] = getenv("SENHA_PLATAFORMA");
+                  file_put_contents("config.php", "<?php\nreturn " . var_export($c, true) . ";\n");'
+
+      - name: Testes de isolamento entre locadoras
+        run: php tests/isolamento.php
+
+      - name: Subir o sistema
+        run: |
+          php -S localhost:8000 -t . > /tmp/servidor.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs -o /dev/null "$LOCGESTOR_URL/index.php?p=login" && exit 0; sleep 0.5; done
+          cat /tmp/servidor.log; exit 1
+
+      - name: Testes funcionais (pelas telas)
+        run: php tests/funcional.php
+
+      - name: Nenhum warning ou erro do PHP
+        if: always()
+        run: |
+          if [ -s logs/php-erros.log ]; then cat logs/php-erros.log; exit 1; fi
+          echo "logs/php-erros.log vazio"

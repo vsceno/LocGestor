@@ -1,5 +1,7 @@
 # LocGestor
 
+[![Testes](https://github.com/vsceno/LocGestor/actions/workflows/testes.yml/badge.svg)](https://github.com/vsceno/LocGestor/actions/workflows/testes.yml)
+
 SaaS **multi-tenant** para controle de **locação de equipamentos** (construção civil, eventos e outros).
 Várias locadoras usam o mesmo sistema e o mesmo banco, e **cada uma só enxerga os próprios dados**, garantido pelo
 próprio PostgreSQL (Row Level Security).
@@ -147,6 +149,23 @@ php tests\isolamento.php
 Conecta como `locgestor_app` (com a senha do `config.php`) e roda os testes de isolamento entre locadoras.
 Precisa terminar com **"todos os testes de isolamento passaram"**. Rode de novo sempre que mexer no banco.
 
+### 2.7 Testes funcionais (pelas telas)
+
+```bat
+set LOCGESTOR_SUPORTE_SENHA=senha-do-suporte
+php tests\funcional.php
+```
+
+Usa o sistema como um navegador: login, clientes, o roteiro de cobrança (R$ 845 previsto / R$ 520 final),
+isolamento pelas URLs e pela API, reservas, caixa e perfis, relatórios e CSV, proteção do login e o painel da
+plataforma. Tudo o que cria leva o prefixo `TESTE`/`teste` e é **apagado no fim**, mesmo se algum teste falhar.
+Sem `LOCGESTOR_SUPORTE_SENHA`, a parte do painel da plataforma é pulada. Outro endereço: `LOCGESTOR_URL`.
+
+**No GitHub** ([.github/workflows/testes.yml](.github/workflows/testes.yml)), a cada push e pull request, os
+testes rodam sozinhos com **PHP 8.1 e 8.4** e **PostgreSQL 18**: instala o banco do zero, aplica as migrações,
+roda os testes de isolamento e os funcionais e confere que o PHP não registrou nenhum aviso. O resultado aparece
+na aba *Actions* e no selo no topo deste README.
+
 ---
 
 ## 3. Primeiro acesso e primeira locadora
@@ -204,7 +223,8 @@ locgestor/
 ├── assets/vendor/         chart.umd.js (Chart.js 4.4.1 local)
 ├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
 │                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
-├── tests/isolamento.php   testes de isolamento entre locadoras (terminal)
+├── tests/                 isolamento.php (isolamento entre locadoras) e funcional.php (pelas telas)
+├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push
 └── logs/                  app.log e php-erros.log (não versionados)
 ```
 
@@ -430,12 +450,11 @@ Não implementado nesta versão:
 - **cobrança** da assinatura das locadoras (planos e faturamento do SaaS);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** (fotos de avaria, documentos do cliente);
-- testes automatizados das telas (hoje existem os testes de isolamento e roteiros manuais).
 
 Sugestões de próximos passos, em ordem:
 
 1. Exigir senha no PostgreSQL (seção 10.5) e copiar os backups para fora do computador.
-2. Testes automatizados das telas rodando no GitHub Actions a cada push, junto com `tests/isolamento.php`.
+2. Ampliar os testes funcionais a cada tela nova (o GitHub já roda os atuais a cada push).
 3. Envio de contrato/fatura e lembretes de devolução por WhatsApp; PDF gerado no servidor.
 4. Cobrança por PIX com baixa automática no caixa.
 5. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).

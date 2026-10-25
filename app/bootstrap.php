@@ -302,8 +302,10 @@ function redirect(string $url): never
 function voltar(string $padrao): never
 {
     $ref = $_SERVER['HTTP_REFERER'] ?? '';
-    $host = parse_url($ref, PHP_URL_HOST);
-    redirect($ref !== '' && $host === ($_SERVER['HTTP_HOST'] ?? '') ? $ref : $padrao);
+    $p = parse_url($ref);
+    // Compara host E porta (HTTP_HOST traz a porta quando não é a padrão, ex.: localhost:8000)
+    $origem = ($p['host'] ?? '') . (isset($p['port']) ? ':' . $p['port'] : '');
+    redirect($ref !== '' && $origem === ($_SERVER['HTTP_HOST'] ?? '') ? $ref : $padrao);
 }
 
 /** $tipo: ok | erro | aviso */
