@@ -373,6 +373,7 @@ mudanças pelos arquivos de `database/migrations/`, em ordem (cada um pode ser r
 ```bat
 psql -U postgres -d locgestor -f database\migrations\001_seguranca_login.sql
 psql -U postgres -d locgestor -f database\migrations\002_pix.sql
+psql -U postgres -d locgestor -f database\migrations\003_planos_assinatura.sql
 php tests\isolamento.php
 ```
 
