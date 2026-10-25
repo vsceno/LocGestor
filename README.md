@@ -187,9 +187,25 @@ O sistema cria, numa única transação:
 - as 5 categorias padrão;
 - o usuário **administrador** da locadora, com uma **senha temporária mostrada uma única vez**.
 
-Envie ao cliente o identificador, o login e a senha temporária, e oriente a troca em *Configurações › Minha senha*.
+Envie ao cliente o identificador, o login e a senha temporária. No primeiro acesso, o sistema obriga a troca da senha.
 
-Na mesma tela você **suspende** uma locadora (os usuários dela perdem o acesso na hora) ou a reativa.
+### Planos e mensalidades
+
+- **Planos** (menu *Planos*): nome, preço mensal e limite de usuários. Vêm prontos Básico (R$ 99, 3 usuários),
+  Profissional (R$ 199, 5) e Empresarial (R$ 399, 15); edite à vontade.
+- **Nova locadora:** escolha o plano, o **primeiro vencimento** (padrão: 30 dias, período de teste) e os **dias de
+  carência** (padrão: 5). Vencimento vazio = sem cobrança (conta interna ou cortesia).
+- **Gerenciar** (na lista de locadoras): troca de plano, limite especial de usuários, vencimento e carência;
+  **registrar pagamento** de 1 a 24 meses (avança o vencimento; valor vazio = preço do plano × meses);
+  **estornar o último pagamento** (o vencimento volta); **suspender/reativar** manualmente.
+- **Aviso na locadora:** o admin vê uma faixa quando faltam 5 dias ou menos e, depois de vencida, até quando pode
+  regularizar. Para mostrar seu contato nesse aviso, preencha `'suporte_contato'` no `config.php`.
+- **Suspensão automática:** passada a carência sem pagamento, o sistema da locadora **bloqueia o acesso na hora**
+  (não depende de tarefa agendada) e o painel passa a mostrar "suspensa por inadimplência". Registrar o pagamento
+  **reativa** a locadora automaticamente.
+- A lista mostra a **receita mensal recorrente** (locadoras ativas com cobrança) e quantas estão inadimplentes.
+
+O recebimento das mensalidades em si (boleto, PIX, cartão) é feito fora do sistema; aqui você só registra.
 
 ### Sistema da locadora
 
@@ -223,7 +239,7 @@ locgestor/
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
 │                          locacoes, reservas, caixa, relatorios, config, api
-├── modulos_plataforma/    login e locadoras (tenants) do painel da plataforma
+├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução) e graficos.js
 ├── assets/vendor/         chart.umd.js (Chart.js 4.4.1) e qrcode.js (QR Code do PIX), locais
@@ -364,6 +380,7 @@ php tests\isolamento.php
 |---|---|
 | `001_seguranca_login.sql` | tabela `login_tentativas` (limite de login) e coluna `usuarios.trocar_senha` (senha temporária) |
 | `002_pix.sql` | colunas `pix_chave`, `pix_nome` e `pix_cidade` na `empresa` (cobrança por PIX) |
+| `003_planos_assinatura.sql` | tabelas `planos` e `assinatura_pagamentos`; plano, vencimento e carência em `tenants` |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -453,10 +470,9 @@ Se algo parar de funcionar, volte `scram-sha-256` para `trust` no `pg_hba.conf` 
 Não implementado nesta versão:
 
 - emissão de **NF-e** (remessa/retorno) e certificado A1 por locadora;
-- **edição de plano e limite** de uma locadora já criada no painel da plataforma (hoje: pelo banco);
 - **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail;
 - envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
-- **cobrança** da assinatura das locadoras (planos e faturamento do SaaS) e **baixa automática** do PIX (precisa da API do banco);
+- **cobrança automática** das mensalidades das locadoras (boleto/PIX/cartão com baixa sozinha; hoje o pagamento é registrado à mão) e **baixa automática** do PIX (precisa da API do banco);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** (fotos de avaria, documentos do cliente);
 
@@ -466,5 +482,5 @@ Sugestões de próximos passos, em ordem:
 2. Ampliar os testes funcionais a cada tela nova (o GitHub já roda os atuais a cada push).
 3. Lembretes automáticos por API do WhatsApp e PDF gerado no servidor (exige liberar o Composer).
 4. Baixa automática do PIX no caixa (exige a API PIX do banco da locadora; o QR Code e o copia e cola já existem).
-5. Tela de planos no painel da plataforma (limite de usuários, suspensão automática por inadimplência).
+5. Cobrança automática das mensalidades (gateway de pagamento) e e-mail de aviso antes do vencimento.
 6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.

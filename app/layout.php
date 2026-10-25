@@ -17,6 +17,7 @@ const MENU = [
 ];
 const MENU_PLATAFORMA = [
     'tenants' => ['Locadoras', 'produtos'],
+    'planos'  => ['Planos', 'caixa'],
 ];
 
 /** Ícones SVG inline (traço), 24x24. */
@@ -126,6 +127,30 @@ function pix_bloco(array $pix): string
          . '<button type="button" class="btn btn-sec btn-peq pix-copiar">Copiar código</button></div></div>';
 }
 
+/**
+ * Faixa para o admin da locadora: mensalidade vencendo em até 5 dias ou já vencida
+ * (dentro da carência, com a data em que o acesso será suspenso).
+ */
+function aviso_assinatura(): string
+{
+    $t = tenant();
+    if (AREA !== 'locadora' || !is_admin() || $t === null || empty($t['vencimento'])) {
+        return '';
+    }
+    $dias = days_between(today(), $t['vencimento']);
+    $contato = config('suporte_contato', '') !== '' ? ' Contato: ' . config('suporte_contato') . '.' : '';
+    if ($dias < 0) {
+        return '<div class="flash flash-erro" role="alert">Mensalidade do LocGestor vencida desde ' . e(dt($t['vencimento']))
+             . '. Regularize até ' . e(dt(tenant_limite_pagamento($t))) . ' para evitar a suspensão do acesso.' . e($contato) . '</div>';
+    }
+    if ($dias <= 5) {
+        $quando = $dias === 0 ? 'vence hoje' : ($dias === 1 ? 'vence amanhã' : "vence em $dias dias");
+        return '<div class="flash flash-aviso" role="alert">Sua mensalidade do LocGestor (plano ' . e($t['plano']) . ") $quando ("
+             . e(dt($t['vencimento'])) . ').' . e($contato) . '</div>';
+    }
+    return '';
+}
+
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {
@@ -183,6 +208,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
         <h1><?= e($titulo) ?></h1>
     </header>
     <main class="conteudo">
+        <?= aviso_assinatura() ?>
         <?= flashes_html() ?>
 <?php
 }

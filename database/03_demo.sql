@@ -14,9 +14,15 @@ SET client_encoding = 'UTF8';
 SET TIME ZONE 'America/Fortaleza';
 SET ROLE locgestor_owner;
 
-INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios) VALUES
-    ('alfa-locacoes', 'Alfa Locações de Equipamentos', '11444777000161', 'contato@alfalocacoes.com.br', '(85) 3222-1000', 'Profissional', 5),
-    ('beta-eventos',  'Beta Eventos e Locações',       '',               'contato@betaeventos.com.br',  '(85) 3333-2000', 'Básico',       3);
+-- Alfa: mensalidade em dia (vence em 12 dias). Beta: vencida há 2 dias, ainda na carência de 5
+-- (o admin da Beta vê o aviso de mensalidade vencida, mas continua usando o sistema).
+INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios, plano_id, vencimento, carencia_dias)
+SELECT x.slug, x.nome, x.cnpj, x.email, x.tel, p.nome, p.limite_usuarios, p.id, CURRENT_DATE + x.dias, 5
+  FROM (VALUES
+    ('alfa-locacoes', 'Alfa Locações de Equipamentos', '11444777000161', 'contato@alfalocacoes.com.br', '(85) 3222-1000', 'Profissional', 12),
+    ('beta-eventos',  'Beta Eventos e Locações',       '',               'contato@betaeventos.com.br',  '(85) 3333-2000', 'Básico',       -2)
+  ) AS x(slug, nome, cnpj, email, tel, plano, dias)
+  JOIN planos p ON p.nome = x.plano;
 
 -- =====================================================================
 -- ALFA LOCAÇÕES

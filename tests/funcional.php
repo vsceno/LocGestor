@@ -204,7 +204,9 @@ register_shutdown_function(function () use ($base, $inicio) {
         foreach (['tenant_sequencias', 'usuarios', 'categorias', 'empresa'] as $tab) {
             $q("DELETE FROM $tab WHERE tenant_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         }
+        $q("DELETE FROM assinatura_pagamentos WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM tenants WHERE slug LIKE 'teste-%'");
+        $q("DELETE FROM planos WHERE nome LIKE 'TESTE%'");
         $q("UPDATE tenants SET status = 'ativa' WHERE slug IN ('alfa-locacoes', 'beta-eventos')");
         $q("UPDATE empresa SET pix_chave = '', pix_nome = '', pix_cidade = '' WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'beta-eventos')");
         $q('DELETE FROM login_tentativas');
@@ -479,10 +481,14 @@ if (!$senhaSuporte) {
     $r = $pl->enviar('plataforma.php?p=login', 'plataforma.php?p=login&a=entrar', ['login' => 'suporte', 'senha' => $senhaSuporte]);
     ok(str_contains($r['local'], 'p=tenants'), 'suporte entra no painel');
     ok($alfa->get('plataforma.php?p=tenants')['codigo'] === 303, 'sessão de locadora não abre o painel da plataforma');
+    $basico = db("SELECT id, preco_mensal, limite_usuarios FROM planos WHERE nome = 'Básico'")->fetch();
     $r = $pl->enviar('plataforma.php?p=tenants&a=nova', 'plataforma.php?p=tenants&a=criar', [
-        'nome' => 'TESTE Locadora', 'slug' => 'teste-ci', 'plano' => 'Básico', 'limite_usuarios' => '2',
+        'nome' => 'TESTE Locadora', 'slug' => 'teste-ci', 'plano_id' => $basico['id'], 'vencimento' => dia(30), 'carencia_dias' => '5',
         'admin_nome' => 'Admin Teste', 'admin_login' => 'admin',
     ]);
+    $nova = db("SELECT plano, limite_usuarios, vencimento, carencia_dias FROM tenants WHERE slug = 'teste-ci'")->fetch();
+    ok($nova && $nova['plano'] === 'Básico' && (int) $nova['limite_usuarios'] === (int) $basico['limite_usuarios'] && $nova['vencimento'] === dia(30),
+       'nova locadora com o plano Básico: limite de usuários do plano e 1º vencimento em 30 dias', json_encode($nova));
     preg_match('/id="senha-temp">([^<]+)</', $pl->get('plataforma.php?p=tenants&a=criada')['corpo'], $m);
     $temp = $m[1] ?? '';
     ok(strlen($temp) === 12, 'nova locadora criada; senha temporária de 12 caracteres mostrada');
@@ -496,9 +502,68 @@ if (!$senhaSuporte) {
     $cats = dbv("SELECT count(*) FROM categorias WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'teste-ci')");
     ok(str_contains($tn, 'Locações em aberto 0 ') && $cats == 5, 'locadora nova: sistema vazio e 5 categorias padrão');
     $tid = dbv("SELECT id FROM tenants WHERE slug = 'teste-ci'");
-    $pl->enviar('plataforma.php?p=tenants', 'plataforma.php?p=tenants&a=status', ['id' => $tid, 'status' => 'suspensa']);
+    $ger = "plataforma.php?p=tenants&a=editar&id=$tid";
+
+    secao('Plataforma: planos e mensalidade');
+    $pl->enviar('plataforma.php?p=planos', 'plataforma.php?p=planos&a=salvar',
+                ['nome' => 'TESTE Plano', 'preco_mensal' => '1,00', 'limite_usuarios' => '1', 'ativo' => '1']);
+    $pid = dbv("SELECT id FROM planos WHERE nome = 'TESTE Plano'");
+    ok($pid !== null && str_contains(texto($pl->get('plataforma.php?p=planos')['corpo']), 'TESTE Plano R$ 1,00'), 'cria plano (R$ 1,00, 1 usuário)');
+    $pl->enviar("plataforma.php?p=planos&id=$pid", 'plataforma.php?p=planos&a=salvar',
+                ['id' => $pid, 'nome' => 'TESTE Plano', 'preco_mensal' => '2,50', 'limite_usuarios' => '1', 'ativo' => '1']);
+    ok(dbv('SELECT preco_mensal FROM planos WHERE id = :id', ['id' => $pid]) === '2.50', 'edita o preço do plano para R$ 2,50');
+    $pl->enviar('plataforma.php?p=planos', 'plataforma.php?p=planos&a=excluir', ['id' => $pid]);
+    ok(dbv('SELECT count(*) FROM planos WHERE id = :id', ['id' => $pid]) == 0, 'exclui plano sem locadoras');
+
+    // Aviso ao admin da locadora conforme o vencimento
+    db("UPDATE tenants SET vencimento = CURRENT_DATE + 3 WHERE id = :id", ['id' => $tid]);
+    ok(str_contains(texto($nv->get('index.php?p=dashboard')['corpo']), 'mensalidade do LocGestor (plano Básico) vence em 3 dias'),
+       'admin vê o aviso "vence em 3 dias"');
+    db("UPDATE tenants SET vencimento = CURRENT_DATE - 2 WHERE id = :id", ['id' => $tid]);
+    $tn = texto($nv->get('index.php?p=dashboard')['corpo']);
+    ok(str_contains($tn, 'vencida desde ' . date('d/m/Y', strtotime('-2 days'))) && str_contains($tn, 'Regularize até ' . date('d/m/Y', strtotime('+3 days'))),
+       'vencida há 2 dias (carência de 5): aviso com a data-limite e o sistema continua funcionando');
+
+    // Inadimplência: passou da carência
+    db("UPDATE tenants SET vencimento = CURRENT_DATE - 10 WHERE id = :id", ['id' => $tid]);
+    $nv->req('index.php?p=dashboard');
+    ok($nv->mensagem('index.php?p=login') === 'Acesso suspenso por falta de pagamento da mensalidade. Entre em contato com o suporte.',
+       'passou da carência: a sessão aberta cai na hora, com o motivo');
+    $nv->entrar('teste-ci', 'admin', 'NovaSenha2026');
+    ok($nv->mensagem('index.php?p=login') === 'Dados de acesso inválidos.', 'novo login da inadimplente: mensagem genérica');
+    $pl->get('plataforma.php?p=tenants');
+    $st = db('SELECT status, motivo_suspensao FROM tenants WHERE id = :id', ['id' => $tid])->fetch();
+    ok($st['status'] === 'suspensa' && $st['motivo_suspensao'] === 'inadimplencia', 'o painel marca a locadora como suspensa por inadimplência');
+    ok(str_contains(texto($pl->get('plataforma.php?p=tenants')['corpo']), 'inadimplente'), 'lista do painel mostra "inadimplente"');
+
+    // Pagamento: avança o vencimento e reativa
+    $antes = dbv('SELECT vencimento FROM tenants WHERE id = :id', ['id' => $tid]);
+    $pl->enviar($ger, 'plataforma.php?p=tenants&a=pagamento', ['id' => $tid, 'meses' => '2', 'valor' => '', 'data' => dia(0), 'forma' => 'PIX']);
+    $m = $pl->mensagem($ger);
+    $depois = db('SELECT vencimento, status, motivo_suspensao FROM tenants WHERE id = :id', ['id' => $tid])->fetch();
+    $esperado = dbv("SELECT (CAST(:d AS date) + INTERVAL '2 months')::date", ['d' => $antes]);
+    $pg = db('SELECT valor, meses FROM assinatura_pagamentos WHERE locadora_id = :id', ['id' => $tid])->fetch();
+    ok($depois['vencimento'] === $esperado && $depois['status'] === 'ativa' && $depois['motivo_suspensao'] === ''
+       && $pg['valor'] === number_format(2 * (float) $basico['preco_mensal'], 2, '.', '') && str_contains($m, 'Locadora reativada'),
+       "pagamento de 2 meses: R$ {$pg['valor']}, vencimento {$antes} → {$depois['vencimento']} e locadora reativada", $m);
+    ok(entrar_ok($nv, 'teste-ci', 'admin', 'NovaSenha2026'), 'depois do pagamento, o admin volta a entrar');
+    $pl->enviar($ger, 'plataforma.php?p=tenants&a=estornar', ['id' => $tid]);
+    ok(dbv('SELECT vencimento FROM tenants WHERE id = :id', ['id' => $tid]) === $antes
+       && dbv('SELECT count(*) FROM assinatura_pagamentos WHERE locadora_id = :id', ['id' => $tid]) == 0,
+       'estornar o último pagamento devolve o vencimento anterior');
+    db("UPDATE tenants SET vencimento = CURRENT_DATE + 30 WHERE id = :id", ['id' => $tid]);
+
+    // Suspensão manual
+    $pl->enviar($ger, 'plataforma.php?p=tenants&a=status', ['id' => $tid, 'status' => 'suspensa']);
+    ok(dbv('SELECT motivo_suspensao FROM tenants WHERE id = :id', ['id' => $tid]) === 'manual', 'suspensão manual fica registrada como "manual"');
     $nv->req('index.php?p=dashboard');
     ok(str_contains($nv->mensagem('index.php?p=login'), 'Acesso suspenso'), 'suspensa pelo painel: a sessão aberta cai com "Acesso suspenso"');
+}
+
+/** Login com sucesso? (vai para o painel) */
+function entrar_ok(Navegador $n, string $empresa, string $login, string $senha): bool
+{
+    return str_contains($n->entrar($empresa, $login, $senha)['local'], 'p=dashboard');
 }
 
 echo "\n" . str_repeat('=', 60) . "\n";

@@ -51,10 +51,29 @@ function tenant(): ?array
         return null;
     }
     if (empty($GLOBALS['_TENANT'])) {
-        $GLOBALS['_TENANT'] = one('SELECT id, slug, nome, status, plano, limite_usuarios FROM tenants WHERE id = :id',
-                                  ['id' => tenant_id()]);
+        $GLOBALS['_TENANT'] = one('SELECT id, slug, nome, status, plano, limite_usuarios, vencimento, carencia_dias
+                                     FROM tenants WHERE id = :id', ['id' => tenant_id()]);
     }
     return $GLOBALS['_TENANT'];
+}
+
+/** Último dia em que a locadora ainda usa o sistema sem pagar (vencimento + carência); null = isenta. */
+function tenant_limite_pagamento(array $t): ?string
+{
+    if (empty($t['vencimento'])) {
+        return null;
+    }
+    return date('Y-m-d', strtotime($t['vencimento'] . ' +' . (int) $t['carencia_dias'] . ' days'));
+}
+
+/**
+ * Mensalidade vencida além da carência: o acesso fica bloqueado na hora, sem depender de
+ * rotina agendada (o painel da plataforma também marca a locadora como suspensa).
+ */
+function tenant_inadimplente(array $t): bool
+{
+    $limite = tenant_limite_pagamento($t);
+    return $limite !== null && today() > $limite;
 }
 
 /**
@@ -66,11 +85,14 @@ function tenant_iniciar_sessao(): void
     tenant_definir((string) $_SESSION['tenant_id']);
 
     $t = tenant();
-    if ($t === null || $t['status'] !== 'ativa') {
-        log_app('AVISO', 'Sessão encerrada: locadora suspensa ou inexistente.');
+    if ($t === null || $t['status'] !== 'ativa' || tenant_inadimplente($t)) {
+        $porPagamento = $t !== null && $t['status'] === 'ativa';
+        log_app('AVISO', 'Sessão encerrada: locadora ' . ($porPagamento ? 'inadimplente' : 'suspensa ou inexistente') . '.');
         tenant_limpar();
         sessao_encerrar();
-        flash('Acesso suspenso. Entre em contato com o suporte.', 'erro');
+        flash($porPagamento
+            ? 'Acesso suspenso por falta de pagamento da mensalidade. Entre em contato com o suporte.'
+            : 'Acesso suspenso. Entre em contato com o suporte.', 'erro');
         redirect(url('login'));
     }
 

@@ -24,4 +24,4 @@ if (user() !== null) {
     }
 }
 
-executar_rota(['login', 'tenants'], __DIR__ . '/modulos_plataforma', 'tenants');
+executar_rota(['login', 'tenants', 'planos'], __DIR__ . '/modulos_plataforma', 'tenants');

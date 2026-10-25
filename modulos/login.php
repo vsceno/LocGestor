@@ -75,8 +75,9 @@ function login_entrar(): void
     }
 
     // tenants não tem RLS; o app só lê algumas colunas. Mensagem genérica não revela se a empresa existe.
-    $t = one('SELECT id, slug, status FROM tenants WHERE slug = :s', ['s' => $slug]);
-    if ($t === null || $t['status'] !== 'ativa') {
+    $t = one('SELECT id, slug, status, vencimento, carencia_dias FROM tenants WHERE slug = :s', ['s' => $slug]);
+    // Suspensa (manualmente ou por falta de pagamento): mesma mensagem genérica de dados inválidos
+    if ($t === null || $t['status'] !== 'ativa' || tenant_inadimplente($t)) {
         // Hash de uma senha aleatória descartada: gasta o mesmo tempo de uma verificação real
         password_verify($senha, '$2y$12$b3ZTYBwcXEHVCZ/K.j4y1u/YQ8SFgLjsCvjtO9JLNoPl0AHrbY4vO');
         $falhar();

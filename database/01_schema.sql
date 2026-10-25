@@ -33,6 +33,17 @@ $$ SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid $$;
 -- TABELAS DA PLATAFORMA (sem tenant_id e sem RLS)
 -- =====================================================================
 
+-- Planos de assinatura das locadoras
+CREATE TABLE planos (
+    id              uuid PRIMARY KEY DEFAULT uuidv7(),
+    nome            VARCHAR(40)   NOT NULL,
+    preco_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (preco_mensal >= 0),
+    limite_usuarios INTEGER       NOT NULL DEFAULT 3 CHECK (limite_usuarios >= 1),
+    ativo           BOOLEAN       NOT NULL DEFAULT TRUE,
+    criado_em       TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT planos_nome_uk UNIQUE (nome)
+);
+
 CREATE TABLE tenants (
     id              uuid PRIMARY KEY DEFAULT uuidv7(),
     slug            VARCHAR(40)  NOT NULL,
@@ -44,8 +55,16 @@ CREATE TABLE tenants (
     plano           VARCHAR(40)  NOT NULL DEFAULT 'Básico',
     limite_usuarios INTEGER      NOT NULL DEFAULT 3 CHECK (limite_usuarios >= 1),
     criado_em       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- Assinatura: vencimento da próxima mensalidade (NULL = sem cobrança/isenta).
+    -- Passados carencia_dias do vencimento sem pagamento, o acesso é suspenso.
+    plano_id         uuid        REFERENCES planos (id),
+    vencimento       DATE,
+    carencia_dias    INTEGER     NOT NULL DEFAULT 5,
+    motivo_suspensao VARCHAR(20) NOT NULL DEFAULT '',
     CONSTRAINT tenants_slug_uk UNIQUE (slug),
-    CONSTRAINT tenants_slug_ck CHECK (slug ~ '^[a-z0-9-]{3,40}$')
+    CONSTRAINT tenants_slug_ck CHECK (slug ~ '^[a-z0-9-]{3,40}$'),
+    CONSTRAINT tenants_carencia_ck CHECK (carencia_dias BETWEEN 0 AND 60),
+    CONSTRAINT tenants_motivo_ck CHECK (motivo_suspensao IN ('', 'manual', 'inadimplencia'))
 );
 
 CREATE TABLE plataforma_usuarios (
@@ -58,6 +77,23 @@ CREATE TABLE plataforma_usuarios (
     criado_em     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT plataforma_usuarios_login_uk UNIQUE (login)
 );
+
+-- Pagamentos de mensalidade das locadoras. Usa "locadora_id" (e não tenant_id) de propósito:
+-- é dado da plataforma, sem RLS, e a regra "tabela com tenant_id tem RLS" continua sem exceção.
+CREATE TABLE assinatura_pagamentos (
+    id                  uuid PRIMARY KEY DEFAULT uuidv7(),
+    locadora_id         uuid          NOT NULL REFERENCES tenants (id),
+    data                DATE          NOT NULL,
+    meses               INTEGER       NOT NULL CHECK (meses BETWEEN 1 AND 24),
+    valor               NUMERIC(12,2) NOT NULL CHECK (valor >= 0),
+    forma               VARCHAR(30)   NOT NULL DEFAULT 'PIX',
+    vencimento_anterior DATE          NOT NULL,
+    vencimento_novo     DATE          NOT NULL,
+    obs                 TEXT          NOT NULL DEFAULT '',
+    usuario_id          uuid          REFERENCES plataforma_usuarios (id),
+    criado_em           TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+CREATE INDEX assinatura_pagamentos_locadora_idx ON assinatura_pagamentos (locadora_id, data);
 
 -- Tentativas de login que falharam (limite contra tentativa e erro).
 -- Guarda só hashes do IP e da conta, nunca o IP ou o login em texto.
@@ -434,11 +470,13 @@ GRANT SELECT, INSERT, UPDATE ON locacoes, locacao_itens, devolucoes, devolucao_i
 GRANT SELECT, UPDATE ON empresa TO locgestor_app;
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores TO locgestor_app;
 -- tenants não tem RLS: o app só lê as colunas necessárias ao login e ao limite de usuários
-GRANT SELECT (id, slug, nome, status, plano, limite_usuarios) ON tenants TO locgestor_app;
+GRANT SELECT (id, slug, nome, status, plano, limite_usuarios, vencimento, carencia_dias) ON tenants TO locgestor_app;
 GRANT EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT) TO locgestor_app;
 
 -- Painel da plataforma (plataforma.php). Nas tabelas das locadoras vale o mesmo RLS do app.
 GRANT SELECT, INSERT, UPDATE ON tenants TO locgestor_plataforma;
+GRANT SELECT, INSERT, UPDATE, DELETE ON planos TO locgestor_plataforma;
+GRANT SELECT, INSERT, DELETE ON assinatura_pagamentos TO locgestor_plataforma;
 GRANT SELECT, UPDATE ON plataforma_usuarios TO locgestor_plataforma;
 GRANT SELECT, INSERT ON empresa, categorias TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE ON usuarios TO locgestor_plataforma;

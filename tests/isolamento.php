@@ -379,6 +379,9 @@ deve_falhar($pdo, 'CREATE VIEW sem security_invoker',
 deve_falhar($pdo, 'UPDATE em tenants (reativar/mudar locadora)', "UPDATE tenants SET status = 'ativa'", [], '42501');
 deve_falhar($pdo, 'SELECT de coluna não liberada em tenants (email_contato)', 'SELECT email_contato FROM tenants', [], '42501');
 deve_falhar($pdo, 'SELECT em plataforma_usuarios', 'SELECT * FROM plataforma_usuarios', [], '42501');
+deve_falhar($pdo, 'SELECT em planos (dado da plataforma)', 'SELECT * FROM planos', [], '42501');
+deve_falhar($pdo, 'SELECT em assinatura_pagamentos (mensalidades de todas as locadoras)', 'SELECT * FROM assinatura_pagamentos', [], '42501');
+deve_falhar($pdo, 'UPDATE do próprio vencimento em tenants', "UPDATE tenants SET vencimento = CURRENT_DATE + 999", [], '42501');
 
 // =====================================================================
 teste('T-ISO-08  Mesmo CPF e mesmo código de produto em locadoras diferentes');

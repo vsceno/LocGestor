@@ -25,6 +25,8 @@ return [
     // Em produção, com certificado instalado: true (redireciona http -> https)
     'forcar_https' => false,
     'app_name' => 'LocGestor',
+    // Contato do suporte mostrado às locadoras no aviso de mensalidade (e-mail, WhatsApp...)
+    'suporte_contato' => '',
     'timezone' => 'America/Fortaleza',
     'per_page' => 20,
 ];

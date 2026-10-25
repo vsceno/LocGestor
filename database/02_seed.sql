@@ -23,6 +23,11 @@ SET client_encoding = 'UTF8';
 
 SET ROLE locgestor_owner;
 
+-- Planos de assinatura (preço e limite podem ser mudados no painel da plataforma)
+INSERT INTO planos (nome, preco_mensal, limite_usuarios) VALUES
+    ('Básico', 99.00, 3), ('Profissional', 199.00, 5), ('Empresarial', 399.00, 15)
+ON CONFLICT (nome) DO NOTHING;
+
 INSERT INTO plataforma_usuarios (nome, login, senha_hash)
 VALUES ('Suporte LocGestor', 'suporte', :'hash_suporte')
 ON CONFLICT (login) DO UPDATE SET senha_hash = EXCLUDED.senha_hash;
