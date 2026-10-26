@@ -185,7 +185,7 @@ function locacoes_nova(): void
 
     // Repetir locação: cliente, itens, local, fretes e endereço da locação anterior; datas de hoje, mesmo prazo.
     // Acréscimo e desconto não são copiados (são negociados de novo).
-    $copia = ['local_uso' => '', 'frete_entrega' => '', 'frete_recolhimento' => '', 'endereco_entrega' => ''];
+    $copia = ['local_uso' => '', 'frete_entrega' => ''];
     $copiar = get('copiar');
     if (is_uuid($copiar) && !has_old()) {
         $orig = one('SELECT l.*, c.nome, c.cpf_cnpj FROM locacoes l JOIN clientes c ON c.id = l.cliente_id WHERE l.id = :id', ['id' => $copiar]);
@@ -196,8 +196,7 @@ function locacoes_nova(): void
         $prazo = max(0, days_between($orig['data_saida'], $orig['data_prev_devolucao']));
         $saida = today();
         $prev = date('Y-m-d', strtotime("+$prazo days"));
-        $copia = ['local_uso' => $orig['local_uso'], 'frete_entrega' => num($orig['frete_entrega'], 2),
-                  'frete_recolhimento' => num($orig['frete_recolhimento'], 2), 'endereco_entrega' => $orig['endereco_entrega']];
+        $copia = ['local_uso' => $orig['local_uso'], 'frete_entrega' => num($orig['frete_entrega'] + $orig['frete_recolhimento'], 2)];
         $linhas = [];
         foreach (all('SELECT li.produto_id, li.quantidade, li.valor_diaria FROM locacao_itens li WHERE li.locacao_id = :id ORDER BY li.id',
                      ['id' => $copiar]) as $li) {
@@ -254,6 +253,7 @@ function locacoes_nova(): void
                 </label>
                 <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
+                    <span class="ajuda">É também o endereço da entrega.</span>
                 </label>
             </div>
         </div>
@@ -283,14 +283,8 @@ function locacoes_nova(): void
                 <label>Acréscimo (montagem etc.) R$
                     <input type="text" name="acrescimo" id="acrescimo" value="<?= e(old('acrescimo')) ?>" inputmode="decimal" placeholder="0,00">
                 </label>
-                <label>Frete de entrega R$
+                <label>Frete R$
                     <input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(has_old() ? old('frete_entrega') : $copia['frete_entrega']) ?>" inputmode="decimal" placeholder="0,00">
-                </label>
-                <label>Frete de recolhimento R$
-                    <input type="text" name="frete_recolhimento" id="frete-recolhimento" value="<?= e(old('frete_recolhimento')) ?>" inputmode="decimal" placeholder="0,00">
-                </label>
-                <label>Endereço de entrega
-                    <input type="text" name="endereco_entrega" value="<?= e(has_old() ? old('endereco_entrega') : $copia['endereco_entrega']) ?>" maxlength="200" placeholder="Se vazio, o local de uso">
                 </label>
                 <label>Desconto R$
                     <input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00">
