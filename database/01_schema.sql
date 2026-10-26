@@ -205,6 +205,7 @@ CREATE TABLE usuarios (
     perfil        VARCHAR(10)  NOT NULL DEFAULT 'operador' CHECK (perfil IN ('admin', 'operador')),
     ativo         BOOLEAN      NOT NULL DEFAULT TRUE,
     trocar_senha  BOOLEAN      NOT NULL DEFAULT FALSE,   -- senha temporária: precisa trocar no próximo acesso
+    senha_redefinida_em TIMESTAMPTZ,        -- redefinida pelo painel: sessões abertas antes disso deixam de valer
     ultimo_acesso TIMESTAMPTZ,
     criado_em     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT usuarios_tenant_id_uk UNIQUE (tenant_id, id),

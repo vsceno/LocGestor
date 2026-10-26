@@ -487,6 +487,7 @@ function tenants_editar(): void
 
     <?php cobranca_card($t, $cobrancas); ?>
     <?php suporte_card($t); ?>
+    <?php senhas_card($t); ?>
 
     <div class="card">
         <div class="card-titulo">
@@ -613,6 +614,87 @@ function tenants_estornar(): void
         q('UPDATE tenants SET vencimento = :v WHERE id = :id', ['v' => $p['vencimento_anterior'], 'id' => $id]);
     });
     flash('Último pagamento estornado.');
+    redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+// ---------------------------------------------------------------------
+// Senhas dos usuários da locadora (redefinição pelo painel)
+// ---------------------------------------------------------------------
+/** Usuários da locadora (no contexto dela, com RLS). */
+function locadora_usuarios(string $tenantId): array
+{
+    tenant_definir($tenantId);
+    try {
+        return all('SELECT id, nome, login, perfil, ativo, ultimo_acesso FROM usuarios ORDER BY ativo DESC, lower(nome)');
+    } finally {
+        tenant_limpar();
+    }
+}
+
+function senhas_card(array $t): void
+{
+    $usuarios = locadora_usuarios($t['id']);
+    $mostrar = $_SESSION['senha_redefinida'] ?? null;
+    unset($_SESSION['senha_redefinida']);   // a senha aparece uma única vez
+    ?>
+    <div class="card">
+        <h2>Senhas dos usuários</h2>
+        <p class="ajuda">Gera uma senha temporária para um usuário (quando ele esqueceu). Ao entrar com ela, o usuário é obrigado a
+            trocá-la, e qualquer sessão que ele já tinha aberta deixa de valer. A senha temporária aparece só uma vez, aqui.</p>
+        <?php if ($mostrar && ($mostrar['tenant'] ?? '') === $t['id']): ?>
+            <div class="flash flash-aviso" role="status">Senha temporária de <strong><?= e($mostrar['login']) ?></strong>:
+                <code class="senha-temp-mostra"><?= e($mostrar['senha']) ?></code>
+                <small class="muted">Anote e envie ao usuário agora; ela não aparece de novo.</small></div>
+        <?php endif; ?>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Usuário</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($usuarios as $u): ?>
+                    <tr><td><?= e($u['nome']) ?> <code><?= e($u['login']) ?></code></td>
+                        <td><?= $u['perfil'] === 'admin' ? 'Administrador' : 'Operador' ?></td>
+                        <td><?= $u['ativo'] ? '<span class="selo verde">ativo</span>' : '<span class="selo">inativo</span>' ?></td>
+                        <td class="nowrap"><?= $u['ultimo_acesso'] ? e(dt($u['ultimo_acesso'], true)) : '<span class="muted">nunca</span>' ?></td>
+                        <td><?php if ($u['ativo'] && $t['status'] !== 'cancelada'): ?>
+                            <form method="post" action="<?= e(url('tenants', ['a' => 'reset_senha'])) ?>"
+                                  data-confirmar="Gerar uma senha temporária para <?= e($u['login']) ?>? As sessões abertas dele deixam de valer.">
+                                <?= csrf_field() ?><input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                                <input type="hidden" name="usuario" value="<?= e($u['id']) ?>">
+                                <button class="btn btn-sec btn-peq">Redefinir senha</button>
+                            </form><?php endif; ?></td></tr>
+                <?php endforeach; ?>
+                <?php if (!$usuarios): ?><tr><td colspan="5" class="vazio">Nenhum usuário.</td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php
+}
+
+function tenants_reset_senha(): void
+{
+    $id = post('id');
+    $usuario = post('usuario');
+    $t = is_uuid($id) ? locadora_por_id($id) : null;
+    if ($t === null || $t['status'] === 'cancelada') {
+        throw new UserError('Locadora não encontrada ou cancelada.');
+    }
+    if (!is_uuid($usuario)) {
+        throw new UserError('Usuário não encontrado.');
+    }
+    $senha = senha_temporaria();
+    tenant_definir($id);
+    try {
+        $u = one('UPDATE usuarios SET senha_hash = :h, trocar_senha = true, senha_redefinida_em = now()
+                   WHERE id = :id AND ativo RETURNING login', ['h' => password_hash($senha, PASSWORD_DEFAULT), 'id' => $usuario]);
+    } finally {
+        tenant_limpar();
+    }
+    if ($u === null) {
+        throw new UserError('Usuário não encontrado ou inativo.');
+    }
+    log_app('INFO', "Senha de um usuário da locadora {$t['slug']} redefinida pelo painel.");
+    $_SESSION['senha_redefinida'] = ['tenant' => $id, 'login' => $u['login'], 'senha' => $senha];
     redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
 }
 

@@ -187,6 +187,10 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+**Senhas dos usuários:** na tela de uma locadora, **Redefinir senha** gera uma senha temporária para um usuário
+(ela aparece uma única vez). O usuário é obrigado a trocá-la no próximo acesso, e as sessões que ele já tinha abertas
+deixam de valer na hora (migração 015: `senha_redefinida_em`).
+
 **Recados:** menu **Recados** do painel. Um aviso (aviso, novidade ou manutenção programada) com validade aparece no
 topo do sistema de **todas** as locadoras até a data de validade ou até você desativar. A locadora pode fechar o
 recado (fica fechado só naquele navegador). O texto aparece como texto, nunca como código.

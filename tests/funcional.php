@@ -1420,6 +1420,30 @@ if (!$senhaSuporte) {
     ok(!str_contains($recados->get('index.php?p=dashboard')['corpo'], 'TESTE manutenção') && str_contains($recHtml(), 'desativado'),
        'desativado pelo painel: some das locadoras e fica marcado na lista');
     db("DELETE FROM recados WHERE titulo LIKE 'TESTE%'");
+
+    // Redefinir senha de um usuário pelo painel: derruba as sessões dele e obriga a trocar a senha
+    $opId = dbv("SELECT id FROM usuarios WHERE tenant_id = :t AND login = 'teste.operador'", ['t' => $alfaId]);
+    ok($opId !== null && str_contains($op->get('index.php?p=dashboard')['local'] . $op->get('index.php?p=dashboard')['corpo'], 'Operador'),
+       'pré-condição: o operador de teste está logado antes da redefinição');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$alfaId", 'plataforma.php?p=tenants&a=reset_senha', ['id' => $alfaId, 'usuario' => $opId]);
+    $telaReset = $pl->get("plataforma.php?p=tenants&a=editar&id=$alfaId")['corpo'];
+    preg_match('/class="senha-temp-mostra">([^<]+)</', $telaReset, $mt);
+    $senhaTemp = $mt[1] ?? '';
+    ok(strlen($senhaTemp) === 12 && str_contains($telaReset, 'teste.operador'), 'painel gera senha temporária de 12 caracteres para o usuário');
+    ok(!str_contains($pl->get("plataforma.php?p=tenants&a=editar&id=$alfaId")['corpo'], $senhaTemp ?: '##'), 'a senha temporária aparece uma única vez');
+    $caiu = $op->get('index.php?p=dashboard');
+    ok(str_contains($caiu['local'], 'p=login') && str_contains($op->mensagem('index.php?p=login'), 'redefinida pelo administrador'),
+       'sessão aberta do usuário cai na hora, com o aviso de senha redefinida');
+    $velha = new Navegador($BASE);
+    ok(!entrar_ok($velha, 'alfa-locacoes', 'teste.operador', 'Operador2026'), 'a senha anterior do usuário deixa de entrar');
+    $nova = new Navegador($BASE);
+    $r = $nova->entrar('alfa-locacoes', 'teste.operador', $senhaTemp);
+    ok(str_contains($nova->req('index.php?p=dashboard')['local'], 'p=config&a=senha'), 'com a senha temporária, o usuário é obrigado a trocá-la');
+    $nova->enviar('index.php?p=config&a=senha', 'index.php?p=config&a=senha_salvar',
+                  ['senha_atual' => $senhaTemp, 'senha_nova' => 'Operador2027', 'senha_confirma' => 'Operador2027']);
+    ok(entrar_ok(new Navegador($BASE), 'alfa-locacoes', 'teste.operador', 'Operador2027'), 'depois da troca, entra com a senha escolhida pelo usuário');
+    $tudoAntes = db("SELECT count(*) FROM usuarios WHERE tenant_id = :t AND login = 'admin'", ['t' => $alfaId])->fetchColumn();
+    ok($tudoAntes == 1 && entrar_ok(new Navegador($BASE), 'alfa-locacoes', 'admin', 'admin123'), 'o admin da locadora não foi afetado');
 }
 
 /** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */

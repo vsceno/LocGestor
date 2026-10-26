@@ -105,6 +105,7 @@ function login_entrar(): void
         'tenant_id'   => $t['id'],
         'tenant_slug' => $t['slug'],
         'usuario'     => ['id' => $u['id'], 'nome' => $u['nome'], 'login' => $u['login'], 'perfil' => $u['perfil']],
+        'login_em'    => time(),   // sessões abertas antes de uma redefinição de senha pelo painel deixam de valer
     ];
     setcookie(COOKIE_EMPRESA, $t['slug'], [
         'expires'  => time() + 365 * 86400,

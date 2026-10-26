@@ -109,7 +109,7 @@ function tenant_iniciar_sessao(): void
 
     // O usuário pode ter sido desativado depois do login (consulta já filtrada pelo RLS)
     $u = is_uuid(uid())
-        ? one('SELECT id, nome, login, perfil, ativo, trocar_senha FROM usuarios WHERE id = :id', ['id' => uid()])
+        ? one('SELECT id, nome, login, perfil, ativo, trocar_senha, senha_redefinida_em FROM usuarios WHERE id = :id', ['id' => uid()])
         : null;
     if ($u === null || !$u['ativo']) {
         tenant_limpar();
@@ -117,7 +117,14 @@ function tenant_iniciar_sessao(): void
         flash('Seu usuário foi desativado. Fale com o administrador da locadora.', 'erro');
         redirect(url('login'));
     }
-    unset($u['ativo']);
+    // Senha redefinida pelo painel depois deste login: esta sessão não vale mais
+    if ($u['senha_redefinida_em'] !== null && strtotime((string) $u['senha_redefinida_em']) > (int) ($_SESSION['login_em'] ?? 0)) {
+        tenant_limpar();
+        sessao_encerrar();
+        flash('Sua senha foi redefinida pelo administrador. Entre de novo com a senha nova.', 'aviso');
+        redirect(url('login'));
+    }
+    unset($u['ativo'], $u['senha_redefinida_em']);
     $_SESSION['usuario'] = $u; // perfil/nome sempre atualizados
     // Quem está alterando: os gatilhos de auditoria gravam este usuário
     q("SELECT set_config('app.usuario_id', :id, false), set_config('app.usuario', :login, false)",
