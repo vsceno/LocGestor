@@ -183,6 +183,28 @@ function locacoes_nova(): void
         }
     }
 
+    // Repetir locação: cliente, itens, local, fretes e endereço da locação anterior; datas de hoje, mesmo prazo.
+    // Acréscimo e desconto não são copiados (são negociados de novo).
+    $copia = ['local_uso' => '', 'frete_entrega' => '', 'frete_recolhimento' => '', 'endereco_entrega' => ''];
+    $copiar = get('copiar');
+    if (is_uuid($copiar) && !has_old()) {
+        $orig = one('SELECT l.*, c.nome, c.cpf_cnpj FROM locacoes l JOIN clientes c ON c.id = l.cliente_id WHERE l.id = :id', ['id' => $copiar]);
+        if ($orig === null) {
+            pagina_erro(404, 'Locação para repetir não encontrada.');
+        }
+        $clienteTxt = cliente_rotulo($orig);
+        $prazo = max(0, days_between($orig['data_saida'], $orig['data_prev_devolucao']));
+        $saida = today();
+        $prev = date('Y-m-d', strtotime("+$prazo days"));
+        $copia = ['local_uso' => $orig['local_uso'], 'frete_entrega' => num($orig['frete_entrega'], 2),
+                  'frete_recolhimento' => num($orig['frete_recolhimento'], 2), 'endereco_entrega' => $orig['endereco_entrega']];
+        $linhas = [];
+        foreach (all('SELECT li.produto_id, li.quantidade, li.valor_diaria FROM locacao_itens li WHERE li.locacao_id = :id ORDER BY li.id',
+                     ['id' => $copiar]) as $li) {
+            $linhas[] = ['produto_id' => $li['produto_id'], 'quantidade' => $li['quantidade'], 'diaria' => num($li['valor_diaria'], 2)];
+        }
+    }
+
     // Depois de um erro, volta exatamente o que foi digitado
     if (has_old()) {
         $clienteTxt = old('cliente');
@@ -231,7 +253,7 @@ function locacoes_nova(): void
                     <span class="ajuda" id="info-dias"></span>
                 </label>
                 <label>Local de uso (obra/evento)
-                    <input type="text" name="local_uso" value="<?= e(old('local_uso')) ?>" maxlength="200">
+                    <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
                 </label>
             </div>
         </div>
@@ -262,13 +284,13 @@ function locacoes_nova(): void
                     <input type="text" name="acrescimo" id="acrescimo" value="<?= e(old('acrescimo')) ?>" inputmode="decimal" placeholder="0,00">
                 </label>
                 <label>Frete de entrega R$
-                    <input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(old('frete_entrega')) ?>" inputmode="decimal" placeholder="0,00">
+                    <input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(has_old() ? old('frete_entrega') : $copia['frete_entrega']) ?>" inputmode="decimal" placeholder="0,00">
                 </label>
                 <label>Frete de recolhimento R$
                     <input type="text" name="frete_recolhimento" id="frete-recolhimento" value="<?= e(old('frete_recolhimento')) ?>" inputmode="decimal" placeholder="0,00">
                 </label>
                 <label>Endereço de entrega
-                    <input type="text" name="endereco_entrega" value="<?= e(old('endereco_entrega')) ?>" maxlength="200" placeholder="Se vazio, o local de uso">
+                    <input type="text" name="endereco_entrega" value="<?= e(has_old() ? old('endereco_entrega') : $copia['endereco_entrega']) ?>" maxlength="200" placeholder="Se vazio, o local de uso">
                 </label>
                 <label>Desconto R$
                     <input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00">
@@ -372,6 +394,7 @@ function locacoes_ver(): void
                 <?php if ($aberta): ?><a class="btn" href="<?= e(url_locacao($loc, 'devolucao')) ?>">Registrar devolução</a><?php endif; ?>
                 <a class="btn btn-sec" href="<?= e(url_locacao($loc, 'contrato')) ?>" target="_blank">Contrato</a>
                 <a class="btn btn-sec" href="<?= e(url_locacao($loc, 'fatura')) ?>" target="_blank">Fatura</a>
+                <a class="btn btn-sec" href="<?= e(url('locacoes', ['a' => 'nova', 'copiar' => $loc['id']])) ?>">Repetir locação</a>
             </div>
         </div>
 

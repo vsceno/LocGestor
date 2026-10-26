@@ -196,6 +196,10 @@ histórico não pode ser alterado nem apagado (migração 016).
 (ela aparece uma única vez). O usuário é obrigado a trocá-la no próximo acesso, e as sessões que ele já tinha abertas
 deixam de valer na hora (migração 015: `senha_redefinida_em`).
 
+**Repetir locação:** o botão **Repetir locação** (no detalhe) abre uma nova locação com o cliente, os itens e as
+quantidades, o local, os fretes e o endereço da anterior. As datas começam hoje, com o mesmo prazo. Acréscimo e
+desconto não são copiados, porque são negociados de novo.
+
 **Orçamentos:** menu **Orçamentos**: cotação com validade (até 90 dias) para um cliente, com os preços do cadastro
 (podem ser negociados). Não reserva equipamento. Pode ser impresso e enviado pelo WhatsApp. Ao **transformar em
 locação** (se a saída já foi) ou em **reserva** (se é futura), o orçamento fica convertido e não pode mais ser

@@ -1134,6 +1134,19 @@ ok(str_contains($alfa->mensagem('index.php?p=orcamentos&a=novo'), 'validade deve
 ok($beta->get("index.php?p=orcamentos&a=ver&id=$O2")['codigo'] === 404 && !str_contains($beta->get('index.php?p=orcamentos')['corpo'], 'TESTE orçamento'),
    'Beta não vê nem abre orçamento da Alfa');
 // =====================================================================
+secao('Repetir locação (novo contrato a partir de um existente)');
+$detLoc = $alfa->get("index.php?p=locacoes&a=ver&n={$LOC1['numero']}")['corpo'];
+ok(str_contains($detLoc, 'Repetir locação') && str_contains($detLoc, "copiar=$LOC1[id]"), 'a locação tem o botão "Repetir locação"');
+$rep = $alfa->get("index.php?p=locacoes&a=nova&copiar=$LOC1[id]")['corpo'];
+ok(str_contains($rep, 'value="Maria Lúcia Bezerra · 11144477735"') || str_contains($rep, 'Maria Lúcia Bezerra'),
+   'repetir: cliente já preenchido');
+ok(str_contains($rep, 'value="' . $CAR . '"') || str_contains($rep, 'value="' . $CAR . '" selected'), 'repetir: produto da locação original nos itens');
+ok(preg_match('/name="quantidade\[\]" class="qtd" value="2"/', $rep) === 1, 'repetir: quantidades copiadas');
+ok(str_contains($rep, 'value="' . date('Y-m-d') . '"'), 'repetir: saída é hoje');
+ok(str_contains($rep, 'value="10,00"') && !str_contains($rep, 'name="acrescimo" id="acrescimo" value="30'),
+   'repetir: fretes copiados e acréscimo/desconto não copiados');
+ok($beta->get("index.php?p=locacoes&a=nova&copiar=$LOC1[id]")['codigo'] === 404, 'Beta não repete locação da Alfa (404)');
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",
