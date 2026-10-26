@@ -236,6 +236,7 @@ register_shutdown_function(function () use ($base, $inicio) {
         foreach (['tenant_sequencias', 'usuarios', 'categorias', 'empresa'] as $tab) {
             $q("DELETE FROM $tab WHERE tenant_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         }
+        $q("DELETE FROM assinatura_cobrancas WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM assinatura_pagamentos WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM tenants WHERE slug LIKE 'teste-%'");
         $q("DELETE FROM planos WHERE nome LIKE 'TESTE%'");

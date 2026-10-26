@@ -13,6 +13,8 @@ const AREA = 'plataforma';
 
 require __DIR__ . '/app/bootstrap.php';
 require __DIR__ . '/app/layout.php';
+require __DIR__ . '/app/asaas.php';
+require __DIR__ . '/app/assinatura.php';
 
 // O usuário da plataforma pode ter sido desativado depois do login
 if (user() !== null) {

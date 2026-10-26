@@ -390,6 +390,10 @@ deve_falhar($pdo, 'UPDATE do próprio vencimento em tenants', "UPDATE tenants SE
 // Vistoria é prova: o sistema só inclui e lê
 deve_falhar($pdo, 'UPDATE em vistorias (prova não se altera)', "UPDATE vistorias SET obs = 'x'", [], '42501');
 deve_falhar($pdo, 'DELETE em vistoria_fotos (prova não se apaga)', 'DELETE FROM vistoria_fotos', [], '42501');
+// Cobranças do Asaas: a locadora só lê o link das próprias (RLS); nada de ids do gateway nem alteração
+deve_falhar($pdo, 'SELECT do id do gateway em assinatura_cobrancas', 'SELECT gateway_id FROM assinatura_cobrancas', [], '42501');
+deve_falhar($pdo, 'UPDATE em assinatura_cobrancas (marcar como paga)', "UPDATE assinatura_cobrancas SET status = 'paga'", [], '42501');
+deve_falhar($pdo, 'SELECT em gateway_eventos', 'SELECT * FROM gateway_eventos', [], '42501');
 
 // =====================================================================
 teste('T-ISO-08  Mesmo CPF e mesmo código de produto em locadoras diferentes');

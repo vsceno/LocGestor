@@ -32,4 +32,12 @@ return [
     // Pasta das fotos de vistoria e assinaturas. Padrão: storage/ dentro do projeto
     // (bloqueada por .htaccess). Em produção, prefira uma pasta FORA da pasta do site.
     // 'pasta_arquivos' => 'C:/laragon/arquivos/locgestor',
+    // Cobrança automática das mensalidades pelo Asaas (vazio = desligada; veja o README).
+    // A chave da API é segredo: fica só aqui, nunca no Git.
+    'asaas' => [
+        'ambiente'      => 'sandbox',   // 'sandbox' para testes, 'producao' para cobrar de verdade
+        'chave'         => '',          // chave da API (Asaas › Integrações)
+        'webhook_token' => '',          // token de autenticação do webhook (invente um longo e aleatório)
+        'dias_antes'    => 10,          // gera a cobrança N dias antes do vencimento
+    ],
 ];

@@ -23,6 +23,8 @@ error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', RAIZ . '/logs/php-erros.log');
+// Pilha de erro sem os argumentos: a senha do banco (new PDO) nunca vai para o log
+ini_set('zend.exception_ignore_args', '1');
 set_error_handler(function (int $nivel, string $msg, string $arq, int $linha): bool {
     if (!(error_reporting() & $nivel)) {
         return false; // suprimido com @
@@ -103,17 +105,20 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: same-origin');
 
-ini_set('session.use_strict_mode', '1');
-ini_set('session.use_only_cookies', '1');
-session_name(AREA === 'plataforma' ? 'locgestor_plataforma' : 'locgestor');
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
-session_start();
+// Webhook e tarefas agendadas definem SEM_SESSAO: não há usuário nem cookie
+if (!defined('SEM_SESSAO')) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    session_name(AREA === 'plataforma' ? 'locgestor_plataforma' : 'locgestor');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+}
 
 // Dados do último POST com erro, disponíveis só nesta requisição (old())
 $GLOBALS['_OLD'] = $_SESSION['old'] ?? [];

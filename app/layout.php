@@ -159,14 +159,18 @@ function aviso_assinatura(): string
     }
     $dias = days_between(today(), $t['vencimento']);
     $contato = config('suporte_contato', '') !== '' ? ' Contato: ' . config('suporte_contato') . '.' : '';
+    // Cobrança do Asaas em aberto (o RLS só deixa ler as da própria locadora)
+    $link = (string) val("SELECT link FROM assinatura_cobrancas WHERE status = 'pendente' AND link <> ''
+                           ORDER BY vencimento LIMIT 1");
+    $pagar = $link !== '' ? ' <a class="btn btn-peq" href="' . e($link) . '" target="_blank" rel="noopener noreferrer">Pagar agora</a>' : '';
     if ($dias < 0) {
         return '<div class="flash flash-erro" role="alert">Mensalidade do LocGestor vencida desde ' . e(dt($t['vencimento']))
-             . '. Regularize até ' . e(dt(tenant_limite_pagamento($t))) . ' para evitar a suspensão do acesso.' . e($contato) . '</div>';
+             . '. Regularize até ' . e(dt(tenant_limite_pagamento($t))) . ' para evitar a suspensão do acesso.' . e($contato) . $pagar . '</div>';
     }
-    if ($dias <= 5) {
+    if ($dias <= 5 || $link !== '') {
         $quando = $dias === 0 ? 'vence hoje' : ($dias === 1 ? 'vence amanhã' : "vence em $dias dias");
         return '<div class="flash flash-aviso" role="alert">Sua mensalidade do LocGestor (plano ' . e($t['plano']) . ") $quando ("
-             . e(dt($t['vencimento'])) . ').' . e($contato) . '</div>';
+             . e(dt($t['vencimento'])) . ').' . e($contato) . $pagar . '</div>';
     }
     return '';
 }

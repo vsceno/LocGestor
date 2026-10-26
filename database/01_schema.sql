@@ -61,6 +61,9 @@ CREATE TABLE tenants (
     vencimento       DATE,
     carencia_dias    INTEGER     NOT NULL DEFAULT 5,
     motivo_suspensao VARCHAR(20) NOT NULL DEFAULT '',
+    -- Cobrança automática pelo Asaas (desligada por padrão) e o id do cliente lá
+    cobranca_automatica BOOLEAN     NOT NULL DEFAULT FALSE,
+    asaas_cliente_id    VARCHAR(40) NOT NULL DEFAULT '',
     CONSTRAINT tenants_slug_uk UNIQUE (slug),
     CONSTRAINT tenants_slug_ck CHECK (slug ~ '^[a-z0-9-]{3,40}$'),
     CONSTRAINT tenants_carencia_ck CHECK (carencia_dias BETWEEN 0 AND 60),
@@ -94,6 +97,37 @@ CREATE TABLE assinatura_pagamentos (
     criado_em           TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 CREATE INDEX assinatura_pagamentos_locadora_idx ON assinatura_pagamentos (locadora_id, data);
+
+-- Mensalidades geradas no Asaas (link de pagamento e situação). Tabela da plataforma com RLS:
+-- o painel vê todas; o sistema da locadora só lê as próprias (botão "Pagar agora").
+CREATE TABLE assinatura_cobrancas (
+    id            uuid PRIMARY KEY DEFAULT uuidv7(),
+    locadora_id   uuid          NOT NULL REFERENCES tenants (id),
+    vencimento    DATE          NOT NULL,
+    valor         NUMERIC(12,2) NOT NULL CHECK (valor > 0),
+    status        VARCHAR(10)   NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'paga', 'cancelada')),
+    gateway_id    VARCHAR(40),                      -- id da cobrança no Asaas (pay_...); NULL enquanto é criada
+    link          VARCHAR(300)  NOT NULL DEFAULT '', -- fatura do Asaas (PIX, boleto ou cartão)
+    pagamento_id  uuid          REFERENCES assinatura_pagamentos (id),
+    pago_em       DATE,
+    criado_em     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    atualizado_em TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT assinatura_cobrancas_gateway_uk UNIQUE (gateway_id)
+);
+-- Uma cobrança em aberto (ou paga) por vencimento: rodar a rotina duas vezes não cobra duas vezes
+CREATE UNIQUE INDEX assinatura_cobrancas_vencimento_uk
+    ON assinatura_cobrancas (locadora_id, vencimento) WHERE status <> 'cancelada';
+
+CREATE TABLE gateway_eventos (
+    id          VARCHAR(80) PRIMARY KEY,
+    tipo        VARCHAR(60) NOT NULL,
+    recebido_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE assinatura_cobrancas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assinatura_cobrancas FORCE ROW LEVEL SECURITY;
+CREATE POLICY plataforma_todas ON assinatura_cobrancas TO locgestor_plataforma USING (true) WITH CHECK (true);
+CREATE POLICY locadora_propria ON assinatura_cobrancas FOR SELECT TO locgestor_app USING (locadora_id = app_tenant_id());
 
 -- Tentativas de login que falharam (limite contra tentativa e erro).
 -- Guarda só hashes do IP e da conta, nunca o IP ou o login em texto.
@@ -573,6 +607,9 @@ GRANT EXECUTE ON FUNCTION app_tenant_id(), proximo_numero(TEXT), preco_periodo(I
 GRANT SELECT, INSERT, UPDATE ON tenants TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE, DELETE ON planos TO locgestor_plataforma;
 GRANT SELECT, INSERT, DELETE ON assinatura_pagamentos TO locgestor_plataforma;
+GRANT SELECT, INSERT, UPDATE, DELETE ON assinatura_cobrancas TO locgestor_plataforma;
+GRANT SELECT, INSERT ON gateway_eventos TO locgestor_plataforma;
+GRANT SELECT (locadora_id, vencimento, valor, status, link) ON assinatura_cobrancas TO locgestor_app;
 GRANT SELECT, UPDATE ON plataforma_usuarios TO locgestor_plataforma;
 GRANT SELECT, INSERT ON empresa, categorias TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE ON usuarios TO locgestor_plataforma;

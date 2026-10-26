@@ -78,6 +78,9 @@ jobs:
       - name: Testes funcionais (pelas telas)
         run: php tests/funcional.php
 
+      - name: Testes da cobrança automática (Asaas simulado)
+        run: php tests/cobranca.php
+
       - name: Nenhum warning ou erro do PHP
         if: always()
         run: |

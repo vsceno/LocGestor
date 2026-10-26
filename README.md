@@ -34,7 +34,7 @@ salvo localmente (funciona sem internet).
 7. [Nota fiscal](#7-nota-fiscal)
 8. [Segurança e LGPD](#8-segurança-e-lgpd)
 9. [Problemas comuns](#9-problemas-comuns)
-10. [Colocando em produção: login, HTTPS, backup e PostgreSQL](#10-colocando-em-produção-login-https-backup-e-postgresql)
+10. [Colocando em produção: login, HTTPS, backup, PostgreSQL e Asaas](#10-colocando-em-produção-login-https-backup-postgresql-e-asaas)
 11. [O que ficou de fora e próximos passos](#11-o-que-ficou-de-fora-e-próximos-passos)
 
 ---
@@ -167,6 +167,10 @@ isolamento pelas URLs e pela API, reservas, caixa e perfis, relatórios e CSV, p
 plataforma. Tudo o que cria leva o prefixo `TESTE`/`teste` e é **apagado no fim**, mesmo se algum teste falhar.
 Sem `LOCGESTOR_SUPORTE_SENHA`, a parte do painel da plataforma é pulada. Outro endereço: `LOCGESTOR_URL`.
 
+`php tests\cobranca.php` testa a cobrança automática das mensalidades: sobe sozinho um simulador da API do Asaas
+(porta 8091) e uma cópia do sistema apontada para ele (porta 8092), e confere rotina diária, webhook, botão
+"Pagar agora", isolamento e falhas do Asaas. Não precisa de conta no Asaas.
+
 **No GitHub** ([.github/workflows/testes.yml](.github/workflows/testes.yml)), a cada push e pull request, os
 testes rodam sozinhos com **PHP 8.1 e 8.4** e **PostgreSQL 18**: instala o banco do zero, aplica as migrações,
 roda os testes de isolamento e os funcionais e confere que o PHP não registrou nenhum aviso. O resultado aparece
@@ -205,7 +209,10 @@ Envie ao cliente o identificador, o login e a senha temporária. No primeiro ace
   **reativa** a locadora automaticamente.
 - A lista mostra a **receita mensal recorrente** (locadoras ativas com cobrança) e quantas estão inadimplentes.
 
-O recebimento das mensalidades em si (boleto, PIX, cartão) é feito fora do sistema; aqui você só registra.
+- **Cobrança automática pelo Asaas** (opcional, por locadora): a rotina diária gera a cobrança no Asaas alguns dias
+  antes do vencimento; a locadora paga por PIX, boleto ou cartão na fatura do Asaas (o admin dela vê o botão
+  **Pagar agora** no sistema) e a baixa é automática: avança o vencimento e reativa o acesso. Configuração na
+  seção 10.6. Sem o Asaas configurado, registre os pagamentos à mão como acima.
 
 ### Sistema da locadora
 
@@ -243,6 +250,7 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
 locgestor/
 ├── index.php              sistema das locadoras: index.php?p=<modulo>&a=<acao>
 ├── plataforma.php         painel do dono do SaaS (sessão e papel de banco próprios)
+├── webhook_asaas.php      avisos de pagamento do Asaas (confere na API antes de dar baixa)
 ├── config.example.php     modelo de configuração (versionado, sem senhas)
 ├── config.php             configuração real (NÃO versionado)
 ├── .htaccess              sem listagem; bloqueia config*.php, .md, .sql, .bat, .log, .git
@@ -251,6 +259,8 @@ locgestor/
 │   ├── tenant.php         contexto da locadora (único lugar que define app.tenant_id)
 │   ├── layout.php         menu, layout das telas e das páginas de impressão
 │   ├── arquivos.php       gravação e leitura de fotos/assinaturas (regrava toda imagem)
+│   ├── asaas.php          cliente da API do Asaas
+│   ├── assinatura.php     mensalidades: pagamento, suspensão e cobranças automáticas
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
 │                          locacoes, reservas, caixa, relatorios, config, api, arquivos
@@ -260,7 +270,9 @@ locgestor/
 ├── assets/vendor/         chart.umd.js (Chart.js 4.4.1) e qrcode.js (QR Code do PIX), locais
 ├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
 │                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
-├── tests/                 isolamento.php (isolamento entre locadoras) e funcional.php (pelas telas)
+├── tarefas/               diaria.php: rotina diária (cobranças do Asaas e suspensões); bloqueada para a web
+├── tests/                 isolamento.php (isolamento entre locadoras), funcional.php (pelas telas) e
+│                          cobranca.php (cobrança automática, com asaas_simulador.php no lugar do Asaas)
 ├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push
 ├── storage/               fotos e assinaturas das vistorias (não versionadas; acesso direto bloqueado)
 └── logs/                  app.log e php-erros.log (não versionados)
@@ -386,7 +398,7 @@ Preparação para o futuro:
 
 ---
 
-## 10. Colocando em produção: login, HTTPS, backup e PostgreSQL
+## 10. Colocando em produção: login, HTTPS, backup, PostgreSQL e Asaas
 
 ### 10.1 Atualizar um banco já instalado (migrações)
 
@@ -399,6 +411,7 @@ psql -U postgres -d locgestor -f database\migrations\002_pix.sql
 psql -U postgres -d locgestor -f database\migrations\003_planos_assinatura.sql
 psql -U postgres -d locgestor -f database\migrations\004_vistorias.sql
 psql -U postgres -d locgestor -f database\migrations\005_precos_kits.sql
+psql -U postgres -d locgestor -f database\migrations\006_cobranca_asaas.sql
 php tests\isolamento.php
 ```
 
@@ -409,6 +422,7 @@ php tests\isolamento.php
 | `003_planos_assinatura.sql` | tabelas `planos` e `assinatura_pagamentos`; plano, vencimento e carência em `tenants` |
 | `004_vistorias.sql` | tabelas `vistorias`, `vistoria_itens` e `vistoria_fotos` (checklist, fotos e assinatura) |
 | `005_precos_kits.sql` | preço semanal/mensal (`produtos`, `locacao_itens`), função `preco_periodo`, view de valores e tabelas `kits`/`kit_itens` |
+| `006_cobranca_asaas.sql` | cobrança automática: colunas em `tenants`, tabelas `assinatura_cobrancas` (com RLS) e `gateway_eventos` |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -495,6 +509,47 @@ afetados pela mudança, então siga na ordem:
 
 Se algo parar de funcionar, volte `scram-sha-256` para `trust` no `pg_hba.conf` e reinicie o PostgreSQL.
 
+### 10.6 Cobrança automática das mensalidades (Asaas)
+
+1. **Conta de testes:** crie uma conta em [sandbox.asaas.com](https://sandbox.asaas.com) e gere a chave da API
+   (*Integrações › Chaves de API*). Na conta de verdade (asaas.com) o passo é o mesmo.
+2. **`config.php`** (nunca vai para o Git):
+   ```php
+   'asaas' => [
+       'ambiente'      => 'sandbox',              // 'producao' quando for cobrar de verdade
+       'chave'         => '$aact_...',            // chave da API
+       'webhook_token' => 'um-texto-longo-aleatorio',
+       'dias_antes'    => 10,                     // gera a cobrança 10 dias antes do vencimento
+   ],
+   ```
+3. **Rotina diária** (gera as cobranças, confere os pagamentos e suspende os inadimplentes). Teste à mão com
+   `php tarefas\diaria.php` e agende (PowerShell; use o `php.exe` do Laragon):
+   ```powershell
+   $acao    = New-ScheduledTaskAction -Execute 'C:\laragon\bin\php\php-8.x\php.exe' -Argument 'tarefas\diaria.php' -WorkingDirectory 'C:\laragon\www\locgestor'
+   $gatilho = New-ScheduledTaskTrigger -Daily -At '07:00'
+   $config  = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+   Register-ScheduledTask -TaskPath '\LocGestor\' -TaskName 'Rotina diaria' -Action $acao -Trigger $gatilho -Settings $config -Force
+   ```
+4. **Webhook** (baixa na hora; só quando o sistema estiver num endereço público com HTTPS): no Asaas,
+   *Integrações › Webhooks*, URL `https://SEU-DOMINIO/webhook_asaas.php`, eventos de **cobrança** e o mesmo
+   **token de autenticação** do `webhook_token`. Sem webhook (ex.: no Laragon local) tudo funciona igual, só que a
+   baixa acontece na rotina diária ou no botão **Conferir pagamentos**.
+5. **Em cada locadora** (painel › Gerenciar): preencha o **CNPJ** (o Asaas exige) e marque **Gerar a cobrança no
+   Asaas**. O botão **Gerar cobrança do vencimento** cria a cobrança na hora, sem esperar a rotina.
+
+Como funciona e o que protege:
+
+- Cada cobrança leva a nossa referência; se a resposta do Asaas se perder, a rotina seguinte acha a cobrança por
+  essa referência em vez de criar outra. Um vencimento nunca tem duas cobranças em aberto (índice único no banco).
+- O aviso do webhook só diz **qual** cobrança mudou: a situação é sempre conferida na API antes da baixa (um aviso
+  falso não registra pagamento). Token errado = 401 e alerta no log; aviso repetido é ignorado.
+- A baixa usa o mesmo registro do pagamento manual (avança 1 mês e reativa). Pagamento recebido pelo Asaas não é
+  estornado pelo painel: se o dinheiro voltar ao cliente no Asaas, ajuste o vencimento à mão.
+- O sistema da locadora só lê o **link** das cobranças **dela** (RLS na tabela `assinatura_cobrancas`).
+- Mensalidade já vencida é cobrada com vencimento para hoje (o Asaas não aceita data passada).
+- Os testes (`php tests\cobranca.php`) usam um simulador da API; antes de cobrar de verdade, faça um ciclo
+  completo no **sandbox** (gerar, pagar pela fatura de teste e conferir a baixa).
+
 ---
 
 ## 11. O que ficou de fora e próximos passos
@@ -504,7 +559,7 @@ Não implementado nesta versão:
 - emissão de **NF-e** (remessa/retorno) e certificado A1 por locadora;
 - **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail;
 - envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
-- **cobrança automática** das mensalidades das locadoras (boleto/PIX/cartão com baixa sozinha; hoje o pagamento é registrado à mão) e **baixa automática** do PIX (precisa da API do banco);
+- **baixa automática** do PIX das locações (precisa da API do banco da locadora; as mensalidades já têm cobrança automática pelo Asaas);
 - **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
 - **anexos** de documentos do cliente (fotos de avaria e assinatura já existem nas vistorias);
 
@@ -514,5 +569,5 @@ Sugestões de próximos passos, em ordem:
 2. Ampliar os testes funcionais a cada tela nova (o GitHub já roda os atuais a cada push).
 3. Lembretes automáticos por API do WhatsApp e PDF gerado no servidor (exige liberar o Composer).
 4. Baixa automática do PIX no caixa (exige a API PIX do banco da locadora; o QR Code e o copia e cola já existem).
-5. Cobrança automática das mensalidades (gateway de pagamento) e e-mail de aviso antes do vencimento.
+5. Ligar o Asaas: ciclo completo no sandbox, depois produção com o webhook num endereço público (seção 10.6).
 6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.

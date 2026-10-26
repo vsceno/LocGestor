@@ -34,19 +34,6 @@ function assinatura_situacao(array $t): array
     return ['em dia', 'verde'];
 }
 
-/**
- * Suspende (status) quem passou da carência sem pagar. O bloqueio de acesso já acontece
- * sozinho no sistema da locadora; aqui o painel passa a mostrar a situação real.
- */
-function suspender_inadimplentes(): void
-{
-    foreach (all("UPDATE tenants SET status = 'suspensa', motivo_suspensao = 'inadimplencia'
-                   WHERE status = 'ativa' AND vencimento IS NOT NULL AND vencimento + carencia_dias < CURRENT_DATE
-                RETURNING slug") as $t) {
-        log_app('AVISO', "Locadora {$t['slug']} suspensa por inadimplência.");
-    }
-}
-
 function planos_ativos(): array
 {
     return all('SELECT id, nome, preco_mensal, limite_usuarios FROM planos WHERE ativo ORDER BY preco_mensal, nome');
@@ -341,6 +328,8 @@ function tenants_editar(): void
                         WHERE p.locadora_id = :id ORDER BY p.criado_em DESC LIMIT 36', ['id' => $t['id']]);
     $planos = planos_ativos();
     [$sit, $cor] = assinatura_situacao($t);
+    $cobrancas = all('SELECT * FROM assinatura_cobrancas WHERE locadora_id = :id ORDER BY vencimento DESC, criado_em DESC LIMIT 24',
+                     ['id' => $t['id']]);
 
     layout_start($t['nome'], 'tenants');
     ?>
@@ -420,6 +409,8 @@ function tenants_editar(): void
         </div>
     </div>
 
+    <?php cobranca_card($t, $cobrancas); ?>
+
     <div class="card">
         <div class="card-titulo">
             <h2>Pagamentos</h2>
@@ -484,6 +475,11 @@ function tenants_salvar(): void
        'pn' => $a['plano']['nome'], 'l' => $limite, 'v' => $a['vencimento'], 'car' => $a['carencia'], 'id' => $t['id']]);
     log_app('INFO', "Locadora {$t['slug']} atualizada (plano {$a['plano']['nome']}, vencimento " . ($a['vencimento'] ?? 'isenta') . ').');
     flash('Locadora atualizada.');
+    // Cobrança em aberto no Asaas para um vencimento que deixou de valer
+    if (val("SELECT 1 FROM assinatura_cobrancas WHERE locadora_id = :id AND status = 'pendente'
+               AND vencimento IS DISTINCT FROM CAST(:v AS date)", ['id' => $t['id'], 'v' => $a['vencimento']]) !== null) {
+        flash('Há cobrança pendente no Asaas com outro vencimento. Cancele-a abaixo se não valer mais.', 'aviso');
+    }
     redirect(url('tenants', ['a' => 'editar', 'id' => $t['id']]));
 }
 
@@ -503,30 +499,8 @@ function tenants_pagamento(): void
     }
     $forma = in_array(post('forma'), FORMAS_PGTO, true) ? post('forma') : throw new UserError('Escolha a forma de pagamento.');
 
-    $r = tx(function () use ($id, $meses, $data, $obs, $forma) {
-        $t = one('SELECT t.id, t.slug, t.nome, t.vencimento, t.status, t.motivo_suspensao, p.preco_mensal
-                    FROM tenants t LEFT JOIN planos p ON p.id = t.plano_id WHERE t.id = :id FOR UPDATE OF t', ['id' => $id]);
-        if ($t === null) {
-            throw new UserError('Locadora não encontrada.');
-        }
-        $valor = post('valor') === '' ? round((float) $t['preco_mensal'] * $meses, 2) : parse_money(post('valor'));
-        if ($valor < 0) {
-            throw new UserError('O valor não pode ser negativo.');
-        }
-        $base = $t['vencimento'] ?? today();
-        // Soma de meses pelo banco: 31/01 + 1 mês = 28/02 (e não 03/03)
-        $novo = (string) val('SELECT (CAST(:b AS date) + make_interval(months => :m))::date', ['b' => $base, 'm' => $meses]);
-        q('INSERT INTO assinatura_pagamentos (locadora_id, data, meses, valor, forma, vencimento_anterior, vencimento_novo, obs, usuario_id)
-           VALUES (:l, :d, :m, :v, :f, :va, :vn, :o, :u)',
-          ['l' => $id, 'd' => $data, 'm' => $meses, 'v' => $valor, 'f' => $forma, 'va' => $base, 'vn' => $novo, 'o' => $obs, 'u' => uid()]);
-        $reativou = $t['status'] === 'suspensa' && $t['motivo_suspensao'] === 'inadimplencia';
-        q("UPDATE tenants SET vencimento = :v,
-                 status = CASE WHEN status = 'suspensa' AND motivo_suspensao = 'inadimplencia' THEN 'ativa' ELSE status END,
-                 motivo_suspensao = CASE WHEN motivo_suspensao = 'inadimplencia' THEN '' ELSE motivo_suspensao END
-           WHERE id = :id", ['v' => $novo, 'id' => $id]);
-        return ['t' => $t, 'novo' => $novo, 'valor' => $valor, 'reativou' => $reativou];
-    });
-    log_app('INFO', "Pagamento da locadora {$r['t']['slug']}: {$meses} mês(es), vencimento agora {$r['novo']}.");
+    $valor = post('valor') === '' ? null : parse_money(post('valor'));
+    $r = assinatura_registrar_pagamento($id, $meses, $data, $valor, $forma, $obs, uid());
     flash('Pagamento de ' . money($r['valor']) . ' registrado. Próximo vencimento: ' . dt($r['novo']) . '.'
           . ($r['reativou'] ? ' Locadora reativada.' : ''));
     redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
@@ -546,6 +520,9 @@ function tenants_estornar(): void
         if ($venc === null || $p === null) {
             throw new UserError('Nenhum pagamento para estornar.');
         }
+        if (val('SELECT 1 FROM assinatura_cobrancas WHERE pagamento_id = :p', ['p' => $p['id']]) !== null) {
+            throw new UserError('Este pagamento foi recebido pelo Asaas e não é estornado aqui. Se o dinheiro foi devolvido ao cliente no Asaas, ajuste o vencimento manualmente.');
+        }
         if ($venc['vencimento'] !== $p['vencimento_novo']) {
             throw new UserError('O vencimento foi alterado depois deste pagamento. Ajuste o vencimento manualmente e exclua o pagamento pelo banco, se preciso.');
         }
@@ -553,6 +530,138 @@ function tenants_estornar(): void
         q('UPDATE tenants SET vencimento = :v WHERE id = :id', ['v' => $p['vencimento_anterior'], 'id' => $id]);
     });
     flash('Último pagamento estornado.');
+    redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+// ---------------------------------------------------------------------
+// Cobrança automática (Asaas)
+// ---------------------------------------------------------------------
+const SELOS_COBRANCA = ['pendente' => 'amarelo', 'paga' => 'verde', 'cancelada' => ''];
+
+function cobranca_card(array $t, array $cobrancas): void
+{
+    $cfg = asaas_config();
+    ?>
+    <div class="card">
+        <div class="card-titulo">
+            <h2>Cobrança automática (Asaas)</h2>
+            <?php if (asaas_ativo()): ?>
+                <div class="acoes">
+                    <form method="post" action="<?= e(url('tenants', ['a' => 'cobranca_sincronizar'])) ?>">
+                        <?= csrf_field() ?><input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                        <button class="btn btn-sec btn-peq">Conferir pagamentos</button>
+                    </form>
+                    <form method="post" action="<?= e(url('tenants', ['a' => 'cobranca_gerar'])) ?>">
+                        <?= csrf_field() ?><input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                        <button class="btn btn-peq">Gerar cobrança do vencimento</button>
+                    </form>
+                </div>
+            <?php endif; ?>
+        </div>
+        <?php if (!asaas_ativo()): ?>
+            <p class="muted">Asaas não configurado: preencha <code>'asaas'</code> no <code>config.php</code> (veja o README). Enquanto isso, registre os pagamentos à mão.</p>
+        <?php else: ?>
+            <form method="post" action="<?= e(url('tenants', ['a' => 'cobranca_config'])) ?>" class="filtros">
+                <?= csrf_field() ?><input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                <label class="check"><input type="checkbox" name="cobranca_automatica" value="1" <?= $t['cobranca_automatica'] ? 'checked' : '' ?>>
+                    Gerar a cobrança no Asaas <?= num($cfg['dias_antes']) ?> dias antes de cada vencimento</label>
+                <button class="btn btn-sec btn-peq">Salvar</button>
+            </form>
+            <p class="ajuda">A locadora paga por PIX, boleto ou cartão na fatura do Asaas (o administrador dela também vê o botão
+                <strong>Pagar agora</strong> no sistema). A baixa é automática: avança o vencimento e reativa o acesso.
+                Ambiente: <strong><?= e($cfg['ambiente'] === 'producao' ? 'produção' : 'sandbox (testes)') ?></strong><?= $t['asaas_cliente_id'] !== ''
+                    ? ' · cliente ' . e($t['asaas_cliente_id']) : '' ?>.</p>
+        <?php endif; ?>
+        <?php if ($cobrancas): ?>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th>Pago em</th><th>Fatura</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($cobrancas as $c): ?>
+                        <tr><td><?= e(dt($c['vencimento'])) ?></td><td class="num"><?= money($c['valor']) ?></td>
+                            <td><span class="selo <?= SELOS_COBRANCA[$c['status']] ?? '' ?>"><?= e($c['gateway_id'] === null ? 'criando' : $c['status']) ?></span></td>
+                            <td><?= $c['pago_em'] ? e(dt($c['pago_em'])) : '' ?></td>
+                            <td><?= $c['link'] !== '' ? '<a href="' . e($c['link']) . '" target="_blank" rel="noopener noreferrer">abrir</a>' : '' ?></td>
+                            <td><?php if ($c['status'] === 'pendente' && asaas_ativo()): ?>
+                                <form method="post" action="<?= e(url('tenants', ['a' => 'cobranca_cancelar'])) ?>"
+                                      data-confirmar="Cancelar esta cobrança no Asaas? A locadora não poderá mais pagá-la.">
+                                    <?= csrf_field() ?><input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                                    <input type="hidden" name="cobranca" value="<?= e($c['id']) ?>">
+                                    <button class="btn btn-perigo btn-peq">Cancelar</button>
+                                </form>
+                            <?php endif; ?></td></tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+/** Erros do Asaas viram mensagem na tela (a mensagem não contém a chave). */
+function com_asaas(callable $fn)
+{
+    try {
+        return $fn();
+    } catch (AsaasErro $e) {
+        log_app('ERRO', $e->getMessage());
+        throw new UserError($e->getMessage());
+    }
+}
+
+function tenants_cobranca_config(): void
+{
+    $id = post('id');
+    $t = locadora_por_id($id);
+    if ($t === null) {
+        throw new UserError('Locadora não encontrada.');
+    }
+    $ligar = post('cobranca_automatica') === '1';
+    if ($ligar && (strlen($t['cnpj']) !== 14 || empty($t['vencimento']) || (float) $t['preco_mensal'] <= 0)) {
+        throw new UserError('Para cobrar pelo Asaas a locadora precisa de CNPJ, próximo vencimento e um plano pago.');
+    }
+    q('UPDATE tenants SET cobranca_automatica = :c WHERE id = :id', ['c' => $ligar ? 'true' : 'false', 'id' => $id]);
+    flash($ligar ? 'Cobrança automática ligada: a rotina diária gera as cobranças no Asaas.' : 'Cobrança automática desligada.');
+    redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+function tenants_cobranca_gerar(): void
+{
+    $id = post('id');
+    if (!is_uuid($id)) {
+        throw new UserError('Requisição inválida.');
+    }
+    $c = com_asaas(fn() => cobranca_gerar($id));
+    flash('Cobrança de ' . money($c['valor']) . ' com vencimento em ' . dt($c['vencimento']) . ' ' . ($c['status'] === 'pendente' ? 'disponível' : $c['status']) . ' no Asaas.');
+    redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+function tenants_cobranca_sincronizar(): void
+{
+    $id = post('id');
+    if (!is_uuid($id)) {
+        throw new UserError('Requisição inválida.');
+    }
+    $pagas = 0;
+    foreach (all("SELECT id FROM assinatura_cobrancas WHERE locadora_id = :id AND status = 'pendente' AND gateway_id IS NOT NULL",
+                 ['id' => $id]) as $c) {
+        $pagas += com_asaas(fn() => cobranca_sincronizar($c['id'])) === 'paga' ? 1 : 0;
+    }
+    flash($pagas > 0 ? "$pagas pagamento(s) recebido(s) e registrado(s)." : 'Nenhum pagamento novo no Asaas.');
+    redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+function tenants_cobranca_cancelar(): void
+{
+    $id = post('id');
+    $cobranca = post('cobranca');
+    if (!is_uuid($id) || !is_uuid($cobranca)
+            || val('SELECT 1 FROM assinatura_cobrancas WHERE id = :c AND locadora_id = :l', ['c' => $cobranca, 'l' => $id]) === null) {
+        throw new UserError('Cobrança não encontrada.');
+    }
+    com_asaas(fn() => cobranca_cancelar($cobranca));
+    flash('Cobrança cancelada.');
     redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
 }
 
