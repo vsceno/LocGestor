@@ -234,6 +234,14 @@ O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou tr
 reservas (`#123` procura só pelo número), produtos (código ou descrição) e unidades de patrimônio (número ou
 série). Um único resultado abre direto. A busca vai por POST: o termo (que pode ser um CPF) nunca aparece na URL.
 
+### Roteiro do motorista
+
+Menu **Roteiro** (feito para o celular): as **entregas** do dia (locações com saída no dia) e as **coletas**
+(devolução prevista no dia; hoje, também as atrasadas). Cada parada mostra cliente, endereço (o local de uso ou,
+sem ele, o endereço do cliente), o que levar ou buscar e os botões **Mapa** (Google Maps), **Ligar**, **WhatsApp**
+(mensagem "estamos a caminho" pronta) e **Entregue/Coletado**, que registra quem fez, a hora e uma observação.
+A coleta não substitui a devolução: na loja, registre a devolução para conferir os itens.
+
 ### Vistorias (checklist, fotos e assinatura)
 
 No detalhe da locação, **Vistoria de retirada** e **Vistoria de devolução** abrem um checklist com o estado de cada
@@ -319,7 +327,7 @@ locgestor/
 │   ├── assinatura.php     mensalidades: pagamento, suspensão e cobranças automáticas
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
-│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos, busca
+│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos, busca, roteiro
 ├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução), graficos.js e vistoria.js (assinatura e fotos)
@@ -474,6 +482,7 @@ psql -U postgres -d locgestor -f database\migrations\006_cobranca_asaas.sql
 psql -U postgres -d locgestor -f database\migrations\007_patrimonio_manutencao.sql
 psql -U postgres -d locgestor -f database\migrations\008_auditoria.sql
 psql -U postgres -d locgestor -f database\migrations\009_contas_pagar.sql
+psql -U postgres -d locgestor -f database\migrations\010_entregas.sql
 php tests\isolamento.php
 ```
 
@@ -488,6 +497,7 @@ php tests\isolamento.php
 | `007_patrimonio_manutencao.sql` | tabelas `unidades`, `manutencoes` e `locacao_unidades`, view `vw_produto_manutencao` |
 | `008_auditoria.sql` | tabela `auditoria` (com RLS, só inclusão e leitura), função `auditar()` e gatilhos nas tabelas principais |
 | `009_contas_pagar.sql` | tabelas `contas_recorrentes` e `contas_pagar` (com RLS e auditoria) |
+| `010_entregas.sql` | tabela `entregas` (paradas do roteiro do motorista marcadas como feitas) |
 
 ### 10.2 Proteções do login (já ativas)
 

@@ -558,6 +558,23 @@ CREATE TABLE contas_pagar (
 );
 CREATE INDEX contas_pagar_vencimento_idx ON contas_pagar (tenant_id, pago_em, vencimento);
 
+-- Roteiro do motorista: paradas (entrega/coleta) marcadas como feitas
+CREATE TABLE entregas (
+    id         uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id  uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    locacao_id uuid         NOT NULL,
+    tipo       VARCHAR(7)   NOT NULL CHECK (tipo IN ('entrega', 'coleta')),
+    data       DATE         NOT NULL,          -- dia do roteiro
+    obs        VARCHAR(200) NOT NULL DEFAULT '',
+    usuario_id uuid,
+    feita_em   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT entregas_tenant_id_uk UNIQUE (tenant_id, id),
+    CONSTRAINT entregas_parada_uk    UNIQUE (tenant_id, locacao_id, tipo, data),
+    CONSTRAINT entregas_locacao_fk   FOREIGN KEY (tenant_id, locacao_id) REFERENCES locacoes (tenant_id, id),
+    CONSTRAINT entregas_usuario_fk   FOREIGN KEY (tenant_id, usuario_id) REFERENCES usuarios (tenant_id, id)
+);
+CREATE INDEX entregas_data_idx ON entregas (tenant_id, data);
+
 -- Auditoria: cada inclusão, alteração e exclusão nas tabelas principais (gravada por gatilho, ver auditar())
 CREATE TABLE auditoria (
     id          uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -596,7 +613,7 @@ BEGIN
                              'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias',
                              'vistorias', 'vistoria_itens', 'vistoria_fotos', 'kits', 'kit_itens',
                              'unidades', 'manutencoes', 'locacao_unidades', 'auditoria',
-                             'contas_recorrentes', 'contas_pagar']
+                             'contas_recorrentes', 'contas_pagar', 'entregas']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -715,7 +732,8 @@ BEGIN
         ('unidades',    '', '', 'patrimonio'),
         ('manutencoes', '', '', 'numero'),
         ('contas_pagar', '', '', 'descricao'),
-        ('contas_recorrentes', '', 'gerado_ate', 'descricao')
+        ('contas_recorrentes', '', 'gerado_ate', 'descricao'),
+        ('entregas', '', '', 'tipo')
     ) AS t(tabela, mascarar, ignorar, rotulo) LOOP
         EXECUTE format('CREATE TRIGGER auditoria AFTER INSERT OR UPDATE OR DELETE ON %I
                           FOR EACH ROW EXECUTE FUNCTION auditar(%L, %L, %L)', r.tabela, r.mascarar, r.ignorar, r.rotulo);
@@ -803,6 +821,7 @@ GRANT SELECT, UPDATE ON empresa TO locgestor_app;
 GRANT SELECT, INSERT ON vistorias, vistoria_itens, vistoria_fotos TO locgestor_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON unidades, manutencoes, locacao_unidades TO locgestor_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON contas_recorrentes, contas_pagar TO locgestor_app;
+GRANT SELECT, INSERT, DELETE ON entregas TO locgestor_app;
 -- Auditoria: só leitura e inclusão (a inclusão é do gatilho, com o papel de quem alterou)
 GRANT SELECT, INSERT ON auditoria TO locgestor_app;
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores, vw_produto_manutencao TO locgestor_app;

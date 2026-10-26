@@ -213,6 +213,7 @@ register_shutdown_function(function () use ($base, $inicio) {
             $locs = "SELECT id FROM locacoes WHERE tenant_id = :t AND numero > :n";
             $p = ['t' => $t['id'], 'n' => $t['loc']];
             $q("DELETE FROM caixa WHERE locacao_id IN ($locs)", $p);
+            $q("DELETE FROM entregas WHERE locacao_id IN ($locs)", $p);
             $q("DELETE FROM locacao_unidades WHERE locacao_item_id IN (SELECT id FROM locacao_itens WHERE locacao_id IN ($locs))", $p);
             $q("DELETE FROM devolucao_itens WHERE devolucao_id IN (SELECT id FROM devolucoes WHERE locacao_id IN ($locs))", $p);
             $q("DELETE FROM devolucoes WHERE locacao_id IN ($locs)", $p);
@@ -983,6 +984,40 @@ ok(!str_contains($beta->req('index.php?p=busca')['local'], "n=$N") || dbv('SELEC
    'Beta não abre locação da Alfa pela busca');
 $buscar($alfa, 'x');
 ok(str_contains($alfa->get('index.php?p=busca')['corpo'], 'pelo menos 2 caracteres'), 'termo de 1 caractere pede mais');
+
+// =====================================================================
+secao('Roteiro do motorista');
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'local_uso' => 'TESTE Rua das Flores, 100 - Fortaleza/CE',
+    'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => [''],
+]);
+$NR8 = num_locacao($r);
+$LR8 = $valores($NR8, $alfaId)['id'];
+$rot = $alfa->get('index.php?p=roteiro')['corpo'];
+$trot = texto($rot);
+ok(str_contains($trot, "Entrega · nº $NR8 pendente Maria Lúcia Bezerra TESTE Rua das Flores, 100 - Fortaleza/CE Levar: 1 Carrinho de mão 60 L")
+   && str_contains($rot, 'maps/search/?api=1&amp;query=TESTE%20Rua%20das%20Flores%2C%20100%20-%20Fortaleza%2FCE')
+   && str_contains($rot, 'Estamos%20a%20caminho'), 'roteiro de hoje: entrega com endereço, itens, mapa e WhatsApp pronto');
+$atrasadas = (int) dbv("SELECT count(*) FROM locacoes WHERE tenant_id = :t AND status = 'aberta' AND data_prev_devolucao < CURRENT_DATE", ['t' => $alfaId]);
+ok($atrasadas > 0 && substr_count($trot, 'atrasada desde') === $atrasadas, "coletas de hoje incluem as $atrasadas locação(ões) atrasada(s)");
+ok(str_contains(texto($alfa->get('index.php?p=roteiro&data=' . dia(2))['corpo']), "Coleta · nº $NR8"), 'a coleta aparece no dia da devolução prevista');
+$marcar = fn(Navegador $n, string $tipo, string $data, string $obs = '') => $n->enviar('index.php?p=roteiro', 'index.php?p=roteiro&a=marcar',
+                                                                                     ['id' => $LR8, 'tipo' => $tipo, 'data' => $data, 'obs' => $obs]);
+$marcar($op, 'entrega', dia(0), 'TESTE deixado com o mestre de obras');
+$marcar($op, 'entrega', dia(0));
+$e = db('SELECT e.obs, u.login FROM entregas e JOIN usuarios u ON u.id = e.usuario_id WHERE e.locacao_id = :l', ['l' => $LR8])->fetchAll();
+ok(count($e) === 1 && $e[0]['login'] === 'teste.operador' && $e[0]['obs'] === 'TESTE deixado com o mestre de obras'
+   && str_contains(texto($alfa->get('index.php?p=roteiro')['corpo']), "Entrega · nº $NR8 feita"),
+   'operador marca "Entregue" (com quem e observação); marcar de novo não duplica');
+$marcar($alfa, 'coleta', dia(2));
+ok(str_contains($alfa->mensagem('index.php?p=roteiro'), 'hoje ou de dias anteriores'), 'parada de dia futuro não é marcada');
+$marcar($alfa, 'coleta', dia(0));
+ok(str_contains($alfa->mensagem('index.php?p=roteiro'), 'não está no roteiro do dia'), 'parada que não está no roteiro do dia é recusada');
+$marcar($beta, 'entrega', dia(0));
+ok(str_contains($beta->mensagem('index.php?p=roteiro'), 'não está no roteiro do dia') && !str_contains($beta->get('index.php?p=roteiro')['corpo'], 'TESTE Rua das Flores'),
+   'Beta não vê nem marca parada da Alfa');
+$alfa->enviar('index.php?p=roteiro', 'index.php?p=roteiro&a=desmarcar', ['id' => $LR8, 'tipo' => 'entrega', 'data' => dia(0)]);
+ok(dbv('SELECT count(*) FROM entregas WHERE locacao_id = :l', ['l' => $LR8]) == 0, 'desfazer apaga o registro da parada');
 
 // =====================================================================
 secao('Painel, relatórios e CSV');

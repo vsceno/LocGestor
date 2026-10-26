@@ -436,3 +436,12 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 /* Auditoria */
 .auditoria-dados { font-size: .85rem; color: var(--texto-2); max-width: 520px; overflow-wrap: anywhere; }
 .auditoria-dados strong { color: var(--texto); font-weight: 600; }
+
+/* Roteiro do motorista (pensado para o celular) */
+.parada.feita { opacity: .7; }
+.parada p { margin: 0 0 6px; }
+.parada-endereco { font-size: 1.05rem; }
+.parada-acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.parada-acoes .btn { min-height: 40px; }
+.parada-feito { display: flex; flex: 1 1 260px; gap: 8px; margin: 0; }
+.parada-feito input { flex: 1; min-width: 0; }
