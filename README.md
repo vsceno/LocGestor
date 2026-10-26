@@ -196,6 +196,11 @@ histórico não pode ser alterado nem apagado (migração 016).
 (ela aparece uma única vez). O usuário é obrigado a trocá-la no próximo acesso, e as sessões que ele já tinha abertas
 deixam de valer na hora (migração 015: `senha_redefinida_em`).
 
+**Orçamentos:** menu **Orçamentos**: cotação com validade (até 90 dias) para um cliente, com os preços do cadastro
+(podem ser negociados). Não reserva equipamento. Pode ser impresso e enviado pelo WhatsApp. Ao **transformar em
+locação** (se a saída já foi) ou em **reserva** (se é futura), o orçamento fica convertido e não pode mais ser
+alterado ou excluído. Orçamento vencido não converte. Migração 018.
+
 **Fretes e endereço de entrega:** a locação tem frete de entrega e frete de recolhimento (cada um somado uma vez
 ao valor), além de um endereço de entrega (se vazio, usa o local de uso). Os dois aparecem no contrato e na fatura,
 e podem ser ajustados enquanto a locação está em aberto (a mudança fica no histórico). Migração 017.

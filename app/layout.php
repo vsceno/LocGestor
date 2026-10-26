@@ -9,6 +9,7 @@ const MENU = [
     'dashboard'  => ['Painel',         'painel'],
     'locacoes'   => ['Locações',       'locacoes'],
     'reservas'   => ['Reservas',       'reservas'],
+    'orcamentos' => ['Orçamentos',     'reservas'],
     'roteiro'    => ['Roteiro',        'roteiro'],
     'clientes'   => ['Clientes',       'clientes'],
     'produtos'   => ['Produtos',       'produtos'],

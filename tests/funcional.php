@@ -209,6 +209,8 @@ register_shutdown_function(function () use ($base, $inicio) {
         db('BEGIN');
         // A limpeza não entra na auditoria (o interruptor vale para o superusuário) e apaga a do teste
         db("SELECT set_config('app.auditoria', 'off', true)");
+        // Orçamentos de teste saem antes: eles apontam para as locações e reservas que o teste criou
+        $q('DELETE FROM orcamentos WHERE criado_em >= :i', ['i' => $inicio]);
         foreach ($base as $t) {
             $locs = "SELECT id FROM locacoes WHERE tenant_id = :t AND numero > :n";
             $p = ['t' => $t['id'], 'n' => $t['loc']];
@@ -1077,6 +1079,60 @@ ok(str_contains($alfa->get("index.php?p=locacoes&a=devolucao&n=$NF")['corpo'], '
    'a devolução soma os fretes ao saldo (60 + 30 = 90)');
 
 // =====================================================================
+// =====================================================================
+secao('Orçamentos: cotação, conversão em locação e em reserva');
+$orcId = fn(string $loc) => preg_match('/id=([0-9a-f-]{36})/', $loc, $m) ? $m[1] : '';
+$novoOrc = function (string $saida, string $validade, array $extra = [], string $prev = '') use ($alfa, $CAR, $MARIA, $orcId) {
+    $r = $alfa->enviar('index.php?p=orcamentos&a=novo', 'index.php?p=orcamentos&a=salvar', $extra + [
+        'cliente' => $MARIA, 'data_saida' => $saida, 'data_prev_devolucao' => $prev !== '' ? $prev : dia(0), 'validade' => $validade,
+        'produto_id' => [$CAR], 'quantidade' => ['2'], 'diaria' => ['5,00'],
+        'acrescimo' => '0', 'desconto' => '0', 'frete_entrega' => '10,00', 'frete_recolhimento' => '0', 'obs' => 'TESTE orçamento',
+    ]);
+    return $orcId($r['local']);
+};
+ok(str_contains($alfa->get('index.php?p=orcamentos&a=novo')['corpo'], 'Salvar orçamento') && str_contains($alfa->get('index.php?p=orcamentos&a=novo')['corpo'], 'id="tabela-itens"'),
+   'tela de novo orçamento com itens e valores');
+$O1 = $novoOrc(dia(-2), dia(7));
+$v1 = texto($alfa->get("index.php?p=orcamentos&a=ver&id=$O1")['corpo']);
+ok($O1 !== '' && str_contains($v1, 'Valor previsto R$ 30,00') && str_contains($v1, 'em aberto'),
+   'orçamento salvo: 2 carrinhos × 2 dias × R$ 5 + frete de R$ 10 = R$ 30,00 (sem reservar estoque)', mb_substr($v1, 0, 300));
+$lista = texto($alfa->get('index.php?p=orcamentos')['corpo']);
+ok(str_contains($lista, 'Maria Lúcia Bezerra') && str_contains($lista, 'em aberto'), 'orçamento aparece na lista');
+ok(str_contains($alfa->get("index.php?p=orcamentos&a=imprimir&id=$O1")['corpo'], 'Total previsto'), 'orçamento tem página para impressão');
+// Converter em locação (saída já feita)
+$r = $alfa->enviar("index.php?p=orcamentos&a=ver&id=$O1", 'index.php?p=orcamentos&a=converter', ['id' => $O1, 'tipo' => 'locacao']);
+$LOC1 = db("SELECT l.id, l.numero, l.frete_entrega, l.obs FROM orcamentos o JOIN locacoes l ON l.id = o.locacao_id WHERE o.id = :id", ['id' => $O1])->fetch();
+ok($LOC1 && (float) $LOC1['frete_entrega'] === 10.0 && str_contains($LOC1['obs'], 'Do orçamento nº'),
+   'converter em locação: a locação recebe os itens, o frete e a observação do orçamento', json_encode($LOC1));
+$vLoc = $valores((int) $LOC1['numero'], $alfaId);
+ok($vLoc && $vLoc['valor_previsto'] === '30.00', 'a locação criada tem o mesmo valor previsto do orçamento (R$ 30,00)', json_encode($vLoc));
+ok(dbv('SELECT status FROM orcamentos WHERE id = :id', ['id' => $O1]) === 'convertido', 'orçamento fica convertido');
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O1", 'index.php?p=orcamentos&a=converter', ['id' => $O1, 'tipo' => 'locacao']);
+ok(str_contains($alfa->mensagem("index.php?p=orcamentos&a=ver&id=$O1"), 'já foi convertido'), 'não converte duas vezes');
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O1", 'index.php?p=orcamentos&a=excluir', ['id' => $O1]);
+ok(str_contains($alfa->mensagem("index.php?p=orcamentos&a=ver&id=$O1"), 'Só é possível excluir') && dbv('SELECT count(*) FROM orcamentos WHERE id = :id', ['id' => $O1]) == 1,
+   'orçamento convertido não pode ser excluído');
+// Saída futura: só vira reserva
+$O2 = $novoOrc(dia(3), dia(10), [], dia(6));
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O2", 'index.php?p=orcamentos&a=converter', ['id' => $O2, 'tipo' => 'locacao']);
+ok(str_contains($alfa->mensagem("index.php?p=orcamentos&a=ver&id=$O2"), 'converta em reserva'), 'saída futura não vira locação');
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O2", 'index.php?p=orcamentos&a=converter', ['id' => $O2, 'tipo' => 'reserva']);
+$RES2 = db("SELECT r.numero, r.data_inicio, r.data_fim, o.status FROM orcamentos o JOIN reservas r ON r.id = o.reserva_id WHERE o.id = :id", ['id' => $O2])->fetch();
+ok($RES2 && $RES2['data_inicio'] === dia(3) && $RES2['status'] === 'convertido' && (int) dbv('SELECT count(*) FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id WHERE r.numero = :n', ['n' => $RES2['numero']]) == 1,
+   'converter em reserva: datas e itens vão para a reserva', json_encode($RES2));
+// Validade vencida recusa a conversão
+$O3 = $novoOrc(dia(-1), dia(5));
+db("UPDATE orcamentos SET validade = CURRENT_DATE - 1 WHERE id = :id", ['id' => $O3]);
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O3", 'index.php?p=orcamentos&a=converter', ['id' => $O3, 'tipo' => 'locacao']);
+ok(str_contains($alfa->mensagem("index.php?p=orcamentos&a=ver&id=$O3"), 'vencido'), 'orçamento vencido não converte');
+$alfa->enviar("index.php?p=orcamentos&a=ver&id=$O3", 'index.php?p=orcamentos&a=excluir', ['id' => $O3]);
+ok(dbv('SELECT count(*) FROM orcamentos WHERE id = :id', ['id' => $O3]) == 0, 'orçamento em aberto pode ser excluído');
+// Validade fora da regra e outra locadora
+$alfa->enviar('index.php?p=orcamentos&a=novo', 'index.php?p=orcamentos&a=salvar', ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(0),
+    'validade' => dia(-3), 'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => ['5,00']]);
+ok(str_contains($alfa->mensagem('index.php?p=orcamentos&a=novo'), 'validade deve ser'), 'validade no passado é recusada');
+ok($beta->get("index.php?p=orcamentos&a=ver&id=$O2")['codigo'] === 404 && !str_contains($beta->get('index.php?p=orcamentos')['corpo'], 'TESTE orçamento'),
+   'Beta não vê nem abre orçamento da Alfa');
 // =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,

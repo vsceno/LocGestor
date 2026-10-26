@@ -14,6 +14,7 @@ require __DIR__ . '/app/layout.php';
 require __DIR__ . '/app/pix.php';
 require __DIR__ . '/app/arquivos.php';
 require __DIR__ . '/app/negocio.php';
+require __DIR__ . '/app/orcamento.php';
 
 // Senha temporária: até trocá-la, o usuário só acessa a tela de troca de senha (e o Sair)
 if (!empty(user()['trocar_senha']) && get('p') !== 'login'
@@ -22,7 +23,7 @@ if (!empty(user()['trocar_senha']) && get('p') !== 'login'
 }
 
 executar_rota(
-    ['login', 'dashboard', 'busca', 'roteiro', 'clientes', 'produtos', 'manutencoes', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api', 'arquivos', 'suporte'],
+    ['login', 'dashboard', 'busca', 'roteiro', 'clientes', 'produtos', 'manutencoes', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api', 'arquivos', 'suporte', 'orcamentos'],
     __DIR__ . '/modulos',
     'dashboard'
 );
