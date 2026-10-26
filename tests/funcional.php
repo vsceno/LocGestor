@@ -1250,6 +1250,8 @@ if (!$senhaSuporte) {
     $conta->enviar('plataforma.php?p=login', 'plataforma.php?p=login&a=entrar', ['login' => 'teste-conta', 'senha' => 'SenhaAntiga1']);
     $menu = $conta->get('plataforma.php?p=tenants')['corpo'];
     ok(str_contains($menu, 'href="plataforma.php?p=conta"') && str_contains($menu, 'Minha senha'), 'painel tem o item "Minha senha" no menu');
+    $pelaMenu = $conta->get('plataforma.php?p=conta');   // o endereço que o item do menu abre
+    ok($pelaMenu['codigo'] === 200 && str_contains($pelaMenu['corpo'], 'name="senha_atual"'), 'o item "Minha senha" do menu abre a tela (sem "página não encontrada")');
     $tela = $conta->get('plataforma.php?p=conta&a=senha')['corpo'];
     ok(str_contains($tela, 'name="senha_atual"') && str_contains($tela, 'teste-conta'), 'tela "Minha senha" mostra o usuário logado');
     $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',

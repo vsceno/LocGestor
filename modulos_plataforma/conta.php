@@ -6,6 +6,12 @@
 
 declare(strict_types=1);
 
+/** O item do menu abre a própria tela de senha (sem ação na URL). */
+function conta_index(): void
+{
+    conta_senha();
+}
+
 function conta_senha(): void
 {
     layout_start('Minha senha', 'conta');
