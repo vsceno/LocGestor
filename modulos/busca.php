@@ -49,10 +49,14 @@ function busca_resultados(string $q): array
         all('SELECT r.numero, r.data_inicio, r.status, c.nome FROM reservas r JOIN clientes c ON c.id = r.cliente_id WHERE r.numero = :n',
             ['n' => $numero]));
 
-    $r['Produtos'] = $soNumero ? [] : array_map(fn($x) => [$x['codigo'] . ' — ' . $x['descricao'], ($x['ativo'] ? '' : 'inativo · ') . num($x['qtd_total']) . ' em estoque',
+    // Código de barras confere exato (leitor USB); código e descrição só fora do modo "#número"
+    $r['Produtos'] = array_map(fn($x) => [$x['codigo'] . ' — ' . $x['descricao'], ($x['ativo'] ? '' : 'inativo · ') . num($x['qtd_total']) . ' em estoque',
                                           url('produtos', ['a' => 'editar', 'id' => $x['id']])],
-        all('SELECT id, codigo, descricao, qtd_total, ativo FROM produtos WHERE lower(codigo) LIKE lower(:t1) OR lower(descricao) LIKE lower(:t2)
-              ORDER BY ativo DESC, descricao LIMIT ' . BUSCA_LIMITE, ['t1' => $txt, 't2' => $txt]));
+        all('SELECT p.id, p.codigo, p.descricao, p.qtd_total, p.ativo FROM produtos p
+              WHERE (NOT CAST(:so AS boolean) AND (lower(p.codigo) LIKE lower(:t1) OR lower(p.descricao) LIKE lower(:t2)))
+                 OR EXISTS (SELECT 1 FROM produto_barras b WHERE b.produto_id = p.id AND b.codigo = :bc)
+              ORDER BY p.ativo DESC, p.descricao LIMIT ' . BUSCA_LIMITE,
+            ['so' => $soNumero ? 'true' : 'false', 't1' => $txt, 't2' => $txt, 'bc' => $q]));
 
     $r['Patrimônio'] = $soNumero ? [] : array_map(fn($x) => ['Unidade ' . $x['patrimonio'], $x['descricao'] . ($x['serie'] !== '' ? ' · série ' . $x['serie'] : '')
                                             . ($x['ativa'] ? '' : ' · baixada'), url('produtos', ['a' => 'unidade', 'id' => $x['id']])],

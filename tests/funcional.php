@@ -1147,6 +1147,52 @@ ok(str_contains($rep, 'value="10,00"') && !str_contains($rep, 'name="acrescimo" 
    'repetir: fretes copiados e acréscimo/desconto não copiados');
 ok($beta->get("index.php?p=locacoes&a=nova&copiar=$LOC1[id]")['codigo'] === 404, 'Beta não repete locação da Alfa (404)');
 // =====================================================================
+secao('Códigos de barras (principal e similares)');
+$codBar = ['codigo' => 'TESTE-BAR', 'descricao' => 'TESTE produto com código de barras', 'unidade' => 'UN', 'qtd_total' => '2',
+           'valor_diaria' => '10,00', 'ativo' => '1', 'categoria_id' => $catSem];
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar', $codBar + ['codigos_barras' => "7891234567890\n12345"]);
+$BAR = $produto($alfaId, 'TESTE-BAR');
+ok($BAR && dbv('SELECT codigo FROM produto_barras WHERE produto_id = :p AND principal', ['p' => $BAR]) === '7891234567890',
+   'o primeiro código digitado vira o principal');
+ok($BAR && dbv('SELECT count(*) FROM produto_barras WHERE produto_id = :p', ['p' => $BAR]) == 2, 'os dois códigos são gravados');
+
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-BAR2', 'codigos_barras' => '1234 ABC12345'] + array_diff_key($codBar, ['codigo' => 1]));
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=novo'), 'Código de barras inválido'), 'código com menos de 5 dígitos ou letras é recusado');
+ok(dbv('SELECT count(*) FROM produtos WHERE codigo = :c', ['c' => 'TESTE-BAR2']) == 0, 'produto com código de barras inválido não é gravado');
+
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-BAR2', 'codigos_barras' => '99999, 99999'] + array_diff_key($codBar, ['codigo' => 1]));
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=novo'), 'está repetido no produto'), 'código repetido dentro do mesmo produto é recusado');
+
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-BAR3', 'codigos_barras' => '7891234567890'] + array_diff_key($codBar, ['codigo' => 1]));
+ok(str_contains($alfa->mensagem('index.php?p=produtos&a=novo'), 'já está em outro produto'), 'código já usado em outro produto da mesma locadora é recusado');
+ok(dbv('SELECT count(*) FROM produtos WHERE codigo = :c', ['c' => 'TESTE-BAR3']) == 0, 'o produto recusado não é gravado pela metade');
+
+$beta->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-BAR', 'descricao' => 'TESTE produto da Beta com a mesma barra', 'unidade' => 'UN', 'qtd_total' => '1',
+               'valor_diaria' => '10,00', 'ativo' => '1', 'codigos_barras' => '7891234567890']);
+$BAR_BETA = $produto($betaId, 'TESTE-BAR');
+ok($BAR_BETA && dbv('SELECT count(*) FROM produto_barras WHERE produto_id = :p', ['p' => $BAR_BETA]) == 1,
+   'outra locadora pode usar o mesmo código de barras');
+
+$alfa->enviar("index.php?p=produtos&a=editar&id=$BAR", 'index.php?p=produtos&a=salvar',
+              ['id' => $BAR] + $codBar + ['codigos_barras' => '55555']);
+ok(dbv('SELECT count(*) FROM produto_barras WHERE produto_id = :p', ['p' => $BAR]) == 1
+   && dbv('SELECT codigo FROM produto_barras WHERE produto_id = :p', ['p' => $BAR]) === '55555',
+   'ao salvar, a lista de códigos é substituída');
+
+ok(str_contains($alfa->get('index.php?p=produtos&q=55555')['corpo'], 'TESTE produto com código de barras'),
+   'busca de produtos encontra pelo código de barras');
+ok(!str_contains($beta->get('index.php?p=produtos&q=55555')['corpo'], 'TESTE produto com código de barras'),
+   'Beta não encontra produto da Alfa pelo código de barras');
+$rBusca = $buscar($alfa, '55555');
+$fimBusca = $alfa->req('index.php?p=busca');
+ok(str_contains($rBusca['local'] . ' ' . $fimBusca['local'], "id=$BAR") || str_contains($fimBusca['corpo'], 'TESTE produto com código de barras'),
+   'busca global encontra produto pelo código de barras (abre direto se for o único resultado)');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",

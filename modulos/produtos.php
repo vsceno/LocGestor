@@ -33,8 +33,9 @@ function produtos_index(): void
     $where = [match ($situacao) { 'todos' => 'TRUE', 'inativos' => 'NOT p.ativo', default => 'p.ativo' }];
     $params = [];
     if ($q !== '') {
-        $where[] = '(lower(p.codigo) LIKE lower(:q1) OR lower(p.descricao) LIKE lower(:q2))';
-        $params += ['q1' => like($q), 'q2' => like($q)];
+        $where[] = '(lower(p.codigo) LIKE lower(:q1) OR lower(p.descricao) LIKE lower(:q2)
+                     OR EXISTS (SELECT 1 FROM produto_barras b WHERE b.produto_id = p.id AND b.codigo = :q3))';
+        $params += ['q1' => like($q), 'q2' => like($q), 'q3' => $q];
     }
     if (is_uuid($cat)) {
         $where[] = 'p.categoria_id = :cat';
@@ -141,6 +142,10 @@ function produto_form(array $p, string $titulo): void
     $moeda = fn($campo) => has_old() ? old($campo) : (isset($p[$campo]) ? num($p[$campo], 2) : '');
     // Semanal/mensal zerados = não oferece: campo vazio
     $opcional = fn($campo) => has_old() ? old($campo) : ((float) ($p[$campo] ?? 0) > 0 ? num($p[$campo], 2) : '');
+    // Principal primeiro; um código por linha
+    $codigosBarra = $id ? all('SELECT codigo FROM produto_barras WHERE produto_id = :id ORDER BY principal DESC, codigo', ['id' => $id]) : [];
+    $codigosTxt = has_old() ? old('codigos_barras') : implode("
+", array_column($codigosBarra, 'codigo'));
 
     layout_start($titulo, 'produtos');
     ?>
@@ -163,6 +168,10 @@ function produto_form(array $p, string $titulo): void
             </div>
             <label class="obrig">Descrição
                 <input type="text" name="descricao" value="<?= e(valor_form($p, 'descricao')) ?>" required maxlength="150">
+            </label>
+            <label>Códigos de barras
+                <textarea name="codigos_barras" rows="2" placeholder="Um por linha; o primeiro é o principal"><?= e($codigosTxt) ?></textarea>
+                <span class="ajuda">Só números, de 5 a 20 dígitos. Cada código fica só em um produto desta locadora.</span>
             </label>
         </div>
         <div class="card">

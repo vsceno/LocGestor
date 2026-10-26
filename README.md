@@ -285,10 +285,18 @@ Com a demonstração carregada:
 
 **Troque essas senhas** (ou não carregue a demonstração) em qualquer ambiente acessível por outras pessoas.
 
+### Códigos de barras
+
+Em *Produtos › Editar*, o campo **Códigos de barras** aceita um código por linha (ou separados por vírgula ou espaço).
+O **primeiro é o principal**; os outros são similares. Cada código tem de 5 a 20 dígitos, não se repete no mesmo
+produto e não pode estar em outro produto **da mesma locadora** (outra locadora pode usar o mesmo número).
+Ao salvar, a lista inteira é substituída. Na lista de produtos e na busca geral, um leitor USB (que digita o código
+e Enter) acha o produto pelo código de barras exato.
+
 ### Busca geral
 
 O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
-reservas (`#123` procura só pelo número), produtos (código ou descrição) e unidades de patrimônio (número ou
+reservas (`#123` procura só pelo número), produtos (código, descrição ou código de barras) e unidades de patrimônio (número ou
 série). Um único resultado abre direto. A busca vai por POST: o termo (que pode ser um CPF) nunca aparece na URL.
 
 ### Aplicativo no celular (PWA)
@@ -553,6 +561,15 @@ psql -U postgres -d locgestor -f database\migrations\007_patrimonio_manutencao.s
 psql -U postgres -d locgestor -f database\migrations\008_auditoria.sql
 psql -U postgres -d locgestor -f database\migrations\009_contas_pagar.sql
 psql -U postgres -d locgestor -f database\migrations\010_entregas.sql
+psql -U postgres -d locgestor -f database\migrations\011_cancelamento_locadora.sql
+psql -U postgres -d locgestor -f database\migrations\012_uso_plataforma.sql
+psql -U postgres -d locgestor -f database\migrations\013_acesso_suporte.sql
+psql -U postgres -d locgestor -f database\migrations\014_recados.sql
+psql -U postgres -d locgestor -f database\migrations\015_redefinir_senha.sql
+psql -U postgres -d locgestor -f database\migrations\016_auditoria_plataforma.sql
+psql -U postgres -d locgestor -f database\migrations\017_frete_endereco.sql
+psql -U postgres -d locgestor -f database\migrations\018_orcamentos.sql
+psql -U postgres -d locgestor -f database\migrations\019_codigos_barras.sql
 php tests\isolamento.php
 ```
 
@@ -568,6 +585,15 @@ php tests\isolamento.php
 | `008_auditoria.sql` | tabela `auditoria` (com RLS, só inclusão e leitura), função `auditar()` e gatilhos nas tabelas principais |
 | `009_contas_pagar.sql` | tabelas `contas_recorrentes` e `contas_pagar` (com RLS e auditoria) |
 | `010_entregas.sql` | tabela `entregas` (paradas do roteiro do motorista marcadas como feitas) |
+| `011_cancelamento_locadora.sql` | cancelamento de locadora (colunas em `tenants`) e números do painel da plataforma |
+| `012_uso_plataforma.sql` | tela de uso por locadora (painel da plataforma) |
+| `013_acesso_suporte.sql` | tabela `acessos_suporte` (acesso de suporte somente leitura, registrado na auditoria) |
+| `014_recados.sql` | tabela `recados` (avisos do painel para todas as locadoras) |
+| `015_redefinir_senha.sql` | coluna `usuarios.senha_redefinida_em` (senha temporária pelo painel) |
+| `016_auditoria_plataforma.sql` | tabela `auditoria_plataforma` (ações do painel da plataforma, só inclusão e leitura) |
+| `017_frete_endereco.sql` | colunas `frete_entrega`, `frete_recolhimento` e `endereco_entrega` em `locacoes`; view `vw_locacao_valores` soma os fretes |
+| `018_orcamentos.sql` | tabelas `orcamentos` e `orcamento_itens` (cotação com validade, convertível em locação ou reserva) |
+| `019_codigos_barras.sql` | tabela `produto_barras` (códigos de barras do produto; um principal e os similares) |
 
 ### 10.2 Proteções do login (já ativas)
 

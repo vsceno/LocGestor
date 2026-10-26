@@ -239,6 +239,39 @@ function cliente_resumo(string $clienteId): array
 // =====================================================================
 
 /**
+ * Códigos de barras digitados (um por linha, vírgula ou espaço; o primeiro é o principal).
+ * Devolve ['lista' => [[codigo, principal]], 'erros' => [...]]. Só dígitos, de 5 a 20, sem repetir no texto.
+ */
+function codigos_barras_parse(string $texto): array
+{
+    $partes = array_values(array_filter(preg_split('/[\s,;]+/', trim($texto)), fn($x) => $x !== ''));
+    $lista = [];
+    $erros = [];
+    foreach ($partes as $i => $c) {
+        if (!preg_match('/^[0-9]{5,20}$/', $c)) {
+            $erros[] = "Código de barras inválido \"$c\" (use só números, de 5 a 20 dígitos).";
+            continue;
+        }
+        if (in_array($c, array_column($lista, 0), true)) {
+            $erros[] = "O código de barras $c está repetido no produto.";
+            continue;
+        }
+        $lista[] = [$c, $i === 0];
+    }
+    return ['lista' => $lista, 'erros' => $erros];
+}
+
+/** Substitui os códigos de barras do produto (dentro da transação do produto). */
+function produto_codigos_gravar(string $produtoId, array $lista): void
+{
+    q('DELETE FROM produto_barras WHERE produto_id = :id', ['id' => $produtoId]);
+    foreach ($lista as [$codigo, $principal]) {
+        q('INSERT INTO produto_barras (produto_id, codigo, principal) VALUES (:p, :c, :pr)',
+          ['p' => $produtoId, 'c' => $codigo, 'pr' => $principal ? 'true' : 'false']);
+    }
+}
+
+/**
  * Valida e grava um produto. $id = null cria um novo. Devolve o id.
  * Regra: o estoque total não pode ficar menor que a quantidade alugada (na rua).
  */
@@ -291,15 +324,19 @@ function produto_salvar(array $d, ?string $id = null): string
     if ($p['ncm'] !== '' && strlen($p['ncm']) !== 8) {
         $erros[] = 'NCM deve ter 8 dígitos.';
     }
+    $codigos = codigos_barras_parse((string) ($d['codigos_barras'] ?? ''));
+    $erros = array_merge($erros, $codigos['erros']);
     if ($erros) {
         throw new UserError(implode(' ', $erros));
     }
 
     $colunas = array_keys($p);
-    return tx(function () use ($p, $id, $colunas) {
+    return tx(function () use ($p, $id, $colunas, $codigos) {
         if ($id === null) {
-            return (string) val('INSERT INTO produtos (' . implode(', ', $colunas) . ')
-                                 VALUES (:' . implode(', :', $colunas) . ') RETURNING id', $p);
+            $novoId = (string) val('INSERT INTO produtos (' . implode(', ', $colunas) . ')
+                                    VALUES (:' . implode(', :', $colunas) . ') RETURNING id', $p);
+            produto_codigos_gravar($novoId, $codigos['lista']);
+            return $novoId;
         }
         // Trava o produto para ninguém alugar no meio da conferência
         if (val('SELECT id FROM produtos WHERE id = :id FOR UPDATE', ['id' => $id]) === null) {
@@ -319,6 +356,7 @@ function produto_salvar(array $d, ?string $id = null): string
         }
         $sets = implode(', ', array_map(fn($k) => "$k = :$k", $colunas));
         q("UPDATE produtos SET $sets WHERE id = :id", $p + ['id' => $id]);
+        produto_codigos_gravar($id, $codigos['lista']);
         return $id;
     });
 }

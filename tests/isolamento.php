@@ -29,6 +29,7 @@ const TABELAS = [
     'clientes'          => 'id',
     'categorias'        => 'id',
     'produtos'          => 'id',
+    'produto_barras'    => 'id',
     'reservas'          => 'id',
     'reserva_itens'     => 'id',
     'locacoes'          => 'id',
