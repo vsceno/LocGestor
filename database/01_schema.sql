@@ -522,6 +522,42 @@ CREATE INDEX locacao_unidades_item_idx ON locacao_unidades (tenant_id, locacao_i
 -- Uma unidade não está na rua em duas locações ao mesmo tempo
 CREATE UNIQUE INDEX locacao_unidades_na_rua_uk ON locacao_unidades (tenant_id, unidade_id) WHERE devolucao_id IS NULL;
 
+-- Contas a pagar; as recorrentes (aluguel, salário...) geram as parcelas até ~90 dias à frente
+CREATE TABLE contas_recorrentes (
+    id         uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id  uuid          NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    descricao  VARCHAR(200)  NOT NULL,
+    categoria  VARCHAR(60)   NOT NULL,
+    valor      NUMERIC(12,2) NOT NULL CHECK (valor > 0),
+    dia        SMALLINT      NOT NULL CHECK (dia BETWEEN 1 AND 28),
+    inicio     DATE          NOT NULL,                  -- primeiro mês com vencimento
+    ativa      BOOLEAN       NOT NULL DEFAULT TRUE,
+    gerado_ate DATE,                                    -- último vencimento já gerado em contas_pagar
+    criado_em  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT contas_recorrentes_tenant_id_uk UNIQUE (tenant_id, id)
+);
+
+CREATE TABLE contas_pagar (
+    id            uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id     uuid          NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    descricao     VARCHAR(200)  NOT NULL,
+    categoria     VARCHAR(60)   NOT NULL,
+    valor         NUMERIC(12,2) NOT NULL CHECK (valor > 0),
+    vencimento    DATE          NOT NULL,
+    pago_em       DATE,                                 -- NULL = em aberto
+    caixa_id      uuid,                                 -- saída lançada no caixa ao pagar
+    recorrente_id uuid,
+    usuario_id    uuid,
+    criado_em     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT contas_pagar_tenant_id_uk  UNIQUE (tenant_id, id),
+    CONSTRAINT contas_pagar_parcela_uk    UNIQUE (tenant_id, recorrente_id, vencimento),
+    CONSTRAINT contas_pagar_caixa_fk      FOREIGN KEY (tenant_id, caixa_id) REFERENCES caixa (tenant_id, id),
+    CONSTRAINT contas_pagar_recorrente_fk FOREIGN KEY (tenant_id, recorrente_id) REFERENCES contas_recorrentes (tenant_id, id),
+    CONSTRAINT contas_pagar_usuario_fk    FOREIGN KEY (tenant_id, usuario_id) REFERENCES usuarios (tenant_id, id),
+    CONSTRAINT contas_pagar_pago_ck       CHECK ((pago_em IS NULL) = (caixa_id IS NULL))
+);
+CREATE INDEX contas_pagar_vencimento_idx ON contas_pagar (tenant_id, pago_em, vencimento);
+
 -- Auditoria: cada inclusão, alteração e exclusão nas tabelas principais (gravada por gatilho, ver auditar())
 CREATE TABLE auditoria (
     id          uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -559,7 +595,8 @@ BEGIN
                              'reservas', 'reserva_itens', 'locacoes', 'locacao_itens',
                              'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias',
                              'vistorias', 'vistoria_itens', 'vistoria_fotos', 'kits', 'kit_itens',
-                             'unidades', 'manutencoes', 'locacao_unidades', 'auditoria']
+                             'unidades', 'manutencoes', 'locacao_unidades', 'auditoria',
+                             'contas_recorrentes', 'contas_pagar']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -676,7 +713,9 @@ BEGIN
         ('devolucoes',  '', '', 'data'),
         ('caixa',       '', '', 'descricao'),
         ('unidades',    '', '', 'patrimonio'),
-        ('manutencoes', '', '', 'numero')
+        ('manutencoes', '', '', 'numero'),
+        ('contas_pagar', '', '', 'descricao'),
+        ('contas_recorrentes', '', 'gerado_ate', 'descricao')
     ) AS t(tabela, mascarar, ignorar, rotulo) LOOP
         EXECUTE format('CREATE TRIGGER auditoria AFTER INSERT OR UPDATE OR DELETE ON %I
                           FOR EACH ROW EXECUTE FUNCTION auditar(%L, %L, %L)', r.tabela, r.mascarar, r.ignorar, r.rotulo);
@@ -763,6 +802,7 @@ GRANT SELECT, UPDATE ON empresa TO locgestor_app;
 -- Vistorias são prova: só leitura e inclusão
 GRANT SELECT, INSERT ON vistorias, vistoria_itens, vistoria_fotos TO locgestor_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON unidades, manutencoes, locacao_unidades TO locgestor_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON contas_recorrentes, contas_pagar TO locgestor_app;
 -- Auditoria: só leitura e inclusão (a inclusão é do gatilho, com o papel de quem alterou)
 GRANT SELECT, INSERT ON auditoria TO locgestor_app;
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores, vw_produto_manutencao TO locgestor_app;

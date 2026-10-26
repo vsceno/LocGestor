@@ -7,7 +7,7 @@ Várias locadoras usam o mesmo sistema e o mesmo banco, e **cada uma só enxerga
 próprio PostgreSQL (Row Level Security).
 
 **Para a locadora:** clientes, produtos e categorias, locação com disponibilidade em tempo real, devolução total ou
-parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4, painel com gráficos, 8 relatórios
+parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4, painel com gráficos, 10 relatórios (entre eles a rentabilidade por equipamento e por unidade)
 (impressão e CSV para o Excel), usuários com perfis e **WhatsApp**: botões que abrem o WhatsApp do atendente com a
 mensagem pronta (resumo da locação, lembrete de devolução, cobrança do saldo, confirmação de reserva), inclusive
 na lista de devoluções atrasadas e próximas do painel. Sem custo e sem cadastro: usa links `wa.me` com o celular do
@@ -256,6 +256,21 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
 - **Histórico da unidade**: todas as locações e manutenções dela. **Baixa** (venda, perda, sucata) tira a unidade
   do patrimônio e diminui 1 do estoque; só vale para peça que não está na rua nem em manutenção.
 
+### Contas a pagar e previsão de caixa
+
+*Fluxo de caixa* tem três abas:
+
+- **Lançamentos:** o extrato de sempre.
+- **Contas a pagar:** contas avulsas (com vencimento) e **recorrentes** (aluguel, salário, internet: valor e dia
+  do mês). As recorrentes geram as parcelas sozinhas até 90 dias à frente, sem criar parcelas já vencidas; excluir
+  uma parcela não a faz voltar; mudar o valor vale para as parcelas em aberto; desativar remove as futuras.
+  **Pagar** lança a saída no caixa com a categoria da conta; só o administrador cria recorrentes, exclui contas e
+  desfaz pagamentos (o lançamento de uma conta paga só sai do caixa por "Desfazer pagamento").
+- **Previsão (30, 60 ou 90 dias):** saldo de hoje + o que deve entrar − o que deve sair, semana a semana, com
+  gráfico e o menor saldo do período (avisa se o caixa fica negativo). Entram: o saldo de cada locação aberta na
+  data prevista de devolução, locações atrasadas e devolvidas com saldo (na primeira semana) e reservas ativas
+  estimadas pelos preços atuais. Saem: as contas em aberto (as vencidas, na primeira semana).
+
 ### Auditoria
 
 *Configurações › Auditoria* (só administrador): toda inclusão, alteração e exclusão em locações, devoluções,
@@ -445,6 +460,7 @@ psql -U postgres -d locgestor -f database\migrations\005_precos_kits.sql
 psql -U postgres -d locgestor -f database\migrations\006_cobranca_asaas.sql
 psql -U postgres -d locgestor -f database\migrations\007_patrimonio_manutencao.sql
 psql -U postgres -d locgestor -f database\migrations\008_auditoria.sql
+psql -U postgres -d locgestor -f database\migrations\009_contas_pagar.sql
 php tests\isolamento.php
 ```
 
@@ -458,6 +474,7 @@ php tests\isolamento.php
 | `006_cobranca_asaas.sql` | cobrança automática: colunas em `tenants`, tabelas `assinatura_cobrancas` (com RLS) e `gateway_eventos` |
 | `007_patrimonio_manutencao.sql` | tabelas `unidades`, `manutencoes` e `locacao_unidades`, view `vw_produto_manutencao` |
 | `008_auditoria.sql` | tabela `auditoria` (com RLS, só inclusão e leitura), função `auditar()` e gatilhos nas tabelas principais |
+| `009_contas_pagar.sql` | tabelas `contas_recorrentes` e `contas_pagar` (com RLS e auditoria) |
 
 ### 10.2 Proteções do login (já ativas)
 

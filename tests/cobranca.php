@@ -54,6 +54,8 @@ function dbv(string $sql, array $p = [])
     return $v === false ? null : $v;
 }
 function dia(int $n): string { return date('Y-m-d', strtotime("$n days")); }
+/** +1 mês pela regra do banco (31/10 + 1 mês = 30/11), a mesma do sistema. */
+function mais_um_mes(string $d): string { return (string) dbv("SELECT (CAST(:d AS date) + INTERVAL '1 month')::date", ['d' => $d]); }
 
 /** Requisição HTTP simples (cookies por arquivo). Devolve [codigo, corpo, local]. */
 function http(string $url, ?array $post = null, array $cab = [], ?string $cookies = null, bool $json = false): array
@@ -265,7 +267,7 @@ ok($r[0] === 200 && str_contains($r[1], 'paga') && count($pg) === 1 && $pg[0]['f
    && $pg[0]['meses'] === 1 && $pg[0]['usuario_id'] === null && $pg[0]['obs'] === "Asaas $payD",
    'pago no Asaas: baixa com valor da API (não o do aviso), forma PIX e 1 mês', $r[1] . ' ' . json_encode($pg));
 $t = db('SELECT status, motivo_suspensao, vencimento FROM tenants WHERE id = :id', ['id' => $D])->fetch();
-ok($t['status'] === 'ativa' && $t['motivo_suspensao'] === '' && $t['vencimento'] === date('Y-m-d', strtotime("$vencD +1 month"))
+ok($t['status'] === 'ativa' && $t['motivo_suspensao'] === '' && $t['vencimento'] === mais_um_mes($vencD)
    && dbv('SELECT status FROM assinatura_cobrancas WHERE gateway_id = :g', ['g' => $payD]) === 'paga',
    'D reativada, vencimento +1 mês e cobrança paga', json_encode($t));
 $r = $hook($aviso);
@@ -283,7 +285,7 @@ http(SIM . "/_teste/pagar/{$cobA[0]['gateway_id']}?forma=CREDIT_CARD", []);
 [$cod, $saida] = rotina();
 $pgA = db('SELECT forma, vencimento_novo FROM assinatura_pagamentos WHERE locadora_id = :l', ['l' => $A])->fetchAll();
 ok(str_contains($saida, 'teste-cob-a: cobrança paga') && count($pgA) === 1 && $pgA[0]['forma'] === 'Cartão de crédito'
-   && dbv('SELECT vencimento FROM tenants WHERE id = :id', ['id' => $A]) === date('Y-m-d', strtotime(dia(5) . ' +1 month')),
+   && dbv('SELECT vencimento FROM tenants WHERE id = :id', ['id' => $A]) === mais_um_mes(dia(5)),
    'A pagou com cartão: a rotina dá baixa e o vencimento avança (a próxima cobrança fica para perto dele)', trim($saida));
 ok(dbv("SELECT count(*) FROM assinatura_cobrancas WHERE locadora_id = :l", ['l' => $A]) == 1, 'A: nenhuma cobrança nova com o vencimento longe');
 

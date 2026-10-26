@@ -1188,7 +1188,240 @@ function lancamento_excluir(string $id): void
     if ($l['locacao_id'] !== null) {
         throw new UserError('Lançamentos de locação não podem ser excluídos. Use o estorno (cancelamento) na própria locação.');
     }
+    if (val('SELECT 1 FROM contas_pagar WHERE caixa_id = :id', ['id' => $id]) !== null) {
+        throw new UserError('Este lançamento é o pagamento de uma conta: use "Desfazer pagamento" em Contas a pagar.');
+    }
     q('DELETE FROM caixa WHERE id = :id', ['id' => $id]);
+}
+
+// =====================================================================
+// CONTAS A PAGAR E RECORRENTES
+// =====================================================================
+
+const CONTAS_HORIZONTE_DIAS = 90;   // até onde as recorrentes geram parcelas (e a previsão de caixa olha)
+
+/** Campos comuns de conta/recorrente validados. */
+function conta_campos(array $d): array
+{
+    $c = [
+        'descricao' => trim((string) ($d['descricao'] ?? '')),
+        'categoria' => trim((string) ($d['categoria'] ?? '')),
+        'valor'     => parse_money($d['valor'] ?? ''),
+    ];
+    if (mb_strlen($c['descricao']) < 3 || mb_strlen($c['descricao']) > 200) {
+        throw new UserError('Informe a descrição (3 a 200 caracteres).');
+    }
+    if ($c['categoria'] === '' || mb_strlen($c['categoria']) > 60) {
+        throw new UserError('Informe a categoria (até 60 caracteres).');
+    }
+    if ($c['valor'] <= 0 || $c['valor'] > 9999999999) {
+        throw new UserError('O valor deve ser maior que zero.');
+    }
+    return $c;
+}
+
+/**
+ * Gera as parcelas das contas recorrentes ativas até CONTAS_HORIZONTE_DIAS à frente.
+ * Continua de onde parou (gerado_ate): uma parcela excluída não volta.
+ */
+function contas_gerar_recorrentes(): void
+{
+    tx(function () {
+        $limite = date('Y-m-d', strtotime('+' . CONTAS_HORIZONTE_DIAS . ' days'));
+        foreach (all('SELECT * FROM contas_recorrentes WHERE ativa FOR UPDATE') as $r) {
+            // Primeiro mês a gerar: o seguinte ao último gerado, ou o do início
+            $mes = $r['gerado_ate'] !== null ? date('Y-m-01', strtotime($r['gerado_ate'] . ' first day of next month'))
+                                             : date('Y-m-01', strtotime($r['inicio']));
+            $ultimo = $r['gerado_ate'];
+            // Primeira geração (ou refeita) não cria parcelas já vencidas; depois segue mês a mês, sem pular
+            $piso = $r['gerado_ate'] === null ? max($r['inicio'], today()) : $r['inicio'];
+            while (true) {
+                $venc = date('Y-m-', strtotime($mes)) . sprintf('%02d', $r['dia']);
+                if ($venc > $limite) {
+                    break;
+                }
+                if ($venc >= $piso) {
+                    q('INSERT INTO contas_pagar (descricao, categoria, valor, vencimento, recorrente_id)
+                       VALUES (:d, :c, :v, :venc, :r) ON CONFLICT (tenant_id, recorrente_id, vencimento) DO NOTHING',
+                      ['d' => $r['descricao'], 'c' => $r['categoria'], 'v' => $r['valor'], 'venc' => $venc, 'r' => $r['id']]);
+                    $ultimo = $venc;
+                }
+                $mes = date('Y-m-01', strtotime($mes . ' +1 month'));
+            }
+            if ($ultimo !== $r['gerado_ate']) {
+                q('UPDATE contas_recorrentes SET gerado_ate = :g WHERE id = :id', ['g' => $ultimo, 'id' => $r['id']]);
+            }
+        }
+    });
+}
+
+/** Conta avulsa. Devolve o id. */
+function conta_salvar(array $d): string
+{
+    $c = conta_campos($d);
+    $venc = (string) ($d['vencimento'] ?? '');
+    if (!valid_date($venc)) {
+        throw new UserError('Informe o vencimento.');
+    }
+    return (string) val('INSERT INTO contas_pagar (descricao, categoria, valor, vencimento, usuario_id)
+                         VALUES (:descricao, :categoria, :valor, :v, :u) RETURNING id', $c + ['v' => $venc, 'u' => uid()]);
+}
+
+/**
+ * Conta recorrente (só admin). Alterar o modelo atualiza as parcelas futuras ainda em aberto;
+ * desativar remove as parcelas futuras em aberto. Devolve o id.
+ */
+function recorrente_salvar(array $d, ?string $id = null): string
+{
+    require_admin();
+    $c = conta_campos($d);
+    $dia = filter_var($d['dia'] ?? '', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 28]]);
+    $inicio = (string) ($d['inicio'] ?? '');
+    $ativa = !empty($d['ativa']);
+    if ($dia === false) {
+        throw new UserError('O dia do vencimento deve ser de 1 a 28 (vale para todos os meses).');
+    }
+    if (!valid_date($inicio)) {
+        throw new UserError('Informe a partir de quando a conta vence.');
+    }
+    $id = tx(function () use ($c, $dia, $inicio, $ativa, $id) {
+        if ($id === null) {
+            return (string) val('INSERT INTO contas_recorrentes (descricao, categoria, valor, dia, inicio)
+                                 VALUES (:descricao, :categoria, :valor, :dia, :inicio) RETURNING id',
+                                $c + ['dia' => $dia, 'inicio' => $inicio]);
+        }
+        $antes = one('SELECT dia, inicio FROM contas_recorrentes WHERE id = :id FOR UPDATE', ['id' => $id]);
+        if ($antes === null) {
+            throw new UserError('Conta recorrente não encontrada.');
+        }
+        // Mudou o dia ou o início, ou foi desativada: as parcelas futuras em aberto são refeitas (ou somem)
+        $refazer = !$ativa || (int) $antes['dia'] !== $dia || $antes['inicio'] !== $inicio;
+        q('UPDATE contas_recorrentes SET descricao = :descricao, categoria = :categoria, valor = :valor, dia = :dia,
+                  inicio = :inicio, ativa = :ativa' . ($refazer ? ', gerado_ate = NULL' : '') . ' WHERE id = :id',
+          $c + ['dia' => $dia, 'inicio' => $inicio, 'ativa' => $ativa ? 'true' : 'false', 'id' => $id]);
+        if ($refazer) {
+            q('DELETE FROM contas_pagar WHERE recorrente_id = :id AND pago_em IS NULL AND vencimento >= CURRENT_DATE', ['id' => $id]);
+            // Não regera o que já passou: continua do último vencimento mantido
+            q('UPDATE contas_recorrentes SET gerado_ate = (SELECT max(vencimento) FROM contas_pagar WHERE recorrente_id = :id) WHERE id = :id2',
+              ['id' => $id, 'id2' => $id]);
+        } else {
+            q('UPDATE contas_pagar SET descricao = :descricao, categoria = :categoria, valor = :valor
+                WHERE recorrente_id = :id AND pago_em IS NULL AND vencimento >= CURRENT_DATE', $c + ['id' => $id]);
+        }
+        return $id;
+    });
+    contas_gerar_recorrentes();
+    return $id;
+}
+
+/** Paga a conta: lança a saída no caixa (com o valor pago) e marca como paga. */
+function conta_pagar(string $id, array $d): void
+{
+    $data = (string) ($d['data'] ?? '');
+    $valor = ($d['valor'] ?? '') === '' ? null : parse_money($d['valor']);
+    $forma = forma_valida((string) ($d['forma'] ?? ''));
+    if (!valid_date($data) || $data > today()) {
+        throw new UserError('Informe a data do pagamento (até hoje).');
+    }
+    if ($valor !== null && ($valor <= 0 || $valor > 9999999999)) {
+        throw new UserError('O valor pago deve ser maior que zero.');
+    }
+    tx(function () use ($id, $data, $valor, $forma) {
+        $c = one('SELECT * FROM contas_pagar WHERE id = :id FOR UPDATE', ['id' => $id]);
+        if ($c === null) {
+            throw new UserError('Conta não encontrada.');
+        }
+        if ($c['pago_em'] !== null) {
+            throw new UserError('Esta conta já foi paga.');
+        }
+        $valor ??= (float) $c['valor'];
+        $caixa = (string) val("INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, usuario_id)
+                               VALUES (:d, 'S', :c, :ds, :v, :f, :u) RETURNING id",
+            ['d' => $data, 'c' => $c['categoria'], 'ds' => $c['descricao'], 'v' => $valor, 'f' => $forma, 'u' => uid()]);
+        q('UPDATE contas_pagar SET pago_em = :d, valor = :v, caixa_id = :cx WHERE id = :id',
+          ['d' => $data, 'v' => $valor, 'cx' => $caixa, 'id' => $id]);
+    });
+}
+
+/** Desfaz o pagamento (só admin): apaga a saída do caixa e a conta volta a ficar em aberto. */
+function conta_desfazer_pagamento(string $id): void
+{
+    require_admin();
+    tx(function () use ($id) {
+        $c = one('SELECT caixa_id FROM contas_pagar WHERE id = :id AND pago_em IS NOT NULL FOR UPDATE', ['id' => $id]);
+        if ($c === null) {
+            throw new UserError('Conta paga não encontrada.');
+        }
+        q('UPDATE contas_pagar SET pago_em = NULL, caixa_id = NULL WHERE id = :id', ['id' => $id]);
+        q('DELETE FROM caixa WHERE id = :id', ['id' => $c['caixa_id']]);
+    });
+}
+
+/**
+ * Previsão de caixa para os próximos $dias: saldo de hoje + o que entra (saldos das locações, reservas
+ * estimadas) − o que sai (contas em aberto), semana a semana. Vencidos entram na primeira semana.
+ */
+function previsao_caixa(int $dias): array
+{
+    contas_gerar_recorrentes();
+    $hoje = today();
+    $limite = date('Y-m-d', strtotime("+$dias days"));
+    $saldo = (float) val("SELECT COALESCE(SUM(CASE WHEN tipo = 'E' THEN valor ELSE -valor END), 0) FROM caixa WHERE data <= CURRENT_DATE");
+
+    $itens = [];
+    // A receber: locações abertas (no fim previsto) e devolvidas com saldo (já vencido)
+    foreach (all("SELECT l.numero, c.nome, l.status, l.data_prev_devolucao,
+                         GREATEST(v.valor_previsto, v.valor_atual) - v.valor_pago AS aberta_saldo, v.valor_atual - v.valor_pago AS saldo
+                    FROM locacoes l JOIN clientes c ON c.id = l.cliente_id JOIN vw_locacao_valores v ON v.locacao_id = l.id
+                   WHERE l.status <> 'cancelada'
+                     AND (CASE WHEN l.status = 'aberta' THEN GREATEST(v.valor_previsto, v.valor_atual) ELSE v.valor_atual END) - v.valor_pago > 0.004") as $l) {
+        $aberta = $l['status'] === 'aberta';
+        $data = $aberta ? $l['data_prev_devolucao'] : $hoje;
+        if ($data > $limite) {
+            continue;
+        }
+        $itens[] = ['tipo' => 'E', 'data' => max($data, $hoje), 'vencido' => $data < $hoje || !$aberta,
+                    'valor' => (float) ($aberta ? $l['aberta_saldo'] : $l['saldo']),
+                    'descricao' => "Locação nº {$l['numero']} - {$l['nome']}", 'provavel' => false];
+    }
+    // Reservas ativas que terminam no horizonte: valor estimado pelos preços atuais
+    foreach (all("SELECT r.numero, c.nome, r.data_inicio, r.data_fim, ri.quantidade, p.valor_diaria, p.valor_semanal, p.valor_mensal
+                    FROM reservas r JOIN clientes c ON c.id = r.cliente_id
+                    JOIN reserva_itens ri ON ri.reserva_id = r.id JOIN produtos p ON p.id = ri.produto_id
+                   WHERE r.status = 'ativa' AND r.data_fim BETWEEN CURRENT_DATE AND CAST(:l AS date)", ['l' => $limite]) as $r) {
+        $chave = "R{$r['numero']}";
+        $valor = $r['quantidade'] * preco_item($r, max(1, days_between($r['data_inicio'], $r['data_fim'])));
+        if (isset($itens[$chave])) {
+            $itens[$chave]['valor'] += $valor;
+        } else {
+            $itens[$chave] = ['tipo' => 'E', 'data' => $r['data_fim'], 'vencido' => false, 'valor' => $valor,
+                              'descricao' => "Reserva nº {$r['numero']} - {$r['nome']} (estimado)", 'provavel' => true];
+        }
+    }
+    // A pagar: contas em aberto até o fim do horizonte
+    foreach (all('SELECT descricao, vencimento, valor FROM contas_pagar WHERE pago_em IS NULL AND vencimento <= CAST(:l AS date)',
+                 ['l' => $limite]) as $c) {
+        $itens[] = ['tipo' => 'S', 'data' => max($c['vencimento'], $hoje), 'vencido' => $c['vencimento'] < $hoje,
+                    'valor' => (float) $c['valor'], 'descricao' => $c['descricao'], 'provavel' => false];
+    }
+    $itens = array_values($itens);
+    usort($itens, fn($a, $b) => [$a['data'], $a['tipo']] <=> [$b['data'], $b['tipo']]);
+
+    // Semanas a partir de hoje
+    $semanas = [];
+    $acumulado = $saldo;
+    for ($i = 0; $i * 7 < $dias; $i++) {
+        $ini = date('Y-m-d', strtotime("+" . ($i * 7) . ' days'));
+        $fim = min(date('Y-m-d', strtotime('+' . ($i * 7 + 6) . ' days')), $limite);
+        $doPeriodo = array_filter($itens, fn($x) => $x['data'] >= $ini && $x['data'] <= $fim);
+        $entra = array_sum(array_map(fn($x) => $x['tipo'] === 'E' ? $x['valor'] : 0, $doPeriodo));
+        $sai = array_sum(array_map(fn($x) => $x['tipo'] === 'S' ? $x['valor'] : 0, $doPeriodo));
+        $acumulado += $entra - $sai;
+        $semanas[] = ['inicio' => $ini, 'fim' => $fim, 'entradas' => round($entra, 2), 'saidas' => round($sai, 2), 'saldo' => round($acumulado, 2)];
+    }
+    $vencido = fn(string $t) => round(array_sum(array_map(fn($x) => $x['tipo'] === $t && $x['vencido'] ? $x['valor'] : 0, $itens)), 2);
+    return ['saldo' => round($saldo, 2), 'semanas' => $semanas, 'itens' => $itens,
+            'receber_vencido' => $vencido('E'), 'pagar_vencido' => $vencido('S')];
 }
 
 // =====================================================================

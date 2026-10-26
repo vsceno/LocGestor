@@ -242,6 +242,8 @@ register_shutdown_function(function () use ($base, $inicio) {
         }
         $q("DELETE FROM unidades WHERE produto_id IN ($prodTeste)");
         $q("DELETE FROM produtos WHERE codigo LIKE 'TESTE-%'");
+        $q("DELETE FROM contas_pagar WHERE descricao LIKE 'TESTE%'");
+        $q("DELETE FROM contas_recorrentes WHERE descricao LIKE 'TESTE%'");
         $q("DELETE FROM caixa WHERE descricao LIKE 'TESTE%' AND criado_em >= :i", ['i' => $inicio]);
         $q("DELETE FROM clientes WHERE nome LIKE 'TESTE%'");
         $q("DELETE FROM usuarios WHERE login LIKE 'teste.%'");
@@ -882,6 +884,81 @@ ok(str_contains($tela, '2 registro(s)') && str_contains(texto($tela), 'nome: TES
 $tela = $op->get('index.php?p=config&a=auditoria&de=2000-01-01')['corpo'];
 ok(str_contains($tela, 'Acesso restrito ao administrador.') && !str_contains($tela, 'TESTE Auditoria'), 'operador não abre a auditoria');
 ok(!str_contains($beta->get('index.php?p=config&a=auditoria&de=2000-01-01')['corpo'], 'TESTE Auditoria'), 'Beta não vê a auditoria da Alfa');
+
+// =====================================================================
+secao('Contas a pagar, recorrentes e previsão de caixa');
+$contas = 'index.php?p=caixa&a=contas';
+$alfa->enviar($contas, 'index.php?p=caixa&a=conta_salvar',
+              ['descricao' => 'TESTE luz de outubro', 'categoria' => 'TESTE Energia', 'valor' => '200,00', 'vencimento' => dia(-2)]);
+$LUZ = dbv("SELECT id FROM contas_pagar WHERE tenant_id = :t AND descricao = 'TESTE luz de outubro'", ['t' => $alfaId]);
+ok($LUZ !== null && str_contains(texto($alfa->get($contas)['corpo']), 'TESTE luz de outubro TESTE Energia R$ 200,00 vencida'), 'conta avulsa vencida aparece como vencida');
+$rec = ['descricao' => 'TESTE aluguel do galpão', 'categoria' => 'TESTE Aluguel', 'valor' => '1.500,00', 'dia' => '15', 'inicio' => dia(-60), 'ativa' => '1'];
+$op->enviar('index.php?p=caixa', 'index.php?p=caixa&a=recorrente_salvar', ['id' => ''] + $rec);
+ok(str_contains($op->mensagem('index.php?p=caixa'), 'Acesso restrito ao administrador.'), 'operador não cria conta recorrente');
+$alfa->enviar($contas, 'index.php?p=caixa&a=recorrente_salvar', ['id' => ''] + $rec);
+$REC = dbv("SELECT id FROM contas_recorrentes WHERE tenant_id = :t AND descricao = 'TESTE aluguel do galpão'", ['t' => $alfaId]);
+$parcelas = fn() => db('SELECT id, vencimento, valor FROM contas_pagar WHERE recorrente_id = :r ORDER BY vencimento', ['r' => $REC])->fetchAll();
+$pc = $parcelas();
+$esperadas = [];
+for ($m = 0; $m < 5; $m++) {
+    $v = date('Y-m-15', strtotime(date('Y-m-01') . " +$m month"));
+    if ($v >= dia(0) && $v <= dia(90)) {
+        $esperadas[] = $v;
+    }
+}
+ok(array_column($pc, 'vencimento') === $esperadas && count(array_unique(array_column($pc, 'valor'))) === 1 && $pc[0]['valor'] === '1500.00',
+   'recorrente gera as parcelas do dia 15 de hoje até 90 dias (nenhuma vencida, mesmo com início há 60 dias)', json_encode(array_column($pc, 'vencimento')));
+$alfa->get($contas);
+$alfa->get('index.php?p=caixa&a=previsao');
+ok(count($parcelas()) === count($esperadas), 'abrir as telas de novo não duplica parcelas');
+$ultima = end($pc)['id'];
+$alfa->enviar($contas, 'index.php?p=caixa&a=conta_excluir', ['id' => $ultima]);
+$alfa->get($contas);
+ok(count($parcelas()) === count($esperadas) - 1, 'parcela excluída não volta');
+$alfa->enviar($contas, 'index.php?p=caixa&a=recorrente_salvar', ['id' => $REC, 'valor' => '1.600,00'] + $rec);
+ok(array_unique(array_column($parcelas(), 'valor')) === ['1600.00'], 'novo valor da recorrente vale para as parcelas em aberto');
+
+// Pagar, não pagar duas vezes, desfazer
+$op->enviar('index.php?p=caixa', 'index.php?p=caixa&a=conta_pagar', ['id' => $LUZ, 'data' => dia(0), 'forma' => 'Boleto']);
+$pg = db('SELECT c.pago_em, x.tipo, x.valor, x.categoria, x.forma FROM contas_pagar c JOIN caixa x ON x.id = c.caixa_id WHERE c.id = :id', ['id' => $LUZ])->fetch();
+ok($pg && $pg['pago_em'] === dia(0) && $pg['tipo'] === 'S' && $pg['valor'] === '200.00' && $pg['categoria'] === 'TESTE Energia' && $pg['forma'] === 'Boleto',
+   'operador paga a conta: saída de R$ 200,00 no caixa com a categoria da conta', json_encode($pg));
+$op->enviar('index.php?p=caixa', 'index.php?p=caixa&a=conta_pagar', ['id' => $LUZ, 'data' => dia(0), 'forma' => 'PIX']);
+ok(str_contains($op->mensagem('index.php?p=caixa'), 'já foi paga'), 'não paga duas vezes');
+$cxLuz = dbv('SELECT caixa_id FROM contas_pagar WHERE id = :id', ['id' => $LUZ]);
+$alfa->enviar('index.php?p=caixa', 'index.php?p=caixa&a=excluir', ['id' => $cxLuz]);
+ok(str_contains($alfa->mensagem('index.php?p=caixa'), 'Desfazer pagamento'), 'o lançamento do pagamento não é excluído pelo extrato');
+$op->enviar('index.php?p=caixa', 'index.php?p=caixa&a=conta_desfazer', ['id' => $LUZ]);
+ok(str_contains($op->mensagem('index.php?p=caixa'), 'Acesso restrito') && dbv('SELECT pago_em FROM contas_pagar WHERE id = :id', ['id' => $LUZ]) === dia(0),
+   'operador não desfaz pagamento');
+$alfa->enviar($contas, 'index.php?p=caixa&a=conta_desfazer', ['id' => $LUZ]);
+ok(dbv('SELECT pago_em FROM contas_pagar WHERE id = :id', ['id' => $LUZ]) === null && dbv('SELECT count(*) FROM caixa WHERE id = :c', ['c' => $cxLuz]) == 0,
+   'admin desfaz: a saída sai do caixa e a conta volta a ficar em aberto');
+
+// Previsão: saldo de hoje = caixa; semanas fecham com o saldo final; conta vencida na 1ª semana; reserva estimada
+$moeda = fn(string $v) => (float) str_replace(['R$', ' ', "\u{a0}", '.', ','], ['', '', '', '', '.'], $v);
+$prev = texto($alfa->get('index.php?p=caixa&a=previsao&dias=60')['corpo']);
+$saldoDb = (float) dbv("SELECT COALESCE(SUM(CASE WHEN tipo = 'E' THEN valor ELSE -valor END), 0) FROM caixa WHERE tenant_id = :t AND data <= CURRENT_DATE", ['t' => $alfaId]);
+preg_match('/Saldo hoje (-?R\$ [\d.,]+)/u', $prev, $mh);
+preg_match('/Saldo em 60 dias (-?R\$ [\d.,]+)/u', $prev, $mf);
+preg_match_all('#(\d{2}/\d{2}/\d{4}) a (\d{2}/\d{2}/\d{4}) (-?R\$ [\d.,]+) (-?R\$ [\d.,]+) (-?R\$ [\d.,]+)#u', $prev, $sem, PREG_SET_ORDER);
+$hoje = $moeda($mh[1] ?? 'x');
+$somaE = array_sum(array_map(fn($x) => $moeda($x[3]), $sem));
+$somaS = array_sum(array_map(fn($x) => $moeda($x[4]), $sem));
+ok(abs($hoje - $saldoDb) < 0.01 && count($sem) === 9 && abs($hoje + $somaE - $somaS - $moeda(end($sem)[5])) < 0.01
+   && abs($moeda(end($sem)[5]) - $moeda($mf[1] ?? 'x')) < 0.01,
+   'previsão: saldo de hoje = caixa, 9 semanas, saldo final = hoje + entradas − saídas', "hoje $hoje / db $saldoDb / semanas " . count($sem));
+ok(str_contains($prev, 'vencido TESTE luz de outubro R$ 200,00') && $moeda($sem[0][4]) >= 200, 'conta vencida entra como saída na primeira semana');
+preg_match('/Menor saldo no período (-?R\$ [\d.,]+)/u', $prev, $mm);
+ok(abs($moeda($mm[1] ?? 'x') - min(array_merge([$hoje], array_map(fn($x) => $moeda($x[5]), $sem)))) < 0.01, 'menor saldo considera o saldo de hoje e o de cada semana');
+$r1 = db("SELECT status, data_fim FROM reservas WHERE tenant_id = :t AND numero = 1", ['t' => $alfaId])->fetch();
+ok($r1['status'] !== 'ativa' || str_contains($prev, 'Reserva nº 1 - Francisco das Chagas Pinheiro (estimado) R$ 360,00'),
+   'reserva ativa entra estimada pelos preços (2 betoneiras + 4 carrinhos + 20 painéis por 2 dias = R$ 360,00)');
+ok(!str_contains(texto($beta->get('index.php?p=caixa&a=previsao')['corpo']), 'TESTE luz') && !str_contains($beta->get('index.php?p=caixa&a=contas')['corpo'], 'TESTE aluguel'),
+   'Beta não vê contas nem previsão da Alfa');
+$alfa->enviar($contas, 'index.php?p=caixa&a=recorrente_salvar', ['id' => $REC, 'ativa' => ''] + $rec);
+ok(dbv('SELECT count(*) FROM contas_pagar WHERE recorrente_id = :r AND pago_em IS NULL AND vencimento >= CURRENT_DATE', ['r' => $REC]) == 0,
+   'desativar a recorrente remove as parcelas futuras em aberto');
 
 // =====================================================================
 secao('Painel, relatórios e CSV');

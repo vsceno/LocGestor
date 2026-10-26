@@ -46,6 +46,8 @@ const TABELAS = [
     'manutencoes'       => 'id',
     'locacao_unidades'  => 'id',
     'auditoria'         => 'id',
+    'contas_recorrentes' => 'id',
+    'contas_pagar'      => 'id',
 ];
 const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores', 'vw_produto_manutencao'];
 

@@ -325,9 +325,9 @@ function relatorios_ver(): void
     $rel = $defs[$chave];
 
     // Período padrão: os últimos 12 meses
-    $de = get('de', date('Y-m-01', strtotime('-11 months')));
+    $de = get('de', date('Y-m-d', strtotime('first day of -11 months')));
     $ate = get('ate', today());
-    $de = valid_date($de) ? $de : date('Y-m-01', strtotime('-11 months'));
+    $de = valid_date($de) ? $de : date('Y-m-d', strtotime('first day of -11 months'));
     $ate = valid_date($ate) ? $ate : today();
     if ($ate < $de) {
         [$de, $ate] = [$ate, $de];
