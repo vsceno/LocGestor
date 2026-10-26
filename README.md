@@ -234,6 +234,18 @@ O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou tr
 reservas (`#123` procura só pelo número), produtos (código ou descrição) e unidades de patrimônio (número ou
 série). Um único resultado abre direto. A busca vai por POST: o termo (que pode ser um CPF) nunca aparece na URL.
 
+### Aplicativo no celular (PWA)
+
+O LocGestor pode ser **instalado** como aplicativo: no Chrome do Android, menu › *Instalar app* (ou *Adicionar à
+tela inicial*); no iPhone, Safari › Compartilhar › *Adicionar à Tela de Início*. Abre em tela cheia, com o ícone
+"LG" e atalhos para *Nova locação* e *Roteiro do dia*. Exige **HTTPS** (seção 10.3); em `localhost` funciona para
+teste.
+
+- O aplicativo guarda no aparelho **só** arquivos estáticos (estilos, scripts, ícones). As telas, com dados de
+  clientes e locações, vêm sempre do servidor e nunca ficam salvas: num celular compartilhado, nada sobra depois
+  de sair do sistema. Sem internet, aparece a página "Sem conexão".
+- Arquivos: `manifest.webmanifest`, `sw.js` (service worker), `offline.html`, `assets/js/pwa.js` e `assets/icons/`.
+
 ### Roteiro do motorista
 
 Menu **Roteiro** (feito para o celular): as **entregas** do dia (locações com saída no dia) e as **coletas**

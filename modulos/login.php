@@ -22,6 +22,7 @@ function login_index(): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Entrar · <?= e(config('app_name', 'LocGestor')) ?></title>
 <link rel="stylesheet" href="<?= e(asset('assets/css/app.css')) ?>">
+<?= pwa_head() ?>
 </head>
 <body class="pagina-login">
 <main class="login-caixa">

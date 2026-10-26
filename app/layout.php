@@ -51,6 +51,23 @@ function asset(string $caminho): string
     return $caminho . (is_file($arq) ? '?v=' . filemtime($arq) : '');
 }
 
+/** Instalação como aplicativo (PWA): manifesto, ícone e registro do service worker. Só no sistema das locadoras. */
+function pwa_head(): string
+{
+    if (AREA !== 'locadora') {
+        return '';
+    }
+    return '<link rel="manifest" href="manifest.webmanifest">' . "
+"
+         . '<meta name="theme-color" content="#e8710a">' . "
+"
+         . '<link rel="icon" type="image/png" href="assets/icons/icon-192.png">' . "
+"
+         . '<link rel="apple-touch-icon" href="assets/icons/icon-180.png">' . "
+"
+         . '<script src="' . e(asset('assets/js/pwa.js')) . '" defer></script>';
+}
+
 function flashes_html(): string
 {
     $html = '';
@@ -200,6 +217,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($titulo) ?> · <?= e(nome_locadora()) ?></title>
 <link rel="stylesheet" href="<?= e(asset('assets/css/app.css')) ?>">
+<?= pwa_head() ?>
 </head>
 <body>
 <input type="checkbox" id="menu-toggle" class="menu-toggle" aria-label="Abrir menu">

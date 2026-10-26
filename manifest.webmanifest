@@ -1,0 +1,21 @@
+{
+    "name": "LocGestor - locação de equipamentos",
+    "short_name": "LocGestor",
+    "description": "Locações, reservas, estoque e caixa da locadora.",
+    "lang": "pt-BR",
+    "start_url": "index.php",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#f3f4f7",
+    "theme_color": "#e8710a",
+    "icons": [
+        { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ],
+    "shortcuts": [
+        { "name": "Nova locação", "url": "index.php?p=locacoes&a=nova", "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }] },
+        { "name": "Roteiro do dia", "url": "index.php?p=roteiro", "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }] }
+    ]
+}

@@ -10,5 +10,13 @@ DirectoryIndex index.php
     Require all denied
 </FilesMatch>
 
+# Aplicativo (PWA): tipo do manifesto; o service worker é sempre conferido no servidor
+AddType application/manifest+json .webmanifest
+<IfModule mod_headers.c>
+    <Files "sw.js">
+        Header set Cache-Control "no-cache"
+    </Files>
+</IfModule>
+
 # Pastas ocultas (.git, .claude) respondem como inexistentes
 RedirectMatch 404 /\.(git|claude)(/|$)

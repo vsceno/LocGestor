@@ -1020,6 +1020,25 @@ $alfa->enviar('index.php?p=roteiro', 'index.php?p=roteiro&a=desmarcar', ['id' =>
 ok(dbv('SELECT count(*) FROM entregas WHERE locacao_id = :l', ['l' => $LR8]) == 0, 'desfazer apaga o registro da parada');
 
 // =====================================================================
+secao('Aplicativo (PWA)');
+$anon = new Navegador($BASE);
+$man = $anon->req('manifest.webmanifest');
+$mj = json_decode($man['corpo'], true);
+$iconesOk = is_array($mj) && count($mj['icons'] ?? []) === 3
+            && array_reduce($mj['icons'], fn($ok, $i) => $ok && $anon->req($i['src'])['codigo'] === 200, true);
+ok($man['codigo'] === 200 && ($mj['start_url'] ?? '') === 'index.php' && ($mj['display'] ?? '') === 'standalone' && $iconesOk,
+   'manifesto válido, abre em tela cheia e os 3 ícones existem');
+$sw = $anon->req('sw.js');
+ok($sw['codigo'] === 200 && preg_match('/content-type:\s*(text|application)\/javascript/i', $sw['cabecalhos']) === 1
+   && str_contains($sw['corpo'], "req.mode === 'navigate'") && !str_contains($sw['corpo'], 'index.php'),
+   'service worker servido como JavaScript (páginas sempre da rede, nunca do cache)');
+ok($anon->req('offline.html')['codigo'] === 200 && str_contains($anon->req('offline.html')['corpo'], 'Sem conexão'), 'página "sem conexão" existe');
+$login = $anon->get('index.php?p=login')['corpo'];
+$painel = $alfa->get('index.php?p=dashboard')['corpo'];
+ok(str_contains($login, 'rel="manifest"') && str_contains($painel, 'rel="manifest"') && str_contains($painel, 'assets/js/pwa.js'),
+   'login e telas da locadora oferecem a instalação');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",
