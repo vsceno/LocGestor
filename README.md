@@ -228,6 +228,12 @@ Com a demonstração carregada:
 
 **Troque essas senhas** (ou não carregue a demonstração) em qualquer ambiente acessível por outras pessoas.
 
+### Busca geral
+
+O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
+reservas (`#123` procura só pelo número), produtos (código ou descrição) e unidades de patrimônio (número ou
+série). Um único resultado abre direto. A busca vai por POST: o termo (que pode ser um CPF) nunca aparece na URL.
+
 ### Vistorias (checklist, fotos e assinatura)
 
 No detalhe da locação, **Vistoria de retirada** e **Vistoria de devolução** abrem um checklist com o estado de cada
@@ -313,7 +319,7 @@ locgestor/
 │   ├── assinatura.php     mensalidades: pagamento, suspensão e cobranças automáticas
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
-│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos
+│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos, busca
 ├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução), graficos.js e vistoria.js (assinatura e fotos)

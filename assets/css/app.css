@@ -170,6 +170,11 @@ code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: .9e
     z-index: 10;
 }
 .topo h1 { font-size: 1.25rem; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.busca-topo { margin: 0 0 0 auto; flex: 0 1 300px; min-width: 120px; }
+.busca-topo input { width: 100%; padding: 7px 12px; border: 1px solid var(--borda); border-radius: 20px; font: inherit; background: var(--fundo, #f3f4f7); }
+.busca-lista { list-style: none; margin: 0; padding: 0; }
+.busca-lista li { padding: 7px 0; border-bottom: 1px solid var(--borda); }
+.busca-lista li:last-child { border-bottom: 0; }
 .btn-menu { display: none; cursor: pointer; color: var(--texto); padding: 4px; }
 .btn-menu .ico { width: 24px; height: 24px; }
 .menu-fundo { display: none; }

@@ -232,6 +232,12 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
     <header class="topo">
         <label for="menu-toggle" class="btn-menu" title="Menu"><?= icone('menu') ?></label>
         <h1><?= e($titulo) ?></h1>
+        <?php if (AREA === 'locadora' && $u !== null): ?>
+            <form method="post" action="<?= e(url('busca', ['a' => 'buscar'])) ?>" class="busca-topo" role="search">
+                <?= csrf_field() ?>
+                <input type="search" name="q" placeholder="Buscar cliente, locação, produto..." aria-label="Busca geral" maxlength="100">
+            </form>
+        <?php endif; ?>
     </header>
     <main class="conteudo">
         <?= aviso_assinatura() ?>

@@ -961,6 +961,30 @@ ok(dbv('SELECT count(*) FROM contas_pagar WHERE recorrente_id = :r AND pago_em I
    'desativar a recorrente remove as parcelas futuras em aberto');
 
 // =====================================================================
+secao('Busca global');
+$buscar = fn(Navegador $n, string $q) => $n->enviar('index.php?p=dashboard', 'index.php?p=busca&a=buscar', ['q' => $q]);
+ok(str_contains($alfa->get('index.php?p=dashboard')['corpo'], 'class="busca-topo"'), 'campo de busca no topo das telas');
+$r = $buscar($alfa, '111.444.777-35');
+$fim = $alfa->req('index.php?p=busca');
+ok(str_ends_with($r['local'], 'p=busca') && !preg_match('/\d{6}/', $r['local'] . $fim['local'])
+   && str_contains($fim['local'], 'p=clientes&a=ver&id='), 'busca por CPF: vai por POST, a URL não leva o CPF e o único resultado abre direto');
+$buscar($alfa, "#$N");
+ok(str_contains($alfa->req('index.php?p=busca')['local'], "p=locacoes&a=ver&n=$N"), "\"#$N\" abre a locação nº $N");
+$buscar($alfa, '98620');
+ok(str_contains($alfa->req('index.php?p=busca')['local'], 'p=clientes&a=ver&id='), 'busca pelo trecho do celular acha o cliente');
+$buscar($alfa, 'teste-p');
+$t = texto($alfa->get('index.php?p=busca')['corpo']);
+ok(str_contains($t, 'Produtos (1) TESTE-PAT — TESTE gerador com patrimônio') && str_contains($t, 'Unidade TESTE-P1 TESTE gerador com patrimônio · série SN-teste-p1 · baixada')
+   && str_contains($t, 'Unidade TESTE-P3'), 'resultados agrupados: produto e unidades (com a baixada marcada)', $t);
+$buscar($beta, 'teste-p');
+ok(str_contains(texto($beta->get('index.php?p=busca')['corpo']), 'Nada encontrado'), 'Beta não acha produto nem unidade da Alfa');
+$buscar($beta, "#$N");
+ok(!str_contains($beta->req('index.php?p=busca')['local'], "n=$N") || dbv('SELECT count(*) FROM locacoes WHERE tenant_id = :t AND numero = :n', ['t' => $betaId, 'n' => $N]) == 1,
+   'Beta não abre locação da Alfa pela busca');
+$buscar($alfa, 'x');
+ok(str_contains($alfa->get('index.php?p=busca')['corpo'], 'pelo menos 2 caracteres'), 'termo de 1 caractere pede mais');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",
