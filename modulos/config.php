@@ -195,6 +195,7 @@ const AUDITORIA_TABELAS = [
     'manutencoes' => 'Manutenção', 'caixa' => 'Caixa', 'usuarios' => 'Usuário', 'empresa' => 'Empresa',
     'acesso_suporte' => 'Acesso de suporte',
     'orcamentos' => 'Orçamento',
+    'recibos' => 'Recibo',
 ];
 const AUDITORIA_ACOES = ['I' => 'incluiu', 'U' => 'alterou', 'D' => 'excluiu'];
 

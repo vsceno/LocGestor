@@ -393,6 +393,9 @@ function locacoes_ver(): void
             <div class="acoes" style="margin-top:14px">
                 <?php if ($aberta): ?><a class="btn" href="<?= e(url_locacao($loc, 'devolucao')) ?>">Registrar devolução</a><?php endif; ?>
                 <a class="btn btn-sec" href="<?= e(url_locacao($loc, 'contrato')) ?>" target="_blank">Contrato</a>
+                <a class="btn btn-sec" href="<?= e(url_locacao($loc, 'romaneio')) ?>" target="_blank">Romaneio</a>
+                <a class="btn btn-sec" href="<?= e(url('locacoes', ['a' => 'romaneio', 'n' => $loc['numero'], 'tipo' => 'troca'])) ?>" target="_blank">Romaneio de troca</a>
+                <a class="btn btn-sec" href="<?= e(url('recibos', ['a' => 'novo', 'locacao' => $loc['id']])) ?>">Recibo</a>
                 <a class="btn btn-sec" href="<?= e(url_locacao($loc, 'fatura')) ?>" target="_blank">Fatura</a>
                 <a class="btn btn-sec" href="<?= e(url('locacoes', ['a' => 'nova', 'copiar' => $loc['id']])) ?>">Repetir locação</a>
             </div>
@@ -770,6 +773,47 @@ function locatario_impressao(array $loc): void
         <tr><th>Telefone</th><td><?= implode(' · ', array_map(fn($t) => '<span class="nowrap">' . e($t) . '</span>', array_filter([$c['telefone'], $c['celular']]))) ?></td><th>E-mail</th><td><?= e($c['email']) ?></td></tr>
     </table>
     <?php
+}
+
+/**
+ * Romaneio para conferir a retirada ou a troca de itens. Só imprime: não mexe no estoque nem na locação.
+ */
+function locacoes_romaneio(): void
+{
+    $loc = locacao_da_url();
+    $troca = get('tipo') === 'troca';
+    $titulo = $troca ? 'Romaneio de troca' : 'Romaneio de retirada';
+    $itens = all("SELECT li.quantidade, p.codigo, p.descricao, p.unidade,
+                         (SELECT string_agg(u.patrimonio, ', ' ORDER BY u.patrimonio) FROM locacao_unidades lu
+                            JOIN unidades u ON u.id = lu.unidade_id WHERE lu.locacao_item_id = li.id) AS patrimonios
+                    FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
+                   WHERE li.locacao_id = :id ORDER BY p.descricao", ['id' => $loc['id']]);
+
+    print_start("$titulo · locação nº {$loc['numero']}", url_locacao($loc));
+    cabecalho_impressao($titulo, 'Locação nº ' . $loc['numero']);
+    locatario_impressao($loc);
+    ?>
+    <h2>Saída e devolução previstas</h2>
+    <p><?= e(dt($loc['data_saida'])) ?> → <?= e(dt($loc['data_prev_devolucao'])) ?><?= $loc['local_uso'] !== '' ? ' · local: ' . e($loc['local_uso']) : '' ?></p>
+    <h2>Itens</h2>
+    <table>
+        <thead><tr><th class="num">Qtd.</th><th>Código</th><th>Descrição</th><th>Patrimônio</th>
+            <?php if ($troca): ?><th>Saiu</th><th>Entrou</th><?php else: ?><th>Conferido</th><?php endif; ?></tr></thead>
+        <tbody>
+        <?php foreach ($itens as $it): ?>
+            <tr><td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
+                <td><?= e($it['descricao']) ?></td><td><?= e($it['patrimonios'] ?? '') ?></td>
+                <?= $troca ? '<td></td><td></td>' : '<td>&#9744;</td>' ?></tr>
+        <?php endforeach; ?>
+        <?php if ($troca): for ($i = 0; $i < 3; $i++): ?>
+            <tr><td></td><td></td><td>&nbsp;</td><td></td><td></td><td></td></tr>
+        <?php endfor; endif; ?>
+        </tbody>
+    </table>
+    <p style="margin-top:50px">Assinatura do cliente: ______________________________ Documento: ____________________ Data: ____/____/______</p>
+    <p>Responsável da locadora: ______________________________</p>
+    <?php
+    print_end();
 }
 
 function locacoes_contrato(): void

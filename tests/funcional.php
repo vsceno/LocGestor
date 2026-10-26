@@ -211,6 +211,7 @@ register_shutdown_function(function () use ($base, $inicio) {
         db("SELECT set_config('app.auditoria', 'off', true)");
         // Orçamentos de teste saem antes: eles apontam para as locações e reservas que o teste criou
         $q('DELETE FROM orcamentos WHERE criado_em >= :i', ['i' => $inicio]);
+        $q('DELETE FROM recibos WHERE criado_em >= :i', ['i' => $inicio]);
         foreach ($base as $t) {
             $locs = "SELECT id FROM locacoes WHERE tenant_id = :t AND numero > :n";
             $p = ['t' => $t['id'], 'n' => $t['loc']];
@@ -1191,6 +1192,58 @@ $rBusca = $buscar($alfa, '55555');
 $fimBusca = $alfa->req('index.php?p=busca');
 ok(str_contains($rBusca['local'] . ' ' . $fimBusca['local'], "id=$BAR") || str_contains($fimBusca['corpo'], 'TESTE produto com código de barras'),
    'busca global encontra produto pelo código de barras (abre direto se for o único resultado)');
+
+// =====================================================================
+secao('Recibos numerados e romaneio de retirada/troca');
+$recUltimo = (int) dbv('SELECT coalesce(max(numero), 0) FROM recibos WHERE tenant_id = :t', ['t' => $alfaId]);
+$alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
+              ['recebido_de' => 'TESTE Recibo Avulso', 'documento' => '', 'valor' => '120,00', 'referente' => 'TESTE serviço avulso',
+               'forma' => 'PIX', 'locacao_id' => '']);
+$RECA = dbv("SELECT id FROM recibos WHERE referente = 'TESTE serviço avulso'");
+ok($RECA && (int) dbv('SELECT numero FROM recibos WHERE id = :i', ['i' => $RECA]) === $recUltimo + 1,
+   'recibo avulso recebe o próximo número da locadora');
+ok($RECA && (float) dbv('SELECT valor FROM recibos WHERE id = :i', ['i' => $RECA]) === 120.0, 'valor do recibo gravado (120,00)');
+ok(str_contains($alfa->req("index.php?p=recibos&a=imprimir&id=$RECA")['corpo'], 'Recebemos de')
+   && str_contains($alfa->req("index.php?p=recibos&a=imprimir&id=$RECA")['corpo'], '120,00'), 'recibo imprime o texto e o valor');
+
+$alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
+              ['recebido_de' => 'TESTE Recibo Sequência', 'documento' => '', 'valor' => '5,00', 'referente' => 'TESTE sequência', 'forma' => 'Dinheiro', 'locacao_id' => '']);
+ok((int) dbv("SELECT numero FROM recibos WHERE referente = 'TESTE sequência'") === $recUltimo + 2, 'o número seguinte aparece sem pular');
+
+$alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
+              ['recebido_de' => 'TESTE Doc', 'documento' => '123', 'valor' => '10,00', 'referente' => 'TESTE documento errado', 'forma' => 'PIX', 'locacao_id' => '']);
+ok(str_contains($alfa->mensagem('index.php?p=recibos&a=novo'), 'CPF ou CNPJ inválido'), 'documento inválido é recusado');
+$alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
+              ['recebido_de' => 'TESTE Zero', 'documento' => '', 'valor' => '0', 'referente' => 'TESTE valor zero', 'forma' => 'PIX', 'locacao_id' => '']);
+ok(str_contains($alfa->mensagem('index.php?p=recibos&a=novo'), 'valor maior que zero')
+   && dbv("SELECT count(*) FROM recibos WHERE referente = 'TESTE valor zero'") == 0, 'valor zero é recusado e não gera número');
+
+$pre = $alfa->get("index.php?p=recibos&a=novo&locacao=$LOC1[id]")['corpo'];
+ok(str_contains($pre, 'value="Maria Lúcia Bezerra"') && str_contains($pre, "Pagamento da locação nº $LOC1[numero]"),
+   'recibo da locação já vem com o cliente e a referência');
+$alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
+              ['recebido_de' => 'Maria Lúcia Bezerra', 'documento' => '111.444.777-35', 'valor' => '30,00',
+               'referente' => 'TESTE pagamento da locação', 'forma' => 'PIX', 'locacao_id' => $LOC1['id']]);
+$RECL = dbv("SELECT id FROM recibos WHERE referente = 'TESTE pagamento da locação'");
+ok($RECL && dbv('SELECT locacao_id FROM recibos WHERE id = :i', ['i' => $RECL]) === $LOC1['id'], 'recibo fica ligado à locação');
+ok(!str_contains(urldecode($alfa->req("index.php?p=recibos&a=ver&id=$RECL")['local']), '11144477735')
+   && !str_contains($alfa->req("index.php?p=recibos&a=ver&id=$RECL")['local'], '111.444'), 'o CPF não vai para a URL');
+
+ok($alfa->get("index.php?p=recibos&a=ver&id=$RECA")['codigo'] === 200, 'Alfa vê o próprio recibo');
+ok($beta->get("index.php?p=recibos&a=ver&id=$RECA")['codigo'] === 404, 'Beta não abre recibo da Alfa (404)');
+ok(!str_contains($beta->get('index.php?p=recibos')['corpo'], 'TESTE Recibo Avulso'), 'Beta não lista recibos da Alfa');
+
+$detLoc = $alfa->get("index.php?p=locacoes&a=ver&n=$LOC1[numero]")['corpo'];
+ok(str_contains($detLoc, 'a=romaneio') && str_contains($detLoc, 'tipo=troca') && str_contains($detLoc, "locacao=$LOC1[id]"),
+   'a locação tem os botões Romaneio, Romaneio de troca e Recibo');
+$codLoc = dbv('SELECT p.codigo FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id WHERE li.locacao_id = :l LIMIT 1', ['l' => $LOC1['id']]);
+$rom = $alfa->get("index.php?p=locacoes&a=romaneio&n=$LOC1[numero]")['corpo'];
+ok(str_contains($rom, 'Romaneio de retirada') && str_contains($rom, 'Conferido') && str_contains($rom, $codLoc),
+   'romaneio de retirada lista os itens com a coluna de conferência');
+$romT = $alfa->get("index.php?p=locacoes&a=romaneio&n=$LOC1[numero]&tipo=troca")['corpo'];
+ok(str_contains($romT, 'Romaneio de troca') && str_contains($romT, 'Entrou') && !str_contains($romT, 'Conferido'),
+   'romaneio de troca tem colunas Saiu e Entrou');
+ok($beta->get("index.php?p=locacoes&a=romaneio&n=$LOC1[numero]")['codigo'] === 404, 'Beta não imprime romaneio da Alfa (404)');
 
 // =====================================================================
 secao('Painel, relatórios e CSV');

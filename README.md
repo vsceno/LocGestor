@@ -293,6 +293,17 @@ produto e não pode estar em outro produto **da mesma locadora** (outra locadora
 Ao salvar, a lista inteira é substituída. Na lista de produtos e na busca geral, um leitor USB (que digita o código
 e Enter) acha o produto pelo código de barras exato.
 
+### Recibos e romaneio
+
+- **Recibo** (*Recibos*, ou pelo botão **Recibo** na locação): comprovante com número da própria locadora, que nunca
+  se repete e não se altera nem se apaga. Pode ser avulso (informa quem pagou, CPF/CNPJ opcional, valor, forma e
+  referência) ou ligado a uma locação (já preenche cliente e referência). Não lança nada no caixa: o pagamento
+  continua sendo lançado no caixa, como antes.
+- **Romaneio de retirada** (botão **Romaneio** na locação): lista os itens, a quantidade e os patrimônios para
+  conferir na hora de entregar, com a coluna *Conferido* e a assinatura do cliente.
+- **Romaneio de troca** (botão **Romaneio de troca**): mesma lista, com colunas *Saiu* e *Entrou* e linhas em branco
+  para itens que entram no lugar. Só imprime: não muda o estoque nem a locação.
+
 ### Busca geral
 
 O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
@@ -570,6 +581,7 @@ psql -U postgres -d locgestor -f database\migrations\016_auditoria_plataforma.sq
 psql -U postgres -d locgestor -f database\migrations\017_frete_endereco.sql
 psql -U postgres -d locgestor -f database\migrations\018_orcamentos.sql
 psql -U postgres -d locgestor -f database\migrations\019_codigos_barras.sql
+psql -U postgres -d locgestor -f database\migrations\020_recibos.sql
 php tests\isolamento.php
 ```
 
@@ -594,6 +606,7 @@ php tests\isolamento.php
 | `017_frete_endereco.sql` | colunas `frete_entrega`, `frete_recolhimento` e `endereco_entrega` em `locacoes`; view `vw_locacao_valores` soma os fretes |
 | `018_orcamentos.sql` | tabelas `orcamentos` e `orcamento_itens` (cotação com validade, convertível em locação ou reserva) |
 | `019_codigos_barras.sql` | tabela `produto_barras` (códigos de barras do produto; um principal e os similares) |
+| `020_recibos.sql` | tabela `recibos` (recibos numerados, sem alteração nem exclusão; CPF/CNPJ mascarado na auditoria) |
 
 ### 10.2 Proteções do login (já ativas)
 

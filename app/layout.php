@@ -15,6 +15,7 @@ const MENU = [
     'produtos'   => ['Produtos',       'produtos'],
     'manutencoes' => ['Manutenção',    'manutencao'],
     'caixa'      => ['Fluxo de caixa', 'caixa'],
+    'recibos'    => ['Recibos',        'caixa'],
     'relatorios' => ['Relatórios',     'relatorios'],
     'config'     => ['Configurações',  'config'],
 ];
