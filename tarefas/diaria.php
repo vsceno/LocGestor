@@ -23,6 +23,8 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 require dirname(__DIR__) . '/app/asaas.php';
 require dirname(__DIR__) . '/app/assinatura.php';
 
+// Quem altera as locadoras nesta rotina aparece na auditoria como "rotina diária"
+q("SELECT set_config('app.usuario', 'rotina diária', false)");
 $r = cobrancas_rotina();
 echo '[' . date('Y-m-d H:i:s') . '] Rotina diária do LocGestor' . PHP_EOL;
 foreach ($r['linhas'] ?: ['Nada a fazer.'] as $linha) {

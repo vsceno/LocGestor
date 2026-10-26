@@ -256,6 +256,7 @@ register_shutdown_function(function () use ($base, $inicio) {
         $q("DELETE FROM assinatura_cobrancas WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM assinatura_pagamentos WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM tenants WHERE slug LIKE 'teste-%'");
+        $q('DELETE FROM auditoria_plataforma WHERE quando >= :i', ['i' => $inicio]);   // depois das exclusões de teste
         $q("DELETE FROM planos WHERE nome LIKE 'TESTE%'");
         $q("UPDATE tenants SET status = 'ativa' WHERE slug IN ('alfa-locacoes', 'beta-eventos')");
         $q("UPDATE empresa SET pix_chave = '', pix_nome = '', pix_cidade = '' WHERE tenant_id = (SELECT id FROM tenants WHERE slug = 'beta-eventos')");
@@ -1444,6 +1445,31 @@ if (!$senhaSuporte) {
     ok(entrar_ok(new Navegador($BASE), 'alfa-locacoes', 'teste.operador', 'Operador2027'), 'depois da troca, entra com a senha escolhida pelo usuário');
     $tudoAntes = db("SELECT count(*) FROM usuarios WHERE tenant_id = :t AND login = 'admin'", ['t' => $alfaId])->fetchColumn();
     ok($tudoAntes == 1 && entrar_ok(new Navegador($BASE), 'alfa-locacoes', 'admin', 'admin123'), 'o admin da locadora não foi afetado');
+
+    // Auditoria do painel: o que o painel fez fica registrado, com quem e com os dados mascarados
+    $ap = db("SELECT usuario, acao, dados::text AS dados FROM auditoria_plataforma WHERE tabela = 'tenants' AND rotulo = 'teste-ci' ORDER BY quando")->fetchAll();
+    $statusMudou = false;
+    foreach ($ap as $x) {
+        $d = json_decode($x['dados'], true) ?: [];
+        if (($d['status'] ?? null) === ['ativa', 'suspensa'] && $x['usuario'] === 'plataforma: suporte') {
+            $statusMudou = true;
+        }
+    }
+    ok($statusMudou, 'suspensão no painel fica na auditoria do painel (ativa → suspensa, quem: plataforma: suporte)', json_encode($ap));
+    $cnpjOculto = true;
+    foreach ($ap as $x) {
+        $d = json_decode($x['dados'], true) ?: [];
+        foreach (['cnpj', 'email_contato', 'telefone'] as $c) {
+            if (isset($d[$c]) && !in_array($d[$c], ['', '***', ['***', '***']], true)) {
+                $cnpjOculto = false;
+            }
+        }
+    }
+    ok($cnpjOculto, 'CNPJ, e-mail e telefone da locadora aparecem mascarados na auditoria do painel');
+    $telaAud = $pl->get('plataforma.php?p=auditoria')['corpo'];
+    ok(str_contains($telaAud, 'Auditoria do painel') && str_contains($telaAud, 'teste-ci') && str_contains(texto($telaAud), 'plataforma: suporte'),
+       'tela "Auditoria" do painel lista as ações com quem fez', mb_substr(texto($telaAud), 0, 500));
+    ok(str_contains($pl->get('plataforma.php?p=tenants')['corpo'], 'href="plataforma.php?p=auditoria"'), 'painel tem o item "Auditoria" no menu');
 }
 
 /** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */

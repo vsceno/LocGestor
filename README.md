@@ -187,6 +187,11 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+**Auditoria do painel:** menu **Auditoria**. Quem criou, alterou ou excluiu locadoras, planos, pagamentos,
+recados e usuários do painel, e quando, com o antes e o depois. As ações automáticas aparecem como "rotina
+diária" (cobranças e suspensões) e "webhook asaas". CNPJ, e-mail, telefone e senhas aparecem mascarados, e o
+histórico não pode ser alterado nem apagado (migração 016).
+
 **Senhas dos usuários:** na tela de uma locadora, **Redefinir senha** gera uma senha temporária para um usuário
 (ela aparece uma única vez). O usuário é obrigado a trocá-la no próximo acesso, e as sessões que ele já tinha abertas
 deixam de valer na hora (migração 015: `senha_redefinida_em`).

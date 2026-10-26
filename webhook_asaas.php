@@ -47,6 +47,8 @@ if (!str_starts_with($aviso['event'], 'PAYMENT_') || !is_string($pagamentoId) ||
     responder(200, 'Ignorado.');
 }
 
+// Quem altera as locadoras por aviso do Asaas aparece na auditoria como "webhook asaas"
+q("SELECT set_config('app.usuario', 'webhook asaas', false)");
 try {
     if ($eventoId !== '' && val('SELECT 1 FROM gateway_eventos WHERE id = :id', ['id' => $eventoId]) !== null) {
         responder(200, 'Aviso já processado.');

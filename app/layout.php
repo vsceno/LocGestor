@@ -22,6 +22,7 @@ const MENU_PLATAFORMA = [
     'numeros' => ['Números', 'painel'],
     'uso'     => ['Uso', 'painel'],
     'recados' => ['Recados', 'mensagem'],
+    'auditoria' => ['Auditoria', 'config'],
     'planos'  => ['Planos', 'caixa'],
     'conta'   => ['Minha senha', 'config'],
 ];
