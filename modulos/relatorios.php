@@ -182,6 +182,83 @@ function relatorios_definicoes(): array
                             'valor_atual' => ['Valor', 'money'], 'valor_pago' => ['Pago', 'money'], 'saldo' => ['Saldo', 'money']],
             'soma'      => ['valor_atual', 'valor_pago', 'saldo'],
         ],
+        'rentabilidade' => [
+            'titulo'    => 'Rentabilidade por equipamento',
+            'descricao' => 'Faturamento (itens devolvidos no período) menos o custo das manutenções concluídas no período. '
+                         . 'Investimento = valor de aquisição das unidades de patrimônio ou, sem elas, estoque × valor de reposição. '
+                         . '"Já recuperado" compara todo o faturamento menos manutenções, desde sempre, com o investimento.',
+            'periodo'   => true,
+            'sql'       => "WITH fat AS (
+                                SELECT li.produto_id,
+                                       SUM(di.valor) FILTER (WHERE d.data BETWEEN CAST(:de AS date) AND CAST(:ate AS date)) AS periodo,
+                                       SUM(di.valor) AS total
+                                  FROM devolucao_itens di
+                                  JOIN devolucoes d ON d.id = di.devolucao_id
+                                  JOIN locacao_itens li ON li.id = di.locacao_item_id
+                                 GROUP BY li.produto_id
+                            ), man AS (
+                                SELECT produto_id,
+                                       SUM(custo) FILTER (WHERE data_fim BETWEEN CAST(:de AS date) AND CAST(:ate AS date)) AS periodo,
+                                       SUM(custo) FILTER (WHERE data_fim IS NOT NULL) AS total
+                                  FROM manutencoes GROUP BY produto_id
+                            ), inv AS (
+                                SELECT p.id AS produto_id,
+                                       COALESCE((SELECT SUM(u.aquisicao_valor) FROM unidades u
+                                                  WHERE u.produto_id = p.id AND u.ativa AND u.aquisicao_valor > 0),
+                                                p.qtd_total * p.valor_reposicao) AS investimento
+                                  FROM produtos p
+                            )
+                            SELECT p.codigo, p.descricao,
+                                   COALESCE(fat.periodo, 0) AS faturamento,
+                                   COALESCE(man.periodo, 0) AS manutencao,
+                                   COALESCE(fat.periodo, 0) - COALESCE(man.periodo, 0) AS resultado,
+                                   inv.investimento,
+                                   CASE WHEN inv.investimento > 0
+                                        THEN 100.0 * (COALESCE(fat.total, 0) - COALESCE(man.total, 0)) / inv.investimento ELSE 0 END AS recuperado
+                              FROM produtos p
+                              JOIN inv ON inv.produto_id = p.id
+                              LEFT JOIN fat ON fat.produto_id = p.id
+                              LEFT JOIN man ON man.produto_id = p.id
+                             WHERE p.ativo OR fat.periodo > 0 OR man.periodo > 0
+                             ORDER BY resultado DESC, p.descricao",
+            'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'faturamento' => ['Faturamento', 'money'],
+                            'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money'],
+                            'investimento' => ['Investimento', 'money'], 'recuperado' => ['Já recuperado', 'pct']],
+            'soma'      => ['faturamento', 'manutencao', 'resultado', 'investimento'],
+            'grafico'   => ['rotulo' => 'descricao', 'series' => ['resultado' => ['Resultado', '#1e8e3e']], 'moeda' => true, 'horizontal' => true],
+        ],
+        'rentabilidade_unidade' => [
+            'titulo'    => 'Rentabilidade por unidade (patrimônio)',
+            'descricao' => 'Para as peças com número de patrimônio: dias na rua e faturamento das locações em que a unidade voltou '
+                         . 'no período (a parte dela no valor do item), menos as manutenções dela concluídas no período.',
+            'periodo'   => true,
+            'sql'       => "WITH uso AS (
+                                SELECT lu.unidade_id, d.data - l.data_saida AS dias,
+                                       di.valor / NULLIF(di.quantidade, 0) AS valor
+                                  FROM locacao_unidades lu
+                                  JOIN devolucoes d ON d.id = lu.devolucao_id
+                                  JOIN devolucao_itens di ON di.devolucao_id = lu.devolucao_id AND di.locacao_item_id = lu.locacao_item_id
+                                  JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                                  JOIN locacoes l ON l.id = li.locacao_id
+                                 WHERE d.data BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
+                            )
+                            SELECT u.patrimonio, p.descricao AS produto, u.aquisicao_valor,
+                                   (SELECT count(*) FROM uso WHERE uso.unidade_id = u.id) AS locacoes,
+                                   COALESCE((SELECT SUM(GREATEST(1, dias)) FROM uso WHERE uso.unidade_id = u.id), 0) AS dias,
+                                   COALESCE((SELECT SUM(valor) FROM uso WHERE uso.unidade_id = u.id), 0) AS faturamento,
+                                   COALESCE((SELECT SUM(m.custo) FROM manutencoes m WHERE m.unidade_id = u.id
+                                              AND m.data_fim BETWEEN CAST(:de AS date) AND CAST(:ate AS date)), 0) AS manutencao,
+                                   COALESCE((SELECT SUM(valor) FROM uso WHERE uso.unidade_id = u.id), 0)
+                                     - COALESCE((SELECT SUM(m.custo) FROM manutencoes m WHERE m.unidade_id = u.id
+                                                  AND m.data_fim BETWEEN CAST(:de AS date) AND CAST(:ate AS date)), 0) AS resultado
+                              FROM unidades u JOIN produtos p ON p.id = u.produto_id
+                             WHERE u.ativa
+                             ORDER BY resultado DESC, u.patrimonio",
+            'colunas'   => ['patrimonio' => ['Patrimônio', 'txt'], 'produto' => ['Produto', 'txt'], 'aquisicao_valor' => ['Aquisição', 'money'],
+                            'locacoes' => ['Locações', 'num'], 'dias' => ['Dias na rua', 'num'], 'faturamento' => ['Faturamento', 'money'],
+                            'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money']],
+            'soma'      => ['locacoes', 'dias', 'faturamento', 'manutencao', 'resultado'],
+        ],
     ];
 }
 

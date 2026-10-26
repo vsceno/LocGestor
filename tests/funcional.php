@@ -576,6 +576,14 @@ ok(str_contains($alfa->mensagem("index.php?p=produtos&a=unidade&id=$P1"), 'em us
 $alfa->enviar("index.php?p=produtos&a=unidade&id=$P1", 'index.php?p=produtos&a=unidade_baixar', ['id' => $P1, 'baixa_data' => dia(0), 'baixa_motivo' => 'TESTE sucata']);
 ok(dbv('SELECT ativa::text FROM unidades WHERE id = :u', ['u' => $P1]) === 'false' && dbv('SELECT qtd_total FROM produtos WHERE id = :p', ['p' => $PAT]) == 2,
    'baixa de TESTE-P1: unidade inativa e estoque 3 → 2');
+// Rentabilidade: R$ 100 faturados (2 devoluções de R$ 50), R$ 150 de manutenção; investimento = 2 unidades ativas × R$ 2.500
+$per = '&de=' . dia(-1) . '&ate=' . dia(0);
+$rent = texto($alfa->get("index.php?p=relatorios&a=ver&r=rentabilidade$per")['corpo']);
+ok(str_contains($rent, 'TESTE-PAT TESTE gerador com patrimônio R$ 100,00 R$ 150,00 -R$ 50,00 R$ 5.000,00 -1,0%'),
+   'rentabilidade do produto: faturamento − manutenção, investimento pelas unidades e % recuperado');
+$rentU = texto($alfa->get("index.php?p=relatorios&a=ver&r=rentabilidade_unidade$per")['corpo']);
+ok(str_contains($rentU, 'TESTE-P3 TESTE gerador com patrimônio R$ 2.500,00 1 1 R$ 50,00 R$ 0,00 R$ 50,00')
+   && !str_contains($rentU, 'TESTE-P1'), 'rentabilidade por unidade: a parte de cada unidade no item (baixada não aparece)');
 
 // Cancelar a locação libera as unidades
 $r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
@@ -884,7 +892,8 @@ $tp = texto($beta->get('index.php?p=dashboard')['corpo']);
 $receber = 'R$ ' . number_format((float) $k['receber'], 2, ',', '.');
 ok(str_contains($tp, "Locações em aberto {$k['abertas']} ") && str_contains($tp, "Total a receber $receber"),
    "painel da Beta = números só da Beta ({$k['abertas']} abertas, a receber $receber)");
-foreach (['atraso', 'debito', 'estoque', 'mais_alugados', 'sem_movimento', 'faturamento', 'clientes_top', 'periodo'] as $rel) {
+foreach (['atraso', 'debito', 'estoque', 'mais_alugados', 'sem_movimento', 'faturamento', 'clientes_top', 'periodo',
+          'rentabilidade', 'rentabilidade_unidade'] as $rel) {
     $t1 = $alfa->get("index.php?p=relatorios&a=ver&r=$rel")['codigo'];
     $t2 = $alfa->get("index.php?p=relatorios&a=ver&r=$rel&imprimir=1")['codigo'];
     $csv = $alfa->req("index.php?p=relatorios&a=ver&r=$rel&csv=1");
