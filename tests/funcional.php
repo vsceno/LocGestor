@@ -967,7 +967,8 @@ $buscar = fn(Navegador $n, string $q) => $n->enviar('index.php?p=dashboard', 'in
 ok(str_contains($alfa->get('index.php?p=dashboard')['corpo'], 'class="busca-topo"'), 'campo de busca no topo das telas');
 $r = $buscar($alfa, '111.444.777-35');
 $fim = $alfa->req('index.php?p=busca');
-ok(str_ends_with($r['local'], 'p=busca') && !preg_match('/\d{6}/', $r['local'] . $fim['local'])
+$urls = urldecode($r['local'] . ' ' . $fim['local']);
+ok(str_ends_with($r['local'], 'p=busca') && !str_contains($urls, '11144477735') && !str_contains($urls, '111.444')
    && str_contains($fim['local'], 'p=clientes&a=ver&id='), 'busca por CPF: vai por POST, a URL não leva o CPF e o único resultado abre direto');
 $buscar($alfa, "#$N");
 ok(str_contains($alfa->req('index.php?p=busca')['local'], "p=locacoes&a=ver&n=$N"), "\"#$N\" abre a locação nº $N");
