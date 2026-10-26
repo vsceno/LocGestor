@@ -193,7 +193,8 @@ $inicio = dbv('SELECT now()');
 $base = [];
 foreach (db('SELECT t.id, t.slug,
                     (SELECT COALESCE(max(numero), 0) FROM locacoes l WHERE l.tenant_id = t.id) AS loc,
-                    (SELECT COALESCE(max(numero), 0) FROM reservas r WHERE r.tenant_id = t.id) AS res
+                    (SELECT COALESCE(max(numero), 0) FROM reservas r WHERE r.tenant_id = t.id) AS res,
+                    (SELECT COALESCE(max(numero), 0) FROM manutencoes m WHERE m.tenant_id = t.id) AS man
                FROM tenants t')->fetchAll() as $t) {
     $base[$t['slug']] = $t;
 }
@@ -210,6 +211,7 @@ register_shutdown_function(function () use ($base, $inicio) {
             $locs = "SELECT id FROM locacoes WHERE tenant_id = :t AND numero > :n";
             $p = ['t' => $t['id'], 'n' => $t['loc']];
             $q("DELETE FROM caixa WHERE locacao_id IN ($locs)", $p);
+            $q("DELETE FROM locacao_unidades WHERE locacao_item_id IN (SELECT id FROM locacao_itens WHERE locacao_id IN ($locs))", $p);
             $q("DELETE FROM devolucao_itens WHERE devolucao_id IN (SELECT id FROM devolucoes WHERE locacao_id IN ($locs))", $p);
             $q("DELETE FROM devolucoes WHERE locacao_id IN ($locs)", $p);
             $q("DELETE FROM locacao_itens WHERE locacao_id IN ($locs)", $p);
@@ -217,6 +219,7 @@ register_shutdown_function(function () use ($base, $inicio) {
             $q('DELETE FROM reservas WHERE tenant_id = :t AND numero > :n', ['t' => $t['id'], 'n' => $t['res']]);
             $q("UPDATE tenant_sequencias SET ultimo = :n WHERE tenant_id = :t AND nome = 'locacao'", ['t' => $t['id'], 'n' => $t['loc']]);
             $q("UPDATE tenant_sequencias SET ultimo = :n WHERE tenant_id = :t AND nome = 'reserva'", ['t' => $t['id'], 'n' => $t['res']]);
+            $q("UPDATE tenant_sequencias SET ultimo = :n WHERE tenant_id = :t AND nome = 'manutencao'", ['t' => $t['id'], 'n' => $t['man']]);
         }
         // Vistorias criadas pelo teste: apaga os registros e os arquivos do disco
         $pasta = rtrim((string) ($GLOBALS['config']['pasta_arquivos'] ?? __DIR__ . '/../storage'), '/\\');
@@ -228,6 +231,14 @@ register_shutdown_function(function () use ($base, $inicio) {
             @unlink("$pasta/$a");
         }
         $q("DELETE FROM kits WHERE codigo LIKE 'TESTE-%'");
+        // Manutenções dos produtos de teste (e o custo lançado no caixa), unidades e produtos
+        $prodTeste = "SELECT id FROM produtos WHERE codigo LIKE 'TESTE-%'";
+        $caixaMan = db("SELECT caixa_id FROM manutencoes WHERE caixa_id IS NOT NULL AND produto_id IN ($prodTeste)")->fetchAll(PDO::FETCH_COLUMN);
+        $q("DELETE FROM manutencoes WHERE produto_id IN ($prodTeste)");
+        foreach ($caixaMan as $cx) {
+            $q('DELETE FROM caixa WHERE id = :id', ['id' => $cx]);
+        }
+        $q("DELETE FROM unidades WHERE produto_id IN ($prodTeste)");
         $q("DELETE FROM produtos WHERE codigo LIKE 'TESTE-%'");
         $q("DELETE FROM caixa WHERE descricao LIKE 'TESTE%' AND criado_em >= :i", ['i' => $inicio]);
         $q("DELETE FROM clientes WHERE nome LIKE 'TESTE%'");
@@ -469,6 +480,129 @@ ok(str_contains($m, 'Kit não encontrado.') && dbv('SELECT count(*) FROM kits WH
 $alfa->enviar("index.php?p=produtos&a=kit_editar&id=$KIT", 'index.php?p=produtos&a=kit_excluir', ['id' => $KIT]);
 ok(dbv('SELECT count(*) FROM kits WHERE id = :k', ['k' => $KIT]) == 0 && dbv('SELECT count(*) FROM kit_itens WHERE kit_id = :k', ['k' => $KIT]) == 0
    && dbv('SELECT count(*) FROM produtos WHERE id = :p', ['p' => $AND]) == 1, 'Alfa exclui o kit (itens juntos; produtos ficam)');
+
+// =====================================================================
+secao('Patrimônio (unidades) e manutenção');
+$prodPat = ['codigo' => 'TESTE-PAT', 'descricao' => 'TESTE gerador com patrimônio', 'unidade' => 'UN', 'qtd_total' => '3',
+            'valor_diaria' => '50,00', 'ativo' => '1', 'categoria_id' => $catSem];
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar', $prodPat);
+$PAT = $produto($alfaId, 'TESTE-PAT');
+$novaUn = fn(string $pat) => $alfa->enviar("index.php?p=produtos&a=unidade_nova&produto=$PAT", 'index.php?p=produtos&a=unidade_salvar',
+                                           ['id' => '', 'produto_id' => $PAT, 'patrimonio' => $pat, 'serie' => "SN-$pat", 'aquisicao_valor' => '2.500,00']);
+$un = fn(string $pat) => dbv('SELECT id FROM unidades WHERE tenant_id = :t AND patrimonio = :p', ['t' => $alfaId, 'p' => $pat]);
+foreach (['teste-p1', 'teste-p2', 'teste-p3'] as $pp) {
+    $novaUn($pp);
+}
+[$P1, $P2, $P3] = [$un('TESTE-P1'), $un('TESTE-P2'), $un('TESTE-P3')];
+ok($P1 && $P2 && $P3 && dbv('SELECT aquisicao_valor FROM unidades WHERE id = :u', ['u' => $P1]) === '2500.00',
+   '3 unidades cadastradas (patrimônio em maiúsculas, valor de aquisição)');
+$novaUn('teste-p4');
+ok(str_contains($alfa->mensagem("index.php?p=produtos&a=unidade_nova&produto=$PAT"), 'Aumente o estoque'), 'não cadastra mais unidades que o estoque (3)');
+$alfa->enviar("index.php?p=produtos&a=unidade&id=$P2", 'index.php?p=produtos&a=unidade_salvar', ['id' => $P2, 'patrimonio' => 'TESTE-P1']);
+ok($alfa->mensagem("index.php?p=produtos&a=unidade&id=$P2") === 'Já existe uma unidade com este número de patrimônio.', 'patrimônio repetido é recusado');
+
+$abrir = fn(Navegador $n, array $c) => $n->enviar('index.php?p=manutencoes&a=nova', 'index.php?p=manutencoes&a=abrir',
+                                                   $c + ['tipo' => 'corretiva', 'descricao' => 'TESTE motor falhando', 'data_inicio' => dia(0)]);
+$abrir($alfa, ['unidade_id' => $P1]);
+$M1 = dbv('SELECT id FROM manutencoes WHERE unidade_id = :u AND data_fim IS NULL', ['u' => $P1]);
+$api = json_decode($alfa->get("index.php?p=api&a=disponivel&produto=$PAT&inicio=" . dia(0) . '&fim=' . dia(30))['corpo'], true);
+ok($M1 && ($api['disponivel'] ?? null) === 2, 'unidade TESTE-P1 em manutenção: disponível cai para 2 (em qualquer período)', json_encode($api));
+$lista = texto($alfa->get('index.php?p=produtos&q=TESTE-PAT')['corpo']);
+ok(str_contains($lista, 'TESTE gerador com patrimônio') && preg_match('/R\$ 50,00\/dia 3 UN 0 0 1 2/', $lista) === 1,
+   'lista de produtos: estoque 3, manutenção 1, disponível 2', $lista);
+$abrir($alfa, ['unidade_id' => $P1]);
+ok(str_contains($alfa->mensagem('index.php?p=manutencoes&a=nova'), 'já está na manutenção nº'), 'a mesma unidade não abre duas manutenções');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(5), 'produto_id' => [$PAT], 'quantidade' => ['3'], 'diaria' => [''],
+]);
+ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=nova'), '(pedido 3, disponível 2)'), 'locação de 3 recusada: 1 está em manutenção');
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(5), 'produto_id' => [$PAT], 'quantidade' => ['2'], 'diaria' => [''],
+]);
+$NP = num_locacao($r);
+$LP = $valores($NP, $alfaId)['id'];
+$IP = dbv('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $LP]);
+$detP = $alfa->get("index.php?p=locacoes&a=ver&n=$NP")['corpo'];
+ok(str_contains($detP, 'Patrimônio (unidades que saíram)') && str_contains($detP, 'TESTE-P2') && !str_contains($detP, "value=\"$P1\""),
+   'detalhe da locação oferece as unidades livres (sem a que está em manutenção)');
+$salvarUn = fn(Navegador $n, string $loc, array $lista) => $n->enviar("index.php?p=locacoes&a=ver&n=$NP", 'index.php?p=locacoes&a=unidades_salvar',
+                                                                      ['id' => $loc, "unidades[$IP]" => $lista]);
+$salvarUn($alfa, $LP, [$P1]);
+ok(str_contains($alfa->mensagem("index.php?p=locacoes&a=ver&n=$NP"), 'TESTE-P1 está na manutenção nº'), 'unidade em manutenção não sai na locação');
+$salvarUn($alfa, $LP, [$P1, $P2, $P3]);
+ok(str_contains($alfa->mensagem("index.php?p=locacoes&a=ver&n=$NP"), 'no máximo 2'), 'não indica mais unidades que a quantidade na rua');
+$salvarUn($alfa, $LP, [$P2, $P3]);
+ok(dbv('SELECT count(*) FROM locacao_unidades WHERE locacao_item_id = :i AND devolucao_id IS NULL', ['i' => $IP]) == 2
+   && str_contains(texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NP")['corpo']), 'Patrimônio: TESTE-P2, TESTE-P3'),
+   'TESTE-P2 e TESTE-P3 na locação, e o contrato mostra os números');
+$alfa->enviar("index.php?p=produtos&a=unidade&id=$P2", 'index.php?p=produtos&a=unidade_baixar', ['id' => $P2, 'baixa_data' => dia(0), 'baixa_motivo' => 'TESTE']);
+ok(str_contains($alfa->mensagem("index.php?p=produtos&a=unidade&id=$P2"), 'está na rua (locação nº'), 'unidade na rua não recebe baixa');
+$abrir($alfa, ['unidade_id' => $P3]);
+ok(str_contains($alfa->mensagem('index.php?p=manutencoes&a=nova'), 'está na rua'), 'unidade na rua não vai para manutenção');
+$abrir($alfa, ['produto_id' => $PAT, 'quantidade' => '1']);
+ok(str_contains($alfa->mensagem('index.php?p=manutencoes&a=nova'), 'Só há 0 peça(s)'), 'manutenção por quantidade respeita o que está livre (0)');
+$alfa->enviar("index.php?p=produtos&a=editar&id=$PAT", 'index.php?p=produtos&a=salvar', ['id' => $PAT, 'qtd_total' => '2'] + $prodPat);
+ok(str_contains($alfa->mensagem("index.php?p=produtos&a=editar&id=$PAT"), '2 na rua e 1 em manutenção'), 'estoque não fica abaixo do que está fora');
+
+$devP = "index.php?p=locacoes&a=devolucao&n=$NP";
+ok(str_contains($alfa->get($devP)['corpo'], 'name="unidades[]" value="' . $P2 . '"'), 'devolução lista as unidades na rua para marcar');
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1', 'unidades' => [$P2, $P3]]);
+ok(str_contains($alfa->mensagem($devP), 'mais unidades de TESTE gerador'), 'devolver 1 marcando 2 unidades é recusado');
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1']);
+ok(str_contains($alfa->mensagem($devP), 'Marque quais unidades'), 'devolução parcial sem dizer qual unidade voltou é recusada');
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1', 'unidades' => [$P3]]);
+ok(dbv('SELECT devolucao_id IS NOT NULL FROM locacao_unidades WHERE unidade_id = :u', ['u' => $P3]) === true
+   && dbv('SELECT devolucao_id IS NULL FROM locacao_unidades WHERE unidade_id = :u', ['u' => $P2]) === true, 'parcial: TESTE-P3 voltou, TESTE-P2 continua na rua');
+
+$alfa->enviar("index.php?p=manutencoes&a=ver&id=$M1", 'index.php?p=manutencoes&a=concluir',
+              ['id' => $M1, 'data_fim' => dia(0), 'custo' => '150,00', 'solucao' => 'Troca da vela', 'lancar_caixa' => '1', 'forma' => 'PIX']);
+$m1 = db('SELECT m.data_fim, m.custo, c.tipo, c.valor, c.categoria FROM manutencoes m LEFT JOIN caixa c ON c.id = m.caixa_id WHERE m.id = :id', ['id' => $M1])->fetch();
+ok($m1['data_fim'] === dia(0) && $m1['custo'] === '150.00' && $m1['tipo'] === 'S' && $m1['valor'] === '150.00' && $m1['categoria'] === 'Manutenção',
+   'manutenção concluída com custo de R$ 150,00 lançado como saída no caixa', json_encode($m1));
+$alfa->enviar("index.php?p=manutencoes&a=ver&id=$M1", 'index.php?p=manutencoes&a=concluir', ['id' => $M1, 'data_fim' => dia(0)]);
+ok($alfa->mensagem("index.php?p=manutencoes&a=ver&id=$M1") === 'Esta manutenção já foi concluída.', 'não conclui duas vezes');
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1']);
+ok($valores($NP, $alfaId)['status'] === 'devolvida' && dbv('SELECT count(*) FROM locacao_unidades WHERE locacao_item_id = :i AND devolucao_id IS NULL', ['i' => $IP]) == 0,
+   'devolução do restante libera TESTE-P2 sozinha');
+$hist = texto($alfa->get("index.php?p=produtos&a=unidade&id=$P1")['corpo']);
+ok(str_contains($hist, 'Manutenção nº') && str_contains($hist, 'TESTE motor falhando'), 'histórico da unidade mostra a manutenção');
+ok(str_contains(texto($alfa->get("index.php?p=produtos&a=unidade&id=$P2")['corpo']), "Locação nº $NP"), 'histórico da unidade mostra a locação');
+$alfa->enviar("index.php?p=produtos&a=unidade&id=$P1", 'index.php?p=produtos&a=unidade_excluir', ['id' => $P1]);
+ok(str_contains($alfa->mensagem("index.php?p=produtos&a=unidade&id=$P1"), 'em uso') && $un('TESTE-P1') !== null, 'unidade com histórico não é excluída');
+$alfa->enviar("index.php?p=produtos&a=unidade&id=$P1", 'index.php?p=produtos&a=unidade_baixar', ['id' => $P1, 'baixa_data' => dia(0), 'baixa_motivo' => 'TESTE sucata']);
+ok(dbv('SELECT ativa::text FROM unidades WHERE id = :u', ['u' => $P1]) === 'false' && dbv('SELECT qtd_total FROM produtos WHERE id = :p', ['p' => $PAT]) == 2,
+   'baixa de TESTE-P1: unidade inativa e estoque 3 → 2');
+
+// Cancelar a locação libera as unidades
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'produto_id' => [$PAT], 'quantidade' => ['1'], 'diaria' => [''],
+]);
+$NC = num_locacao($r);
+$LC = $valores($NC, $alfaId)['id'];
+$IC2 = dbv('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $LC]);
+$alfa->enviar("index.php?p=locacoes&a=ver&n=$NC", 'index.php?p=locacoes&a=unidades_salvar', ['id' => $LC, "unidades[$IC2]" => [$P3]]);
+$alfa->enviar("index.php?p=locacoes&a=ver&n=$NC", 'index.php?p=locacoes&a=cancelar', ['id' => $LC, 'motivo' => 'TESTE', 'forma' => 'PIX']);
+ok($valores($NC, $alfaId)['status'] === 'cancelada' && dbv('SELECT count(*) FROM locacao_unidades WHERE locacao_item_id = :i', ['i' => $IC2]) == 0,
+   'cancelar a locação libera a unidade');
+
+// Isolamento
+ok($beta->get("index.php?p=produtos&a=unidade&id=$P3")['codigo'] === 404 && $beta->get("index.php?p=manutencoes&a=ver&id=$M1")['codigo'] === 404
+   && !str_contains($beta->get('index.php?p=manutencoes&situacao=todas')['corpo'], 'TESTE motor'), 'Beta não vê unidade nem manutenção da Alfa');
+$abrir($beta, ['unidade_id' => $P3]);
+$m = $beta->mensagem('index.php?p=manutencoes&a=nova');
+$abrir($beta, ['produto_id' => $PAT, 'quantidade' => '1']);
+$m2 = $beta->mensagem('index.php?p=manutencoes&a=nova');
+ok(str_contains($m, 'Unidade não encontrada.') && str_contains($m2, 'Produto não encontrado.')
+   && dbv('SELECT count(*) FROM manutencoes WHERE tenant_id = :t', ['t' => $betaId]) == 0, 'Beta não abre manutenção de unidade ou produto da Alfa', "$m / $m2");
+$beta->enviar('index.php?p=manutencoes&a=nova', 'index.php?p=produtos&a=unidade_baixar', ['id' => $P3, 'baixa_data' => dia(0), 'baixa_motivo' => 'invasão']);
+$m = $beta->mensagem('index.php?p=manutencoes&a=nova');
+$beta->enviar('index.php?p=manutencoes&a=nova', 'index.php?p=manutencoes&a=excluir', ['id' => $M1]);
+$m2 = $beta->mensagem('index.php?p=manutencoes&a=nova');
+ok(str_contains($m, 'Unidade não encontrada.') && str_contains($m2, 'Só é possível excluir') && dbv('SELECT ativa FROM unidades WHERE id = :u', ['u' => $P3]) === true
+   && dbv('SELECT count(*) FROM manutencoes WHERE id = :m', ['m' => $M1]) == 1, 'Beta não dá baixa em unidade nem exclui manutenção da Alfa', "$m / $m2");
+$beta->enviar('index.php?p=manutencoes&a=nova', 'index.php?p=locacoes&a=unidades_salvar', ['id' => $LP, "unidades[$IP]" => [$P3]]);
+ok(str_contains($beta->mensagem('index.php?p=manutencoes&a=nova'), 'Locação não encontrada.'), 'Beta não mexe no patrimônio de locação da Alfa');
 
 // =====================================================================
 secao('WhatsApp (links wa.me com a mensagem pronta)');

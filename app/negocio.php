@@ -57,6 +57,7 @@ function precos_html(array $it): string
  *   - itens na rua que ocupam o período: devolução prevista >= início, ou o período
  *     começa hoje (ou antes), porque item atrasado continua fora mesmo com a previsão vencida
  *   - reservas ativas que se cruzam com o período (menos a reserva ignorada, ao convertê-la)
+ *   - peças em manutenção aberta (sem data de volta: indisponíveis em qualquer período)
  */
 function disponivel(string $produtoId, string $inicio, string $fim, ?string $ignorarReserva = null,
                     ?string $ignorarLocacao = null): int
@@ -77,7 +78,9 @@ function disponivel(string $produtoId, string $inicio, string $fim, ?string $ign
                             AND ri.produto_id = p.id
                             AND r.data_inicio <= CAST(:fim AS date)
                             AND r.data_fim >= CAST(:ini3 AS date)
-                            AND (CAST(:ign1 AS uuid) IS NULL OR r.id <> CAST(:ign2 AS uuid))), 0) AS disponivel
+                            AND (CAST(:ign1 AS uuid) IS NULL OR r.id <> CAST(:ign2 AS uuid))), 0)
+             - COALESCE((SELECT SUM(m.quantidade) FROM manutencoes m
+                          WHERE m.produto_id = p.id AND m.data_fim IS NULL), 0) AS disponivel
           FROM produtos p
          WHERE p.id = :id",
         ['id' => $produtoId, 'ini1' => $inicio, 'ini2' => $inicio, 'ini3' => $inicio, 'fim' => $fim,
@@ -121,6 +124,11 @@ function produtos_travar(array $produtoIds): void
 function qtd_alugada(string $produtoId): int
 {
     return (int) (val('SELECT qtd_alugada FROM vw_produto_alugado WHERE produto_id = :id', ['id' => $produtoId]) ?? 0);
+}
+
+function qtd_manutencao(string $produtoId): int
+{
+    return (int) (val('SELECT qtd_manutencao FROM vw_produto_manutencao WHERE produto_id = :id', ['id' => $produtoId]) ?? 0);
 }
 
 // =====================================================================
@@ -301,6 +309,14 @@ function produto_salvar(array $d, ?string $id = null): string
         if ($p['qtd_total'] < $alugado) {
             throw new UserError(sprintf('O estoque total não pode ser menor que a quantidade alugada no momento (%d na rua).', $alugado));
         }
+        $manutencao = qtd_manutencao($id);
+        if ($p['qtd_total'] < $alugado + $manutencao) {
+            throw new UserError(sprintf('O estoque total não pode ser menor que o que está fora (%d na rua e %d em manutenção).', $alugado, $manutencao));
+        }
+        $unidades = (int) val('SELECT count(*) FROM unidades WHERE produto_id = :id AND ativa', ['id' => $id]);
+        if ($p['qtd_total'] < $unidades) {
+            throw new UserError("O estoque total não pode ser menor que as $unidades unidade(s) de patrimônio cadastradas. Dê baixa nas que saíram.");
+        }
         $sets = implode(', ', array_map(fn($k) => "$k = :$k", $colunas));
         q("UPDATE produtos SET $sets WHERE id = :id", $p + ['id' => $id]);
         return $id;
@@ -386,6 +402,251 @@ function kits_para_form(): array
 }
 
 // =====================================================================
+// PATRIMÔNIO (unidades) E MANUTENÇÃO
+// O estoque continua sendo produtos.qtd_total; unidades dão número de patrimônio/série a
+// até qtd_total peças. Manutenção aberta tira as peças do disponível (ver disponivel()).
+// =====================================================================
+
+const TIPOS_MANUTENCAO = ['corretiva' => 'Corretiva (conserto)', 'preventiva' => 'Preventiva (revisão)'];
+
+/** Situação atual de uma unidade: baixada, manutencao (nº), na_rua (locação nº) ou disponivel. */
+function unidade_situacao(string $unidadeId): array
+{
+    $u = one("SELECT u.ativa,
+                     (SELECT numero FROM manutencoes m WHERE m.unidade_id = u.id AND m.data_fim IS NULL) AS manutencao,
+                     (SELECT l.numero FROM locacao_unidades lu JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                        JOIN locacoes l ON l.id = li.locacao_id
+                       WHERE lu.unidade_id = u.id AND lu.devolucao_id IS NULL) AS locacao
+                FROM unidades u WHERE u.id = :id", ['id' => $unidadeId]);
+    return match (true) {
+        $u === null             => ['nao_encontrada', null],
+        !$u['ativa']            => ['baixada', null],
+        $u['manutencao'] !== null => ['manutencao', (int) $u['manutencao']],
+        $u['locacao'] !== null  => ['na_rua', (int) $u['locacao']],
+        default                 => ['disponivel', null],
+    };
+}
+
+/** Valida e grava uma unidade. Nova: até qtd_total unidades ativas por produto. Devolve o id. */
+function unidade_salvar(array $d, ?string $id = null): string
+{
+    $u = [
+        'patrimonio'      => strtoupper(trim((string) ($d['patrimonio'] ?? ''))),
+        'serie'           => trim((string) ($d['serie'] ?? '')),
+        'aquisicao_data'  => ($d['aquisicao_data'] ?? '') === '' ? null : (string) $d['aquisicao_data'],
+        'aquisicao_valor' => parse_money($d['aquisicao_valor'] ?? ''),
+        'obs'             => trim((string) ($d['obs'] ?? '')),
+    ];
+    if (!preg_match('/^[A-Z0-9][A-Z0-9._\/-]{0,29}$/', $u['patrimonio'])) {
+        throw new UserError('Número de patrimônio inválido (até 30 caracteres: letras, números, ponto, hífen, barra).');
+    }
+    if (mb_strlen($u['serie']) > 60 || mb_strlen($u['obs']) > 2000) {
+        throw new UserError('Número de série (até 60) ou observações (até 2.000) longos demais.');
+    }
+    if ($u['aquisicao_data'] !== null && (!valid_date($u['aquisicao_data']) || $u['aquisicao_data'] > today())) {
+        throw new UserError('Data de aquisição inválida.');
+    }
+    if ($u['aquisicao_valor'] < 0 || $u['aquisicao_valor'] > 9999999999) {
+        throw new UserError('Valor de aquisição inválido.');
+    }
+    return tx(function () use ($u, $d, $id) {
+        if ($id !== null) {
+            if (val('UPDATE unidades SET patrimonio = :patrimonio, serie = :serie, aquisicao_data = :aquisicao_data,
+                            aquisicao_valor = :aquisicao_valor, obs = :obs WHERE id = :id RETURNING id', $u + ['id' => $id]) === null) {
+                throw new UserError('Unidade não encontrada.');
+            }
+            return $id;
+        }
+        $pid = (string) ($d['produto_id'] ?? '');
+        $p = is_uuid($pid) ? one('SELECT id, descricao, qtd_total FROM produtos WHERE id = :id FOR UPDATE', ['id' => $pid]) : null;
+        if ($p === null) {
+            throw new UserError('Produto não encontrado.');
+        }
+        $ativas = (int) val('SELECT count(*) FROM unidades WHERE produto_id = :id AND ativa', ['id' => $pid]);
+        if ($ativas >= (int) $p['qtd_total']) {
+            throw new UserError("Já há $ativas unidade(s) cadastrada(s) para um estoque de {$p['qtd_total']}. Aumente o estoque do produto antes.");
+        }
+        return (string) val('INSERT INTO unidades (produto_id, patrimonio, serie, aquisicao_data, aquisicao_valor, obs)
+                             VALUES (:p, :patrimonio, :serie, :aquisicao_data, :aquisicao_valor, :obs) RETURNING id', $u + ['p' => $pid]);
+    });
+}
+
+/** Baixa (venda, perda, sucata): a unidade sai do patrimônio e o estoque do produto diminui 1. */
+function unidade_baixar(string $id, string $data, string $motivo): void
+{
+    $motivo = trim($motivo);
+    if (!valid_date($data) || $data > today() || mb_strlen($motivo) < 3 || mb_strlen($motivo) > 200) {
+        throw new UserError('Informe a data (até hoje) e o motivo da baixa (3 a 200 caracteres).');
+    }
+    tx(function () use ($id, $data, $motivo) {
+        $u = one('SELECT u.id, u.produto_id, u.patrimonio FROM unidades u WHERE u.id = :id FOR UPDATE', ['id' => $id]);
+        if ($u === null) {
+            throw new UserError('Unidade não encontrada.');
+        }
+        produtos_travar([$u['produto_id']]);
+        [$sit, $ref] = unidade_situacao($id);
+        if ($sit !== 'disponivel') {
+            throw new UserError(match ($sit) {
+                'baixada'    => 'Esta unidade já foi baixada.',
+                'manutencao' => "A unidade está na manutenção nº $ref: conclua a manutenção antes da baixa.",
+                default      => "A unidade está na rua (locação nº $ref): registre a devolução antes da baixa.",
+            });
+        }
+        $p = one('SELECT qtd_total FROM produtos WHERE id = :id', ['id' => $u['produto_id']]);
+        $fora = qtd_alugada($u['produto_id']) + qtd_manutencao($u['produto_id']);
+        if ((int) $p['qtd_total'] - 1 < $fora) {
+            throw new UserError("Sem estoque livre para a baixa: $fora peça(s) estão na rua ou em manutenção.");
+        }
+        q('UPDATE unidades SET ativa = false, baixa_data = :d, baixa_motivo = :m WHERE id = :id', ['d' => $data, 'm' => $motivo, 'id' => $id]);
+        q('UPDATE produtos SET qtd_total = qtd_total - 1 WHERE id = :id', ['id' => $u['produto_id']]);
+    });
+}
+
+/** Abre uma ordem de manutenção (de uma unidade ou de N peças do produto). Devolve [id, numero]. */
+function manutencao_abrir(array $d): array
+{
+    $unidadeId = (string) ($d['unidade_id'] ?? '');
+    $produtoId = (string) ($d['produto_id'] ?? '');
+    $tipo = (string) ($d['tipo'] ?? '');
+    $descricao = trim((string) ($d['descricao'] ?? ''));
+    $fornecedor = trim((string) ($d['fornecedor'] ?? ''));
+    $inicio = (string) ($d['data_inicio'] ?? '');
+    $qtd = $unidadeId !== '' ? 1 : filter_var($d['quantidade'] ?? '', FILTER_VALIDATE_INT);
+    if (!isset(TIPOS_MANUTENCAO[$tipo])) {
+        throw new UserError('Escolha o tipo de manutenção.');
+    }
+    if (mb_strlen($descricao) < 3 || mb_strlen($descricao) > 500 || mb_strlen($fornecedor) > 100) {
+        throw new UserError('Descreva o problema ou o serviço (3 a 500 caracteres); fornecedor até 100.');
+    }
+    if (!valid_date($inicio) || $inicio > today()) {
+        throw new UserError('A data de início deve ser hoje ou antes.');
+    }
+    if ($qtd === false || $qtd < 1 || $qtd > 100000) {
+        throw new UserError('Quantidade inválida.');
+    }
+    if (($unidadeId !== '' && !is_uuid($unidadeId)) || ($unidadeId === '' && !is_uuid($produtoId))) {
+        throw new UserError('Escolha o produto ou a unidade.');
+    }
+
+    return tx(function () use ($unidadeId, $produtoId, $tipo, $descricao, $fornecedor, $inicio, $qtd) {
+        if ($unidadeId !== '') {
+            $u = one('SELECT produto_id FROM unidades WHERE id = :id FOR UPDATE', ['id' => $unidadeId]);
+            if ($u === null) {
+                throw new UserError('Unidade não encontrada.');
+            }
+            $produtoId = $u['produto_id'];
+            [$sit, $ref] = unidade_situacao($unidadeId);
+            if ($sit !== 'disponivel') {
+                throw new UserError(match ($sit) {
+                    'baixada'    => 'Esta unidade foi baixada.',
+                    'manutencao' => "A unidade já está na manutenção nº $ref.",
+                    default      => "A unidade está na rua (locação nº $ref): registre a devolução antes.",
+                });
+            }
+        }
+        produtos_travar([$produtoId]);
+        $p = one('SELECT descricao FROM produtos WHERE id = :id', ['id' => $produtoId]);
+        if ($p === null) {
+            throw new UserError('Produto não encontrado.');
+        }
+        $livre = disponivel($produtoId, today(), today());
+        if ($qtd > $livre) {
+            throw new UserError("Só há $livre peça(s) de {$p['descricao']} livre(s) agora: as demais estão na rua, reservadas ou em manutenção.");
+        }
+        $numero = (int) val("SELECT proximo_numero('manutencao')");
+        $id = (string) val('INSERT INTO manutencoes (numero, produto_id, unidade_id, quantidade, tipo, descricao, fornecedor, data_inicio, usuario_id)
+                            VALUES (:n, :p, :u, :q, :t, :d, :f, :i, :usr) RETURNING id',
+            ['n' => $numero, 'p' => $produtoId, 'u' => $unidadeId === '' ? null : $unidadeId, 'q' => $qtd, 't' => $tipo,
+             'd' => $descricao, 'f' => $fornecedor, 'i' => $inicio, 'usr' => uid()]);
+        return ['id' => $id, 'numero' => $numero];
+    });
+}
+
+/** Conclui a manutenção: as peças voltam ao estoque disponível; o custo pode virar saída no caixa. */
+function manutencao_concluir(string $id, array $d): void
+{
+    $fim = (string) ($d['data_fim'] ?? '');
+    $custo = parse_money($d['custo'] ?? '');
+    $solucao = trim((string) ($d['solucao'] ?? ''));
+    $lancar = !empty($d['lancar_caixa']) && $custo > 0;
+    $forma = $lancar ? forma_valida((string) ($d['forma'] ?? '')) : '';
+    if ($custo < 0 || $custo > 9999999999 || mb_strlen($solucao) > 500) {
+        throw new UserError('Confira o custo e o serviço realizado (até 500 caracteres).');
+    }
+    tx(function () use ($id, $fim, $custo, $solucao, $lancar, $forma) {
+        $m = one('SELECT m.*, p.descricao AS produto, u.patrimonio FROM manutencoes m JOIN produtos p ON p.id = m.produto_id
+                    LEFT JOIN unidades u ON u.id = m.unidade_id WHERE m.id = :id FOR UPDATE OF m', ['id' => $id]);
+        if ($m === null) {
+            throw new UserError('Manutenção não encontrada.');
+        }
+        if ($m['data_fim'] !== null) {
+            throw new UserError('Esta manutenção já foi concluída.');
+        }
+        if (!valid_date($fim) || $fim < $m['data_inicio'] || $fim > today()) {
+            throw new UserError('A data de conclusão deve estar entre o início (' . dt($m['data_inicio']) . ') e hoje.');
+        }
+        $caixaId = null;
+        if ($lancar) {
+            $caixaId = (string) val("INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, usuario_id)
+                                     VALUES (:d, 'S', 'Manutenção', :descr, :v, :f, :u) RETURNING id",
+                ['d' => $fim, 'descr' => mb_substr("Manutenção nº {$m['numero']} - {$m['produto']}" . ($m['patrimonio'] ? " ({$m['patrimonio']})" : ''), 0, 200),
+                 'v' => $custo, 'f' => $forma, 'u' => uid()]);
+        }
+        q('UPDATE manutencoes SET data_fim = :f, custo = :c, solucao = :s, caixa_id = :cx WHERE id = :id',
+          ['f' => $fim, 'c' => $custo, 's' => $solucao, 'cx' => $caixaId, 'id' => $id]);
+    });
+}
+
+/**
+ * Unidades que saíram em cada item da locação (aberta): [locacao_item_id => [unidade_id, ...]].
+ * Só unidades do produto do item, ativas, fora de manutenção e não alocadas em outra locação;
+ * no máximo a quantidade ainda pendente do item. Substitui a seleção anterior das que estão na rua.
+ */
+function locacao_unidades_salvar(string $locacaoId, array $porItem): void
+{
+    tx(function () use ($locacaoId, $porItem) {
+        $st = val('SELECT status FROM locacoes WHERE id = :id FOR UPDATE', ['id' => $locacaoId]);
+        if ($st === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($st !== 'aberta') {
+            throw new UserError('Só é possível indicar o patrimônio de locação em aberto.');
+        }
+        $itens = all('SELECT li.id, li.produto_id, li.quantidade - li.qtd_devolvida AS pendente, p.descricao
+                        FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
+                       WHERE li.locacao_id = :id FOR UPDATE OF li', ['id' => $locacaoId]);
+        $validos = array_column($itens, 'id');
+        foreach (array_keys($porItem) as $k) {
+            if (!in_array((string) $k, $validos, true)) {
+                throw new UserError('Item inválido.');
+            }
+        }
+        foreach ($itens as $it) {
+            $escolha = array_values(array_unique(array_filter(array_map('strval', (array) ($porItem[$it['id']] ?? [])), 'is_uuid')));
+            if (count($escolha) > (int) $it['pendente']) {
+                throw new UserError("{$it['descricao']}: escolha no máximo {$it['pendente']} unidade(s) (quantidade na rua).");
+            }
+            q('DELETE FROM locacao_unidades WHERE locacao_item_id = :i AND devolucao_id IS NULL', ['i' => $it['id']]);
+            foreach ($escolha as $uid) {
+                $u = one('SELECT produto_id, patrimonio FROM unidades WHERE id = :id FOR UPDATE', ['id' => $uid]);
+                if ($u === null || $u['produto_id'] !== $it['produto_id']) {
+                    throw new UserError("Unidade inválida para {$it['descricao']}.");
+                }
+                [$sit, $ref] = unidade_situacao($uid);
+                if ($sit !== 'disponivel') {
+                    throw new UserError("A unidade {$u['patrimonio']} " . match ($sit) {
+                        'baixada'    => 'foi baixada.',
+                        'manutencao' => "está na manutenção nº $ref.",
+                        default      => "está na rua (locação nº $ref).",
+                    });
+                }
+                q('INSERT INTO locacao_unidades (locacao_item_id, unidade_id) VALUES (:i, :u)', ['i' => $it['id'], 'u' => $uid]);
+            }
+        }
+    });
+}
+
+// =====================================================================
 // LOCAÇÕES
 // =====================================================================
 
@@ -448,6 +709,36 @@ function itens_do_form(array $d, string $onde): array
         throw new UserError("Inclua pelo menos um item na $onde.");
     }
     return $itens;
+}
+
+/**
+ * Unidades (patrimônio) que voltaram nesta devolução. Item devolvido por inteiro libera todas as suas; em
+ * devolução parcial voltam as marcadas, e as que ficam na rua não podem passar do que continua pendente.
+ */
+function devolucao_unidades(string $devolucaoId, array $devolver, array $marcadas): void
+{
+    $marcadas = array_values(array_filter(array_map('strval', $marcadas), 'is_uuid'));
+    foreach ($devolver as $dv) {
+        $it = $dv['item'];
+        $naRua = array_column(all('SELECT lu.unidade_id FROM locacao_unidades lu
+                                    WHERE lu.locacao_item_id = :i AND lu.devolucao_id IS NULL FOR UPDATE', ['i' => $it['id']]), 'unidade_id');
+        if (!$naRua) {
+            continue;
+        }
+        $pendenteDepois = $it['quantidade'] - $it['qtd_devolvida'] - $dv['qtd'];
+        $voltam = $pendenteDepois === 0 ? $naRua : array_values(array_intersect($naRua, $marcadas));
+        if (count($voltam) > $dv['qtd']) {
+            throw new UserError("Foram marcadas mais unidades de {$it['descricao']} do que a quantidade devolvida ({$dv['qtd']}).");
+        }
+        if (count($naRua) - count($voltam) > $pendenteDepois) {
+            throw new UserError("Marque quais unidades (patrimônio) de {$it['descricao']} voltaram.");
+        }
+        if ($voltam) {
+            q('UPDATE locacao_unidades SET devolucao_id = :d
+                WHERE locacao_item_id = :i AND devolucao_id IS NULL AND unidade_id = ANY (CAST(:u AS uuid[]))',
+              ['d' => $devolucaoId, 'i' => $it['id'], 'u' => '{' . implode(',', $voltam) . '}']);
+        }
+    }
 }
 
 /** Busca a locação com todos os valores da view. null se não existir (nesta locadora). */
@@ -609,8 +900,9 @@ function devolucao_registrar(string $locacaoId, array $d): array
     }
     $forma = $receber > 0 ? forma_valida((string) ($d['forma'] ?? '')) : '';
     $qtds = (array) ($d['qtd'] ?? []);
+    $unidades = (array) ($d['unidades'] ?? []);
 
-    return tx(function () use ($locacaoId, $data, $multa, $avaria, $receber, $forma, $obs, $qtds) {
+    return tx(function () use ($locacaoId, $data, $multa, $avaria, $receber, $forma, $obs, $qtds, $unidades) {
         $loc = one('SELECT l.*, c.nome AS cliente_nome FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
                      WHERE l.id = :id FOR UPDATE OF l', ['id' => $locacaoId]);
         if ($loc === null) {
@@ -661,6 +953,7 @@ function devolucao_registrar(string $locacaoId, array $d): array
               ['d' => $devId, 'i' => $dv['item']['id'], 'q' => $dv['qtd'], 'n' => $dias, 'v' => $dv['valor']]);
             q('UPDATE locacao_itens SET qtd_devolvida = qtd_devolvida + :q WHERE id = :i', ['q' => $dv['qtd'], 'i' => $dv['item']['id']]);
         }
+        devolucao_unidades($devId, $devolver, $unidades);
 
         // Nada mais pendente: a locação está encerrada
         $pendentes = (int) val('SELECT COALESCE(SUM(quantidade - qtd_devolvida), 0) FROM locacao_itens WHERE locacao_id = :id',
@@ -762,6 +1055,8 @@ function locacao_cancelar(string $locacaoId, string $motivo, string $forma): voi
             caixa_lancar_locacao($loc, 'S', $pago, forma_valida($forma), today(), 'Estorno');
         }
         q("UPDATE locacoes SET status = 'cancelada' WHERE id = :id", ['id' => $locacaoId]);
+        // As unidades nunca saíram de fato: some o vínculo
+        q('DELETE FROM locacao_unidades WHERE locacao_item_id IN (SELECT id FROM locacao_itens WHERE locacao_id = :id)', ['id' => $locacaoId]);
         locacao_historico($locacaoId, 'Cancelada' . ($motivo !== '' ? ". Motivo: $motivo" : '.')
                                       . ($pago > 0 ? ' Estorno de ' . money($pago) . " ($forma)." : ''));
     });

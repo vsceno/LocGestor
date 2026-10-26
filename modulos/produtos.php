@@ -1,7 +1,7 @@
 <?php
 /*
- * Produtos, categorias e kits.
- * Disponível hoje = estoque - alugado (na rua) - reservado para hoje.
+ * Produtos, categorias, kits e patrimônio (unidades).
+ * Disponível hoje = estoque - alugado (na rua) - reservado para hoje - em manutenção.
  */
 
 declare(strict_types=1);
@@ -45,7 +45,7 @@ function produtos_index(): void
     $pg = paginate("SELECT count(*) FROM produtos p WHERE $sqlWhere", $params);
     $produtos = all("
         SELECT p.id, p.codigo, p.descricao, p.unidade, p.qtd_total, p.valor_diaria, p.valor_semanal, p.valor_mensal, p.ativo, c.nome AS categoria,
-               COALESCE(a.qtd_alugada, 0) AS alugado,
+               COALESCE(a.qtd_alugada, 0) AS alugado, COALESCE(mn.qtd_manutencao, 0) AS manutencao,
                COALESCE((SELECT SUM(ri.quantidade)
                            FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id
                           WHERE r.status = 'ativa' AND ri.produto_id = p.id
@@ -53,6 +53,7 @@ function produtos_index(): void
           FROM produtos p
           LEFT JOIN categorias c ON c.id = p.categoria_id
           LEFT JOIN vw_produto_alugado a ON a.produto_id = p.id
+          LEFT JOIN vw_produto_manutencao mn ON mn.produto_id = p.id
          WHERE $sqlWhere
          ORDER BY p.descricao
          LIMIT {$pg['por']} OFFSET {$pg['offset']}", $params);
@@ -79,10 +80,10 @@ function produtos_index(): void
             <table class="tabela">
                 <thead>
                 <tr><th>Código</th><th>Descrição</th><th>Categoria</th><th class="num">Preço</th>
-                    <th class="num">Estoque</th><th class="num">Alugado</th><th class="num">Reservado hoje</th><th class="num">Disponível</th><th></th></tr>
+                    <th class="num">Estoque</th><th class="num">Alugado</th><th class="num">Reservado hoje</th><th class="num">Manutenção</th><th class="num">Disponível</th><th></th></tr>
                 </thead>
                 <tbody>
-                <?php foreach ($produtos as $p): $disp = $p['qtd_total'] - $p['alugado'] - $p['reservado']; ?>
+                <?php foreach ($produtos as $p): $disp = $p['qtd_total'] - $p['alugado'] - $p['reservado'] - $p['manutencao']; ?>
                     <tr>
                         <td class="nowrap"><code><?= e($p['codigo']) ?></code></td>
                         <td><?= e($p['descricao']) ?> <?= $p['ativo'] ? '' : '<span class="selo">inativo</span>' ?></td>
@@ -91,12 +92,13 @@ function produtos_index(): void
                         <td class="num"><?= num($p['qtd_total']) ?> <span class="muted"><?= e($p['unidade']) ?></span></td>
                         <td class="num"><?= num($p['alugado']) ?></td>
                         <td class="num"><?= num($p['reservado']) ?></td>
+                        <td class="num"><?= $p['manutencao'] > 0 ? '<a href="' . e(url('manutencoes')) . '">' . num($p['manutencao']) . '</a>' : '0' ?></td>
                         <td class="num"><?= selo_disponivel((int) $disp, (int) $p['qtd_total']) ?></td>
                         <td><a class="btn btn-sec btn-peq" href="<?= e(url('produtos', ['a' => 'editar', 'id' => $p['id']])) ?>">Editar</a></td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if (!$produtos): ?>
-                    <tr><td colspan="9" class="vazio">Nenhum produto encontrado.</td></tr>
+                    <tr><td colspan="10" class="vazio">Nenhum produto encontrado.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -133,7 +135,9 @@ function produto_form(array $p, string $titulo): void
     $alugado = $id ? qtd_alugada($id) : 0;
     $usado = $id && val('SELECT 1 FROM locacao_itens WHERE produto_id = :a UNION ALL SELECT 1 FROM reserva_itens WHERE produto_id = :b
                          UNION ALL SELECT 1 FROM kit_itens WHERE produto_id = :c LIMIT 1',
-                        ['a' => $id, 'b' => $id, 'c' => $id]) !== null;
+                        ['a' => $id, 'b' => $id, 'c' => $id]) !== null
+             || ($id && val('SELECT 1 FROM unidades WHERE produto_id = :a UNION ALL SELECT 1 FROM manutencoes WHERE produto_id = :b LIMIT 1',
+                            ['a' => $id, 'b' => $id]) !== null);
     $moeda = fn($campo) => has_old() ? old($campo) : (isset($p[$campo]) ? num($p[$campo], 2) : '');
     // Semanal/mensal zerados = não oferece: campo vazio
     $opcional = fn($campo) => has_old() ? old($campo) : ((float) ($p[$campo] ?? 0) > 0 ? num($p[$campo], 2) : '');
@@ -198,6 +202,7 @@ function produto_form(array $p, string $titulo): void
             <a class="btn btn-sec" href="<?= e(url('produtos')) ?>">Cancelar</a>
         </div>
     </form>
+    <?php if ($id) { produto_unidades_card($p); } ?>
     <?php if ($id && !$usado): ?>
         <form method="post" action="<?= e(url('produtos', ['a' => 'excluir'])) ?>" data-confirmar="Excluir este produto definitivamente?" style="margin-top:14px">
             <?= csrf_field() ?>
@@ -457,4 +462,225 @@ function produtos_kit_excluir(): void
     }
     flash('Kit excluído.');
     redirect(url('produtos', ['a' => 'kits']));
+}
+
+// ---------------------------------------------------------------------
+// Patrimônio: unidades do produto (número de patrimônio e série)
+// ---------------------------------------------------------------------
+const SELOS_UNIDADE = ['disponivel' => ['disponível', 'verde'], 'na_rua' => ['na rua', 'azul'],
+                       'manutencao' => ['em manutenção', 'amarelo'], 'baixada' => ['baixada', '']];
+
+/** Rótulo da situação da unidade, com link para a locação ou a manutenção. */
+function unidade_selo(array $u): string
+{
+    [$rotulo, $cor] = SELOS_UNIDADE[$u['situacao']];
+    $ref = match ($u['situacao']) {
+        'na_rua'     => ' <a href="' . e(url('locacoes', ['a' => 'ver', 'n' => $u['locacao']])) . '">nº ' . num($u['locacao']) . '</a>',
+        'manutencao' => ' <a href="' . e(url('manutencoes', ['a' => 'ver', 'id' => $u['manutencao_id']])) . '">nº ' . num($u['manutencao']) . '</a>',
+        default      => '',
+    };
+    return '<span class="selo ' . $cor . '">' . e($rotulo) . '</span>' . $ref;
+}
+
+/** Unidades com a situação calculada (uma consulta). */
+function unidades_com_situacao(string $where, array $params): array
+{
+    $lista = all("SELECT u.*, m.id AS manutencao_id, m.numero AS manutencao, l.numero AS locacao
+                    FROM unidades u
+                    LEFT JOIN manutencoes m ON m.unidade_id = u.id AND m.data_fim IS NULL
+                    LEFT JOIN locacao_unidades lu ON lu.unidade_id = u.id AND lu.devolucao_id IS NULL
+                    LEFT JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                    LEFT JOIN locacoes l ON l.id = li.locacao_id
+                   WHERE $where ORDER BY u.ativa DESC, u.patrimonio", $params);
+    foreach ($lista as &$u) {
+        $u['situacao'] = !$u['ativa'] ? 'baixada' : ($u['manutencao'] !== null ? 'manutencao' : ($u['locacao'] !== null ? 'na_rua' : 'disponivel'));
+    }
+    return $lista;
+}
+
+function produto_unidades_card(array $p): void
+{
+    $unidades = unidades_com_situacao('u.produto_id = :id', ['id' => $p['id']]);
+    $ativas = count(array_filter($unidades, fn($u) => $u['ativa']));
+    $manut = qtd_manutencao($p['id']);
+    ?>
+    <div class="card" style="margin-top:14px">
+        <div class="card-titulo">
+            <h2>Patrimônio (unidades)</h2>
+            <div class="acoes">
+                <a class="btn btn-sec btn-peq" href="<?= e(url('manutencoes', ['a' => 'nova', 'produto' => $p['id']])) ?>">Enviar para manutenção</a>
+                <?php if ($ativas < (int) $p['qtd_total']): ?>
+                    <a class="btn btn-peq" href="<?= e(url('produtos', ['a' => 'unidade_nova', 'produto' => $p['id']])) ?>">+ Nova unidade</a>
+                <?php endif; ?>
+            </div>
+        </div>
+        <p class="ajuda">Opcional: número de patrimônio e série de cada peça, para saber qual unidade está com qual cliente
+            e o histórico de locações e manutenções dela. <?= num($ativas) ?> de <?= num($p['qtd_total']) ?> peça(s) cadastrada(s)<?=
+            $manut > 0 ? ' · <strong>' . num($manut) . ' em manutenção</strong>' : '' ?>.</p>
+        <?php if ($unidades): ?>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Patrimônio</th><th>Série</th><th>Situação</th><th>Aquisição</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($unidades as $u): ?>
+                        <tr><td><code><?= e($u['patrimonio']) ?></code></td><td><?= e($u['serie']) ?></td><td><?= unidade_selo($u) ?></td>
+                            <td><?= $u['aquisicao_data'] ? e(dt($u['aquisicao_data'])) : '' ?></td>
+                            <td><a class="btn btn-sec btn-peq" href="<?= e(url('produtos', ['a' => 'unidade', 'id' => $u['id']])) ?>">Abrir</a></td></tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+function produtos_unidade_nova(): void
+{
+    $pid = get('produto');
+    $p = is_uuid($pid) ? one('SELECT id, codigo, descricao FROM produtos WHERE id = :id', ['id' => $pid]) : null;
+    if ($p === null) {
+        pagina_erro(404, 'Produto não encontrado.');
+    }
+    unidade_form(['produto_id' => $p['id']], $p, 'Nova unidade');
+}
+
+function unidade_da_url(): array
+{
+    $id = get('id');
+    $u = is_uuid($id) ? (unidades_com_situacao('u.id = :id', ['id' => $id])[0] ?? null) : null;
+    if ($u === null) {
+        pagina_erro(404, 'Unidade não encontrada.');
+    }
+    return $u;
+}
+
+function produtos_unidade(): void
+{
+    $u = unidade_da_url();
+    $p = one('SELECT id, codigo, descricao FROM produtos WHERE id = :id', ['id' => $u['produto_id']]);
+    unidade_form($u, $p, 'Unidade ' . $u['patrimonio']);
+}
+
+function unidade_form(array $u, array $p, string $titulo): void
+{
+    $id = $u['id'] ?? '';
+    $historico = $id ? all("SELECT 'locacao' AS tipo, l.numero, l.data_saida AS inicio, d.data AS fim, c.nome AS detalhe, NULL::uuid AS ref
+                              FROM locacao_unidades lu JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                              JOIN locacoes l ON l.id = li.locacao_id JOIN clientes c ON c.id = l.cliente_id
+                              LEFT JOIN devolucoes d ON d.id = lu.devolucao_id
+                             WHERE lu.unidade_id = :a
+                            UNION ALL
+                            SELECT 'manutencao', m.numero, m.data_inicio, m.data_fim, m.descricao, m.id
+                              FROM manutencoes m WHERE m.unidade_id = :b
+                             ORDER BY inicio DESC", ['a' => $id, 'b' => $id]) : [];
+    layout_start($titulo, 'produtos');
+    ?>
+    <p class="muted"><a href="<?= e(url('produtos', ['a' => 'editar', 'id' => $p['id']])) ?>">← <?= e($p['codigo'] . ' — ' . $p['descricao']) ?></a></p>
+    <div class="grid-2">
+        <form method="post" action="<?= e(url('produtos', ['a' => 'unidade_salvar'])) ?>" class="form card">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= e($id) ?>">
+            <input type="hidden" name="produto_id" value="<?= e($p['id']) ?>">
+            <div class="card-titulo"><h2><?= e($titulo) ?></h2><?= $id ? unidade_selo($u) : '' ?></div>
+            <div class="linha">
+                <label class="obrig">Nº de patrimônio
+                    <input type="text" name="patrimonio" value="<?= e(valor_form($u, 'patrimonio')) ?>" required maxlength="30" style="text-transform:uppercase"></label>
+                <label>Nº de série<input type="text" name="serie" value="<?= e(valor_form($u, 'serie')) ?>" maxlength="60"></label>
+            </div>
+            <div class="linha">
+                <label>Data de aquisição<input type="date" name="aquisicao_data" value="<?= e(valor_form($u, 'aquisicao_data')) ?>" max="<?= e(today()) ?>"></label>
+                <label>Valor de aquisição R$<input type="text" name="aquisicao_valor" inputmode="decimal" placeholder="0,00"
+                       value="<?= e(has_old() ? old('aquisicao_valor') : ((float) ($u['aquisicao_valor'] ?? 0) > 0 ? num($u['aquisicao_valor'], 2) : '')) ?>"></label>
+            </div>
+            <label>Observações<textarea name="obs" maxlength="2000"><?= e(valor_form($u, 'obs')) ?></textarea></label>
+            <?php if ($id && !$u['ativa']): ?>
+                <p class="alerta">Baixada em <?= e(dt($u['baixa_data'])) ?>: <?= e($u['baixa_motivo']) ?></p>
+            <?php endif; ?>
+            <button class="btn">Salvar</button>
+        </form>
+        <?php if ($id && $u['situacao'] === 'disponivel'): ?>
+            <div>
+                <div class="card">
+                    <h2>Manutenção</h2>
+                    <a class="btn btn-sec" href="<?= e(url('manutencoes', ['a' => 'nova', 'unidade' => $id])) ?>">Enviar esta unidade para manutenção</a>
+                </div>
+                <form method="post" action="<?= e(url('produtos', ['a' => 'unidade_baixar'])) ?>" class="form card"
+                      data-confirmar="Dar baixa nesta unidade? O estoque do produto diminui 1.">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= e($id) ?>">
+                    <h2>Baixa</h2>
+                    <div class="linha">
+                        <label class="obrig">Data<input type="date" name="baixa_data" value="<?= e(today()) ?>" max="<?= e(today()) ?>" required></label>
+                        <label class="obrig">Motivo<input type="text" name="baixa_motivo" maxlength="200" required placeholder="vendida, perdida, sucata..."></label>
+                    </div>
+                    <p class="ajuda">A unidade sai do patrimônio e o estoque do produto diminui 1. O histórico continua.</p>
+                    <button class="btn btn-perigo">Dar baixa</button>
+                </form>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php if ($id): ?>
+        <div class="card">
+            <h2>Histórico</h2>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>O quê</th><th>De</th><th>Até</th><th>Detalhe</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($historico as $h): ?>
+                        <tr><td><?= $h['tipo'] === 'locacao'
+                                ? '<a href="' . e(url('locacoes', ['a' => 'ver', 'n' => $h['numero']])) . '">Locação nº ' . num($h['numero']) . '</a>'
+                                : '<a href="' . e(url('manutencoes', ['a' => 'ver', 'id' => $h['ref']])) . '">Manutenção nº ' . num($h['numero']) . '</a>' ?></td>
+                            <td><?= e(dt($h['inicio'])) ?></td><td><?= $h['fim'] ? e(dt($h['fim'])) : '<em>em andamento</em>' ?></td>
+                            <td><?= e(mb_strimwidth((string) $h['detalhe'], 0, 80, '…')) ?></td></tr>
+                    <?php endforeach; ?>
+                    <?php if (!$historico): ?><tr><td colspan="4" class="vazio">Ainda sem locações ou manutenções.</td></tr><?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if (!$historico): ?>
+                <form method="post" action="<?= e(url('produtos', ['a' => 'unidade_excluir'])) ?>" data-confirmar="Excluir esta unidade (cadastrada por engano)?">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= e($id) ?>">
+                    <button class="btn btn-perigo btn-peq">Excluir (cadastrada por engano)</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+    <?php
+    layout_end();
+}
+
+function produtos_unidade_salvar(): void
+{
+    $id = post('id');
+    if ($id !== '' && !is_uuid($id)) {
+        throw new UserError('Unidade inválida.');
+    }
+    $uid = unidade_salvar($_POST, $id === '' ? null : $id);
+    flash($id === '' ? 'Unidade cadastrada.' : 'Unidade atualizada.');
+    redirect(url('produtos', ['a' => 'unidade', 'id' => $uid]));
+}
+
+function produtos_unidade_baixar(): void
+{
+    $id = post('id');
+    if (!is_uuid($id)) {
+        throw new UserError('Unidade não encontrada.');
+    }
+    unidade_baixar($id, post('baixa_data'), post('baixa_motivo'));
+    flash('Baixa registrada. O estoque do produto diminuiu 1.');
+    redirect(url('produtos', ['a' => 'unidade', 'id' => $id]));
+}
+
+function produtos_unidade_excluir(): void
+{
+    $id = post('id');
+    $pid = is_uuid($id) ? val('SELECT produto_id FROM unidades WHERE id = :id', ['id' => $id]) : null;
+    if ($pid === null) {
+        throw new UserError('Unidade não encontrada.');
+    }
+    q('DELETE FROM unidades WHERE id = :id', ['id' => $id]);   // com histórico, a FK impede ("em uso")
+    flash('Unidade excluída.');
+    redirect(url('produtos', ['a' => 'editar', 'id' => $pid]));
 }

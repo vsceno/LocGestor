@@ -46,14 +46,15 @@ function relatorios_definicoes(): array
         ],
         'estoque' => [
             'titulo'    => 'Disponibilidade de estoque',
-            'descricao' => 'Estoque, itens na rua, reservados para hoje e disponíveis, com o patrimônio a preço de reposição.',
+            'descricao' => 'Estoque, itens na rua, reservados para hoje, em manutenção e disponíveis, com o patrimônio a preço de reposição.',
             'periodo'   => false,
             'sql'       => "SELECT p.codigo, p.descricao, COALESCE(cat.nome, '') AS categoria, p.qtd_total,
                                    COALESCE(a.qtd_alugada, 0) AS alugado,
                                    COALESCE((SELECT SUM(ri.quantidade) FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id
                                               WHERE r.status = 'ativa' AND ri.produto_id = p.id
                                                 AND CURRENT_DATE BETWEEN r.data_inicio AND r.data_fim), 0) AS reservado,
-                                   p.qtd_total - COALESCE(a.qtd_alugada, 0)
+                                   COALESCE(mn.qtd_manutencao, 0) AS manutencao,
+                                   p.qtd_total - COALESCE(a.qtd_alugada, 0) - COALESCE(mn.qtd_manutencao, 0)
                                      - COALESCE((SELECT SUM(ri.quantidade) FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id
                                                   WHERE r.status = 'ativa' AND ri.produto_id = p.id
                                                     AND CURRENT_DATE BETWEEN r.data_inicio AND r.data_fim), 0) AS disponivel,
@@ -61,13 +62,15 @@ function relatorios_definicoes(): array
                               FROM produtos p
                               LEFT JOIN categorias cat ON cat.id = p.categoria_id
                               LEFT JOIN vw_produto_alugado a ON a.produto_id = p.id
+                              LEFT JOIN vw_produto_manutencao mn ON mn.produto_id = p.id
                              WHERE p.ativo
                              ORDER BY p.descricao",
             'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'categoria' => ['Categoria', 'txt'],
                             'qtd_total' => ['Estoque', 'num'], 'alugado' => ['Alugado', 'num'], 'reservado' => ['Reservado hoje', 'num'],
+                            'manutencao' => ['Manutenção', 'num'],
                             'disponivel' => ['Disponível', 'num'], 'valor_reposicao' => ['Reposição (un.)', 'money'],
                             'patrimonio' => ['Patrimônio', 'money']],
-            'soma'      => ['qtd_total', 'alugado', 'reservado', 'disponivel', 'patrimonio'],
+            'soma'      => ['qtd_total', 'alugado', 'reservado', 'manutencao', 'disponivel', 'patrimonio'],
         ],
         'mais_alugados' => [
             'titulo'    => 'Produtos mais alugados',

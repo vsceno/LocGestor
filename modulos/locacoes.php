@@ -304,7 +304,7 @@ function locacoes_ver(): void
     $atraso = $aberta ? days_between($loc['data_prev_devolucao'], today()) : 0;
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
-    $itens = all("SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal,
+    $itens = all("SELECT li.id, li.produto_id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal,
                          p.codigo, p.descricao, p.unidade,
                          COALESCE((SELECT SUM(di.valor) FROM devolucao_itens di WHERE di.locacao_item_id = li.id), 0) AS valor_devolvido
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
@@ -463,6 +463,8 @@ function locacoes_ver(): void
         </div>
     </div>
 
+    <?php locacao_patrimonio_card($loc, $itens); ?>
+
     <div class="card">
         <div class="card-titulo">
             <h2>Vistorias (checklist, fotos e assinatura)</h2>
@@ -592,6 +594,14 @@ function locacoes_devolucao(): void
     }
     $saldoSugerido = max(0, $apurado + $desta + $loc['acrescimo'] - $loc['desconto'] - $loc['valor_pago']);
     $qtdOld = (array) old('qtd', []);
+    // Unidades (patrimônio) na rua: marcadas = voltaram nesta devolução
+    $naRua = [];
+    foreach (all('SELECT lu.locacao_item_id, lu.unidade_id, u.patrimonio FROM locacao_unidades lu
+                    JOIN unidades u ON u.id = lu.unidade_id JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                   WHERE li.locacao_id = :id AND lu.devolucao_id IS NULL ORDER BY u.patrimonio', ['id' => $loc['id']]) as $r) {
+        $naRua[$r['locacao_item_id']][] = $r;
+    }
+    $unidOld = has_old() ? array_map('strval', (array) old('unidades', [])) : null;
 
     layout_start('Devolução · locação nº ' . $loc['numero'], 'locacoes');
     ?>
@@ -621,7 +631,16 @@ function locacoes_devolucao(): void
                     <?php foreach ($itens as $it): $pend = $it['quantidade'] - $it['qtd_devolvida']; ?>
                         <tr class="linha-dev" data-diaria="<?= e($it['valor_diaria']) ?>" data-semanal="<?= e($it['valor_semanal']) ?>"
                             data-mensal="<?= e($it['valor_mensal']) ?>">
-                            <td><?= e($it['descricao']) ?></td>
+                            <td><?= e($it['descricao']) ?>
+                                <?php if (!empty($naRua[$it['id']])): ?>
+                                    <div class="unidades-dev"><span class="muted">Voltaram:</span>
+                                        <?php foreach ($naRua[$it['id']] as $u): ?>
+                                            <label class="check"><input type="checkbox" name="unidades[]" value="<?= e($u['unidade_id']) ?>"
+                                                <?= $unidOld === null || in_array($u['unidade_id'], $unidOld, true) ? 'checked' : '' ?>> <?= e($u['patrimonio']) ?></label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
                             <td class="num"><?= num($pend) ?> <span class="muted"><?= e($it['unidade']) ?></span></td>
                             <td class="num"><input type="number" name="qtd[<?= e($it['id']) ?>]" class="qtd-dev" min="0" max="<?= $pend ?>" step="1"
                                                    value="<?= e($qtdOld[$it['id']] ?? $pend) ?>" style="width:80px" aria-label="Quantidade a devolver"></td>
@@ -707,9 +726,11 @@ function locacoes_contrato(): void
     $loc = locacao_da_url();
     $emp = empresa();
     $dias = max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']));
-    $itens = all('SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.codigo, p.descricao, p.unidade, p.valor_reposicao
+    $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.codigo, p.descricao, p.unidade, p.valor_reposicao,
+                         (SELECT string_agg(u.patrimonio, ', ' ORDER BY u.patrimonio) FROM locacao_unidades lu
+                            JOIN unidades u ON u.id = lu.unidade_id WHERE lu.locacao_item_id = li.id) AS patrimonios
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
-                   WHERE li.locacao_id = :id ORDER BY p.descricao', ['id' => $loc['id']]);
+                   WHERE li.locacao_id = :id ORDER BY p.descricao", ['id' => $loc['id']]);
     $subtotal = 0.0;
     // Assinatura do cliente feita na tela, na vistoria de retirada
     $assinatura = one("SELECT id, assinante_nome, assinado_em FROM vistorias
@@ -732,7 +753,8 @@ function locacoes_contrato(): void
         <tbody>
         <?php foreach ($itens as $it): $sub = $it['quantidade'] * preco_item($it, $dias); $subtotal += $sub; ?>
             <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
-                <td><?= e($it['descricao']) ?></td><td class="num"><?= precos_html($it) ?></td>
+                <td><?= e($it['descricao']) ?><?= $it['patrimonios'] ? '<br><small>Patrimônio: ' . e($it['patrimonios']) . '</small>' : '' ?></td>
+                <td class="num"><?= precos_html($it) ?></td>
                 <td class="num"><?= money($it['valor_reposicao']) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
@@ -968,4 +990,84 @@ function locacoes_vistoria_ver(): void
     <?php endif; ?>
     <?php
     print_end();
+}
+
+// =====================================================================
+// PATRIMÔNIO: quais unidades saíram em cada item
+// =====================================================================
+
+/** Cartão do detalhe: unidades de cada item (escolha enquanto aberta). Só aparece se algum produto tem patrimônio. */
+function locacao_patrimonio_card(array $loc, array $itens): void
+{
+    $aberta = $loc['status'] === 'aberta';
+    $alocadas = [];
+    foreach (all('SELECT lu.locacao_item_id, lu.unidade_id, lu.devolucao_id, u.patrimonio, d.data AS voltou
+                    FROM locacao_unidades lu JOIN unidades u ON u.id = lu.unidade_id JOIN locacao_itens li ON li.id = lu.locacao_item_id
+                    LEFT JOIN devolucoes d ON d.id = lu.devolucao_id
+                   WHERE li.locacao_id = :id ORDER BY u.patrimonio', ['id' => $loc['id']]) as $r) {
+        $alocadas[$r['locacao_item_id']][] = $r;
+    }
+    // Unidades livres agora, por produto (mais as que já estão nesta locação)
+    $livres = [];
+    if ($aberta) {
+        foreach (all('SELECT u.id, u.produto_id, u.patrimonio FROM unidades u
+                       WHERE u.ativa AND u.produto_id = ANY (CAST(:p AS uuid[]))
+                         AND NOT EXISTS (SELECT 1 FROM manutencoes m WHERE m.unidade_id = u.id AND m.data_fim IS NULL)
+                         AND NOT EXISTS (SELECT 1 FROM locacao_unidades lu WHERE lu.unidade_id = u.id AND lu.devolucao_id IS NULL)
+                       ORDER BY u.patrimonio', ['p' => '{' . implode(',', array_unique(array_column($itens, 'produto_id'))) . '}']) as $u) {
+            $livres[$u['produto_id']][] = $u;
+        }
+    }
+    $comPatrimonio = array_filter($itens, fn($it) => !empty($alocadas[$it['id']]) || !empty($livres[$it['produto_id']]));
+    if (!$comPatrimonio) {
+        return;
+    }
+    ?>
+    <div class="card">
+        <h2>Patrimônio (unidades que saíram)</h2>
+        <form method="post" action="<?= e(url('locacoes', ['a' => 'unidades_salvar'])) ?>" class="form">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= e($loc['id']) ?>">
+            <?php foreach ($comPatrimonio as $it):
+                $pend = $it['quantidade'] - $it['qtd_devolvida'];
+                $naRua = array_filter($alocadas[$it['id']] ?? [], fn($a) => $a['devolucao_id'] === null);
+                $voltaram = array_filter($alocadas[$it['id']] ?? [], fn($a) => $a['devolucao_id'] !== null); ?>
+                <div class="patrimonio-item">
+                    <strong><?= e($it['descricao']) ?></strong>
+                    <span class="muted"><?= $aberta ? num($pend) . ' na rua · escolha até ' . num($pend) : '' ?></span>
+                    <div class="patrimonio-opcoes">
+                        <?php if ($aberta): ?>
+                            <input type="hidden" name="unidades[<?= e($it['id']) ?>][]" value="">
+                            <?php foreach (array_merge($naRua, $livres[$it['produto_id']] ?? []) as $u): $uid = $u['unidade_id'] ?? $u['id']; ?>
+                                <label class="check"><input type="checkbox" name="unidades[<?= e($it['id']) ?>][]" value="<?= e($uid) ?>"
+                                    <?= isset($u['unidade_id']) ? 'checked' : '' ?>> <?= e($u['patrimonio']) ?></label>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <?= e(implode(', ', array_column($naRua, 'patrimonio')) ?: '—') ?>
+                        <?php endif; ?>
+                        <?php foreach ($voltaram as $v): ?>
+                            <span class="selo verde"><?= e($v['patrimonio']) ?> voltou em <?= e(dt($v['voltou'])) ?></span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+            <?php if ($aberta): ?>
+                <button class="btn btn-sec btn-peq">Salvar patrimônio</button>
+                <span class="ajuda">Aparece no contrato. Na devolução, marque quais unidades voltaram.</span>
+            <?php endif; ?>
+        </form>
+    </div>
+    <?php
+}
+
+function locacoes_unidades_salvar(): void
+{
+    $loc = locacao_do_post();
+    $porItem = [];
+    foreach ((array) ($_POST['unidades'] ?? []) as $item => $lista) {
+        $porItem[(string) $item] = array_values(array_filter((array) $lista, fn($v) => $v !== ''));
+    }
+    locacao_unidades_salvar($loc['id'], $porItem);
+    flash('Patrimônio da locação atualizado.');
+    redirect(url_locacao($loc));
 }

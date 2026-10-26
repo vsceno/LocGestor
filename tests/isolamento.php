@@ -42,8 +42,11 @@ const TABELAS = [
     'vistoria_fotos'    => 'id',
     'kits'              => 'id',
     'kit_itens'         => 'id',
+    'unidades'          => 'id',
+    'manutencoes'       => 'id',
+    'locacao_unidades'  => 'id',
 ];
-const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores'];
+const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores', 'vw_produto_manutencao'];
 
 // Mínimo que a demo da Beta cria (as telas podem acrescentar registros depois)
 const MINIMO_BETA = ['empresa' => 1, 'usuarios' => 1, 'clientes' => 3, 'categorias' => 5, 'produtos' => 4,

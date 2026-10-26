@@ -22,7 +22,7 @@ if (!empty(user()['trocar_senha']) && get('p') !== 'login'
 }
 
 executar_rota(
-    ['login', 'dashboard', 'clientes', 'produtos', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api', 'arquivos'],
+    ['login', 'dashboard', 'clientes', 'produtos', 'manutencoes', 'locacoes', 'reservas', 'caixa', 'relatorios', 'config', 'api', 'arquivos'],
     __DIR__ . '/modulos',
     'dashboard'
 );

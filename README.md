@@ -223,7 +223,7 @@ Com a demonstração carregada:
 
 | Empresa | Usuário | Senha | Conteúdo |
 |---|---|---|---|
-| `alfa-locacoes` | `admin` | `admin123` | construção civil, ~12 meses de histórico, 3 locações abertas (1 atrasada), 1 reserva, preços semanais/mensais e 1 kit |
+| `alfa-locacoes` | `admin` | `admin123` | construção civil, ~12 meses de histórico, 3 locações abertas (1 atrasada), 1 reserva, preços semanais/mensais, 1 kit e patrimônio de betoneiras e geradores |
 | `beta-eventos` | `admin` | `admin123` | eventos, poucos dados. Tem cliente com o **mesmo CPF** e produto com o **mesmo código** da Alfa |
 
 **Troque essas senhas** (ou não carregue a demonstração) em qualquer ambiente acessível por outras pessoas.
@@ -241,6 +241,20 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
   metadados da câmera, como a localização GPS.
 - Os arquivos ficam em `storage/` (ou na pasta de `pasta_arquivos` do `config.php`), separados por locadora, e só
   são entregues pelo sistema, para quem está logado na locadora dona. O acesso direto à pasta é bloqueado.
+
+### Patrimônio e manutenção
+
+- **Unidades (patrimônio)**, opcional, por produto (*Produtos › Editar › Patrimônio*): número de patrimônio, série,
+  data e valor de aquisição de cada peça, até a quantidade em estoque. O estoque continua sendo o número do produto;
+  as unidades dizem **qual** peça está com **qual** cliente.
+- **Na locação** (detalhe › *Patrimônio*): marque quais unidades saíram; os números aparecem no **contrato**. Na
+  **devolução**, marque quais voltaram (devolvendo o item inteiro, todas voltam sozinhas). Uma unidade não sai em
+  duas locações nem enquanto está em manutenção.
+- **Manutenção** (menu *Manutenção*): ordem corretiva ou preventiva de uma unidade ou de N peças. Enquanto aberta,
+  as peças **saem do estoque disponível** (locação, reserva, listas e relatório de estoque). Ao concluir, informe o
+  custo e, se quiser, ele vira uma **saída no caixa** (categoria *Manutenção*).
+- **Histórico da unidade**: todas as locações e manutenções dela. **Baixa** (venda, perda, sucata) tira a unidade
+  do patrimônio e diminui 1 do estoque; só vale para peça que não está na rua nem em manutenção.
 
 ---
 
@@ -263,7 +277,7 @@ locgestor/
 │   ├── assinatura.php     mensalidades: pagamento, suspensão e cobranças automáticas
 │   └── negocio.php        todas as regras de negócio
 ├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
-│                          locacoes, reservas, caixa, relatorios, config, api, arquivos
+│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos
 ├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
 ├── assets/css/            app.css (telas) e print.css (A4)
 ├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução), graficos.js e vistoria.js (assinatura e fotos)
@@ -338,7 +352,7 @@ O isolamento **não depende de o programador lembrar do `WHERE tenant_id`**. Que
   desconto R$ 10 → previsto (90 + 25) × 7 + 50 − 10 = **R$ 845,00**. Devolvendo tudo hoje com avaria de R$ 20:
   115 × 4 + 20 + 50 − 10 = **R$ 520,00**.
 - **Disponibilidade** de um produto num período = estoque − itens na rua que ocupam o período (inclusive os
-  atrasados) − reservas ativas que se cruzam com ele. Locação, reserva e prorrogação conferem o estoque dentro
+  atrasados) − reservas ativas que se cruzam com ele − peças em manutenção aberta. Locação, reserva e prorrogação conferem o estoque dentro
   de uma transação com `SELECT ... FOR UPDATE`.
 - **Saída no futuro não é locação:** para garantir equipamento para outra data, use a **reserva**.
 - **Cancelamento:** só sem nenhuma devolução. O valor pago gera um lançamento de **estorno** (saída) no caixa.
@@ -412,6 +426,7 @@ psql -U postgres -d locgestor -f database\migrations\003_planos_assinatura.sql
 psql -U postgres -d locgestor -f database\migrations\004_vistorias.sql
 psql -U postgres -d locgestor -f database\migrations\005_precos_kits.sql
 psql -U postgres -d locgestor -f database\migrations\006_cobranca_asaas.sql
+psql -U postgres -d locgestor -f database\migrations\007_patrimonio_manutencao.sql
 php tests\isolamento.php
 ```
 
@@ -423,6 +438,7 @@ php tests\isolamento.php
 | `004_vistorias.sql` | tabelas `vistorias`, `vistoria_itens` e `vistoria_fotos` (checklist, fotos e assinatura) |
 | `005_precos_kits.sql` | preço semanal/mensal (`produtos`, `locacao_itens`), função `preco_periodo`, view de valores e tabelas `kits`/`kit_itens` |
 | `006_cobranca_asaas.sql` | cobrança automática: colunas em `tenants`, tabelas `assinatura_cobrancas` (com RLS) e `gateway_eventos` |
+| `007_patrimonio_manutencao.sql` | tabelas `unidades`, `manutencoes` e `locacao_unidades`, view `vw_produto_manutencao` |
 
 ### 10.2 Proteções do login (já ativas)
 

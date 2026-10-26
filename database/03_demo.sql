@@ -210,6 +210,19 @@ BEGIN
     SELECT v_devol, id, x.q FROM produtos
       JOIN (VALUES ('AND-001', 4), ('ESC-300', 4)) AS x(cod, q) ON x.cod = produtos.codigo;
 
+    -- Patrimônio: betoneiras e geradores com número de patrimônio e série
+    INSERT INTO unidades (produto_id, patrimonio, serie, aquisicao_data, aquisicao_valor)
+    SELECT pr.id, x.pref || '-' || lpad(gs::text, 2, '0'), x.serie || (1000 + gs)::text, CURRENT_DATE - 400 - gs * 30, x.valor
+      FROM (VALUES ('BET-400', 'BET', 'CSM400-', 3500.00, 8), ('GER-6K', 'GER', 'TG6K-', 5200.00, 4)) AS x(cod, pref, serie, valor, n)
+      JOIN produtos pr ON pr.codigo = x.cod
+     CROSS JOIN LATERAL generate_series(1, x.n) AS gs;
+    -- Manutenção preventiva concluída no mês passado
+    INSERT INTO manutencoes (numero, produto_id, unidade_id, quantidade, tipo, descricao, fornecedor,
+                             data_inicio, data_fim, custo, solucao, usuario_id)
+    SELECT proximo_numero('manutencao'), un.produto_id, un.id, 1, 'preventiva', 'Revisão de 500 horas', 'Oficina Motores Ceará',
+           CURRENT_DATE - 40, CURRENT_DATE - 37, 180.00, 'Troca de óleo, filtro de ar e vela.', v_admin
+      FROM unidades un WHERE un.patrimonio = 'GER-01';
+
     -- Reserva futura: Francisco das Chagas, daqui a 7 dias, por 3 dias
     v_cli := (SELECT id FROM clientes WHERE cpf_cnpj = '12345678909');
     INSERT INTO reservas (numero, cliente_id, data_inicio, data_fim, obs, usuario_id)
