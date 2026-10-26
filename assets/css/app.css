@@ -445,3 +445,7 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 .parada-acoes .btn { min-height: 40px; }
 .parada-feito { display: flex; flex: 1 1 260px; gap: 8px; margin: 0; }
 .parada-feito input { flex: 1; min-width: 0; }
+
+/* Cadastro público */
+.cadastro-caixa { max-width: 560px; }
+.isca { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

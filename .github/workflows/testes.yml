@@ -81,6 +81,9 @@ jobs:
       - name: Testes da cobrança automática (Asaas simulado)
         run: php tests/cobranca.php
 
+      - name: Testes do cadastro público
+        run: php tests/cadastro.php
+
       - name: Nenhum warning ou erro do PHP
         if: always()
         run: |

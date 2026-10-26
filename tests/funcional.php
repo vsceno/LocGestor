@@ -1039,6 +1039,11 @@ $painel = $alfa->get('index.php?p=dashboard')['corpo'];
 ok(str_contains($login, 'rel="manifest"') && str_contains($painel, 'rel="manifest"') && str_contains($painel, 'assets/js/pwa.js'),
    'login e telas da locadora oferecem a instalação');
 
+// Cadastro público vem desligado (o teste com ele ligado é tests/cadastro.php)
+if (!($config['cadastro_publico'] ?? false)) {
+    ok($anon->req('cadastro.php')['codigo'] === 404 && !str_contains($login, 'cadastro.php'), 'cadastro público desligado: 404 e sem link no login');
+}
+
 // =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,

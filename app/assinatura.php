@@ -26,6 +26,30 @@ function suspender_inadimplentes(): void
 }
 
 /**
+ * Cria a locadora (já validada), os dados padrão (empresa e categorias) e o administrador, numa transação.
+ * $t: nome, slug, cnpj, email, telefone, plano [id, nome, limite_usuarios], vencimento (ou null), carencia,
+ *     admin_nome, admin_login, admin_senha, trocar_senha. Usado pelo painel e pelo cadastro público. Devolve o id.
+ */
+function locadora_provisionar(array $t): string
+{
+    return tx(function () use ($t) {
+        $id = (string) val('INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios, plano_id, vencimento, carencia_dias)
+                            VALUES (:slug, :nome, :cnpj, :email, :tel, :plano, :limite, :pid, :venc, :car) RETURNING id',
+            ['slug' => $t['slug'], 'nome' => $t['nome'], 'cnpj' => $t['cnpj'], 'email' => $t['email'], 'tel' => $t['telefone'],
+             'plano' => $t['plano']['nome'], 'limite' => $t['plano']['limite_usuarios'], 'pid' => $t['plano']['id'],
+             'venc' => $t['vencimento'], 'car' => $t['carencia']]);
+        // Contexto da nova locadora só até o fim desta transação (true = SET LOCAL)
+        q("SELECT set_config('app.tenant_id', :t, true)", ['t' => $id]);
+        // Linha da empresa (com os textos padrão de contrato e fatura) e as 5 categorias padrão
+        q('SELECT provisionar_dados_padrao(:nome)', ['nome' => $t['nome']]);
+        q("INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha) VALUES (:nome, :login, :hash, 'admin', :trocar)",
+          ['nome' => $t['admin_nome'], 'login' => $t['admin_login'], 'hash' => password_hash($t['admin_senha'], PASSWORD_DEFAULT),
+           'trocar' => $t['trocar_senha'] ? 'true' : 'false']);
+        return $id;
+    });
+}
+
+/**
  * Pagamento de $meses mensalidades: avança o vencimento e reativa quem estava suspensa por falta de pagamento.
  * $valor null = preço do plano × meses. Devolve [t, novo, valor, reativou, pagamento_id].
  */

@@ -6,6 +6,7 @@
  * O front controller define antes de incluir este arquivo:
  *   const AREA = 'locadora'   (index.php, conecta como locgestor_app)
  *   const AREA = 'plataforma' (plataforma.php, conecta como locgestor_plataforma)
+ *   const AREA = 'cadastro'   (cadastro.php, cadastro público de locadoras; também locgestor_plataforma)
  */
 
 declare(strict_types=1);
@@ -50,6 +51,12 @@ $GLOBALS['CONFIG'] = require RAIZ . '/config.php';
 function config(string $chave, $padrao = null)
 {
     return $GLOBALS['CONFIG'][$chave] ?? $padrao;
+}
+
+/** Cadastro público de locadoras ligado? ('cadastro_publico' no config; LOCGESTOR_CADASTRO_PUBLICO=1 nos testes) */
+function cadastro_publico_ativo(): bool
+{
+    return (bool) config('cadastro_publico', false) || getenv('LOCGESTOR_CADASTRO_PUBLICO') === '1';
 }
 
 date_default_timezone_set(config('timezone', 'America/Fortaleza'));
@@ -109,7 +116,7 @@ header('Referrer-Policy: same-origin');
 if (!defined('SEM_SESSAO')) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
-    session_name(AREA === 'plataforma' ? 'locgestor_plataforma' : 'locgestor');
+    session_name(match (AREA) { 'plataforma' => 'locgestor_plataforma', 'cadastro' => 'locgestor_cadastro', default => 'locgestor' });
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
@@ -131,7 +138,8 @@ function db(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
-        $c = config(AREA === 'plataforma' ? 'db_plataforma' : 'db_app');
+        // O cadastro público cria locadoras: usa o papel da plataforma (o único que pode inserir em tenants)
+        $c = config(AREA === 'plataforma' || AREA === 'cadastro' ? 'db_plataforma' : 'db_app');
         $pdo = new PDO(
             "pgsql:host={$c['host']};port={$c['port']};dbname={$c['dbname']}",
             $c['user'],

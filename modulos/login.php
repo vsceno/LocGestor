@@ -45,6 +45,9 @@ function login_index(): void
         </label>
         <button type="submit" class="btn btn-bloco">Entrar</button>
     </form>
+    <?php if (cadastro_publico_ativo()): ?>
+        <p class="ajuda" style="text-align:center;margin-top:12px">Ainda não usa o LocGestor? <a href="cadastro.php">Teste grátis</a></p>
+    <?php endif; ?>
 </main>
 </body>
 </html>

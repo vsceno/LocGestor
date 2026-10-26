@@ -32,6 +32,11 @@ return [
     // Pasta das fotos de vistoria e assinaturas. Padrão: storage/ dentro do projeto
     // (bloqueada por .htaccess). Em produção, prefira uma pasta FORA da pasta do site.
     // 'pasta_arquivos' => 'C:/laragon/arquivos/locgestor',
+    // Cadastro público (cadastro.php): locadoras novas se cadastram sozinhas e ganham um período de teste.
+    // Desligado: a página responde 404. Plano vazio = o mais barato ativo.
+    'cadastro_publico'    => false,
+    'cadastro_dias_teste' => 14,
+    'cadastro_plano'      => '',
     // Cobrança automática das mensalidades pelo Asaas (vazio = desligada; veja o README).
     // A chave da API é segredo: fica só aqui, nunca no Git.
     'asaas' => [

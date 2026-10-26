@@ -263,23 +263,10 @@ function tenants_criar(): void
 
     $senhaTemp = senha_temporaria();
 
-    tx(function () use ($nome, $slug, $cnpj, $email, $telefone, $a, $adminNome, $adminLogin, $senhaTemp) {
-        $id = val('INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios, plano_id, vencimento, carencia_dias)
-                   VALUES (:slug, :nome, :cnpj, :email, :tel, :plano, :limite, :pid, :venc, :car) RETURNING id',
-                  ['slug' => $slug, 'nome' => $nome, 'cnpj' => $cnpj, 'email' => $email, 'tel' => $telefone,
-                   'plano' => $a['plano']['nome'], 'limite' => $a['plano']['limite_usuarios'], 'pid' => $a['plano']['id'],
-                   'venc' => $a['vencimento'], 'car' => $a['carencia']]);
-
-        // Contexto da nova locadora só até o fim desta transação (true = SET LOCAL)
-        q("SELECT set_config('app.tenant_id', :t, true)", ['t' => $id]);
-
-        // Linha da empresa (com os textos padrão de contrato e fatura) e as 5 categorias padrão
-        q('SELECT provisionar_dados_padrao(:nome)', ['nome' => $nome]);
-
-        // Senha temporária: o admin da locadora é obrigado a trocá-la no primeiro acesso
-        q("INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha) VALUES (:nome, :login, :hash, 'admin', true)",
-          ['nome' => $adminNome, 'login' => $adminLogin, 'hash' => password_hash($senhaTemp, PASSWORD_DEFAULT)]);
-    });
+    // Senha temporária: o admin da locadora é obrigado a trocá-la no primeiro acesso
+    locadora_provisionar(['nome' => $nome, 'slug' => $slug, 'cnpj' => $cnpj, 'email' => $email, 'telefone' => $telefone,
+                          'plano' => $a['plano'], 'vencimento' => $a['vencimento'], 'carencia' => $a['carencia'],
+                          'admin_nome' => $adminNome, 'admin_login' => $adminLogin, 'admin_senha' => $senhaTemp, 'trocar_senha' => true]);
 
     log_app('INFO', "Locadora criada: $slug.");
     // A senha temporária fica na sessão só até ser mostrada (uma única vez)

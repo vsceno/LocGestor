@@ -193,6 +193,20 @@ O sistema cria, numa única transação:
 
 Envie ao cliente o identificador, o login e a senha temporária. No primeiro acesso, o sistema obriga a troca da senha.
 
+### Cadastro público (teste grátis)
+
+Com `'cadastro_publico' => true` no `config.php`, a página `cadastro.php` (e o link **Teste grátis** no login)
+deixa uma locadora nova se cadastrar sozinha: nome, identificador, e-mail, telefone, CNPJ opcional e o usuário e
+a senha do administrador. Ela começa **ativa**, no plano de `'cadastro_plano'` (vazio = o mais barato ativo),
+com **vencimento em `'cadastro_dias_teste'` dias** (padrão 14) e 5 dias de carência; depois segue as mesmas regras
+de mensalidade (e, com o Asaas ligado para ela, cobrança automática).
+
+- **Desligado por padrão:** sem a opção, a página responde 404.
+- Contra robôs, sem serviço externo: campo-isca invisível, tempo mínimo de 3 segundos para enviar e no máximo
+  **3 cadastros por IP por hora** (o IP fica guardado só como hash). Cada cadastro vai para o `logs/app.log`.
+- Antes de ligar em produção, escreva os **termos de uso e a política de privacidade** (o formulário pede o aceite)
+  e publique-os no seu site.
+
 ### Planos e mensalidades
 
 - **Planos** (menu *Planos*): nome, preço mensal e limite de usuários. Vêm prontos Básico (R$ 99, 3 usuários),
@@ -327,6 +341,7 @@ locgestor/
 ├── index.php              sistema das locadoras: index.php?p=<modulo>&a=<acao>
 ├── plataforma.php         painel do dono do SaaS (sessão e papel de banco próprios)
 ├── webhook_asaas.php      avisos de pagamento do Asaas (confere na API antes de dar baixa)
+├── cadastro.php           cadastro público de locadoras (desligado por padrão)
 ├── config.example.php     modelo de configuração (versionado, sem senhas)
 ├── config.php             configuração real (NÃO versionado)
 ├── .htaccess              sem listagem; bloqueia config*.php, .md, .sql, .bat, .log, .git
