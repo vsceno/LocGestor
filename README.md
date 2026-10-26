@@ -183,6 +183,9 @@ na aba *Actions* e no selo no topo deste README.
 ### Painel da plataforma (dono do SaaS)
 
 `http://locgestor.test/plataforma.php`: usuário **`suporte`**, com a senha digitada no instalador.
+Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga deixa de valer na hora).
+Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
+suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
 Em **+ Nova locadora**, informe nome, identificador de acesso (ex.: `alfa-locacoes`), plano e limite de usuários.
 O sistema cria, numa única transação:

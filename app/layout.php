@@ -20,6 +20,7 @@ const MENU = [
 const MENU_PLATAFORMA = [
     'tenants' => ['Locadoras', 'produtos'],
     'planos'  => ['Planos', 'caixa'],
+    'conta'   => ['Minha senha', 'config'],
 ];
 
 /** Ícones SVG inline (traço), 24x24. */

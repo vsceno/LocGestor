@@ -1241,6 +1241,39 @@ if (!$senhaSuporte) {
         db('DELETE FROM auditoria WHERE tenant_id = :id', ['id' => $id]);   // o que o próprio teste gerou
         db('DELETE FROM tenants WHERE id = :id', ['id' => $id]);
     }
+
+    // Minha senha (painel da plataforma): troca num usuário temporário, para não mexer no 'suporte' dos testes
+    db("INSERT INTO plataforma_usuarios (nome, login, senha_hash) VALUES ('TESTE Conta', 'teste-conta', :h)",
+       ['h' => password_hash('SenhaAntiga1', PASSWORD_DEFAULT)]);
+    $conta = new Navegador($BASE);
+    $conta->enviar('plataforma.php?p=login', 'plataforma.php?p=login&a=entrar', ['login' => 'teste-conta', 'senha' => 'SenhaAntiga1']);
+    $menu = $conta->get('plataforma.php?p=tenants')['corpo'];
+    ok(str_contains($menu, 'href="plataforma.php?p=conta"') && str_contains($menu, 'Minha senha'), 'painel tem o item "Minha senha" no menu');
+    $tela = $conta->get('plataforma.php?p=conta&a=senha')['corpo'];
+    ok(str_contains($tela, 'name="senha_atual"') && str_contains($tela, 'teste-conta'), 'tela "Minha senha" mostra o usuário logado');
+    $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',
+                   ['senha_atual' => 'errada123', 'senha_nova' => 'NovaSenha77', 'senha_confirma' => 'NovaSenha77']);
+    ok(str_contains($conta->mensagem('plataforma.php?p=conta&a=senha'), 'A senha atual não confere.'), 'senha atual errada é recusada');
+    $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',
+                   ['senha_atual' => 'SenhaAntiga1', 'senha_nova' => 'curta', 'senha_confirma' => 'curta']);
+    ok(str_contains($conta->mensagem('plataforma.php?p=conta&a=senha'), 'pelo menos 8 caracteres'), 'nova senha com menos de 8 caracteres é recusada');
+    $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',
+                   ['senha_atual' => 'SenhaAntiga1', 'senha_nova' => 'NovaSenha77', 'senha_confirma' => 'Outra8888']);
+    ok(str_contains($conta->mensagem('plataforma.php?p=conta&a=senha'), 'não é igual'), 'confirmação diferente é recusada');
+    $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',
+                   ['senha_atual' => 'SenhaAntiga1', 'senha_nova' => 'SenhaAntiga1', 'senha_confirma' => 'SenhaAntiga1']);
+    ok(str_contains($conta->mensagem('plataforma.php?p=conta&a=senha'), 'diferente da atual'), 'nova igual à atual é recusada');
+    $conta->enviar('plataforma.php?p=conta&a=senha', 'plataforma.php?p=conta&a=senha_salvar',
+                   ['senha_atual' => 'SenhaAntiga1', 'senha_nova' => 'NovaSenha77', 'senha_confirma' => 'NovaSenha77']);
+    ok(str_contains($conta->mensagem('plataforma.php?p=conta&a=senha'), 'Senha trocada'), 'troca válida confirmada');
+    $antiga = new Navegador($BASE);
+    $r = $antiga->enviar('plataforma.php?p=login', 'plataforma.php?p=login&a=entrar', ['login' => 'teste-conta', 'senha' => 'SenhaAntiga1']);
+    ok(!str_contains($r['local'], 'p=tenants'), 'a senha antiga deixa de entrar');
+    $nova = new Navegador($BASE);
+    $r = $nova->enviar('plataforma.php?p=login', 'plataforma.php?p=login&a=entrar', ['login' => 'teste-conta', 'senha' => 'NovaSenha77']);
+    ok(str_contains($r['local'], 'p=tenants'), 'a senha nova entra no painel');
+    db("DELETE FROM plataforma_usuarios WHERE login = 'teste-conta'");
+    db('DELETE FROM login_tentativas');
 }
 
 /** Login com sucesso? (vai para o painel) */
