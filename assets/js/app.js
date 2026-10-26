@@ -55,7 +55,8 @@ var LG = {
                 soma += sub;
                 tr.querySelector('.subtotal').textContent = tr.querySelector('.sel-produto').value ? LG.moeda(sub) : '—';
             });
-            var total = soma + LG.numero(campo('#acrescimo').value) - LG.numero(campo('#desconto').value);
+            var total = soma + LG.numero(campo('#acrescimo').value) + LG.numero(campo('#frete-entrega').value)
+                      + LG.numero(campo('#frete-recolhimento').value) - LG.numero(campo('#desconto').value);
             campo('#total-previsto').textContent = LG.moeda(total);
             campo('#total-detalhe').textContent = '(' + d + ' dia' + (d > 1 ? 's' : '') + ')';
             var info = form.querySelector('#info-dias');
@@ -172,7 +173,7 @@ var LG = {
             });
         }
         [saida, prev].forEach(function (el) { el.addEventListener('change', function () { recalcular(); agendarConsulta(); }); });
-        ['#acrescimo', '#desconto'].forEach(function (s) { campo(s).addEventListener('input', recalcular); });
+        ['#acrescimo', '#desconto', '#frete-entrega', '#frete-recolhimento'].forEach(function (s) { campo(s).addEventListener('input', recalcular); });
         recalcular();
         consultar();
     },

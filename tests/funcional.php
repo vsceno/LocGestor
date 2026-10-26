@@ -1046,6 +1046,38 @@ if (!($config['cadastro_publico'] ?? false)) {
 }
 
 // =====================================================================
+secao('Fretes de entrega e recolhimento, endereço de entrega');
+$r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
+    'cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(0), 'local_uso' => 'TESTE Obra Central, 10',
+    'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => ['5,00'],
+    'acrescimo' => '0', 'frete_entrega' => '50,00', 'frete_recolhimento' => '30,00', 'endereco_entrega' => '',
+]);
+$NF = num_locacao($r);
+$vF = $valores($NF, $alfaId);
+$LF = $vF['id'];
+ok($vF && $vF['valor_previsto'] === '85.00', 'fretes entram no valor previsto: 1 diária de R$ 5 + R$ 50 + R$ 30 = R$ 85,00', json_encode($vF));
+$endF = dbv('SELECT endereco_entrega FROM locacoes WHERE id = :id', ['id' => $LF]);
+ok($endF === 'TESTE Obra Central, 10', 'endereço de entrega vazio usa o local de uso', (string) $endF);
+$detF = texto($alfa->get("index.php?p=locacoes&a=ver&n=$NF")['corpo']);
+ok(str_contains($detF, 'Frete de entrega R$ 50,00') && str_contains($detF, 'Frete de recolhimento R$ 30,00'), 'detalhe mostra os dois fretes');
+ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NF")['corpo']), 'Frete de entrega R$ 50,00')
+   && str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$NF")['corpo']), 'Frete de recolhimento R$ 30,00'), 'contrato e fatura trazem os fretes');
+$alfa->enviar("index.php?p=locacoes&a=ver&n=$NF", 'index.php?p=locacoes&a=entrega_salvar',
+              ['id' => $LF, 'frete_entrega' => '60,00', 'frete_recolhimento' => '30,00', 'endereco_entrega' => 'TESTE Galpão Norte, 99']);
+$vF2 = $valores($NF, $alfaId);
+ok($vF2['valor_previsto'] === '95.00' && dbv('SELECT endereco_entrega FROM locacoes WHERE id = :id', ['id' => $LF]) === 'TESTE Galpão Norte, 99',
+   'editar o frete e o endereço da locação em aberto atualiza o valor e o endereço', json_encode($vF2));
+ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=ver&n=$NF")['corpo']), 'Entrega: frete de entrega R$ 50,00 → R$ 60,00'),
+   'a mudança de frete fica no histórico da locação');
+$beta->enviar("index.php?p=locacoes&a=ver&n=$NF", 'index.php?p=locacoes&a=entrega_salvar', ['id' => $LF, 'frete_entrega' => '1,00']);
+ok(dbv('SELECT frete_entrega FROM locacoes WHERE id = :id', ['id' => $LF]) === '60.00', 'Beta não altera o frete de locação da Alfa');
+$alfa->enviar("index.php?p=locacoes&a=ver&n=$NF", 'index.php?p=locacoes&a=entrega_salvar', ['id' => $LF, 'frete_entrega' => '-5']);
+ok(str_contains($alfa->mensagem("index.php?p=locacoes&a=ver&n=$NF"), 'não podem ser negativos'), 'frete negativo é recusado');
+ok(str_contains($alfa->get("index.php?p=locacoes&a=devolucao&n=$NF")['corpo'], 'data-acrescimo="90.00"'),
+   'a devolução soma os fretes ao saldo (60 + 30 = 90)');
+
+// =====================================================================
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",

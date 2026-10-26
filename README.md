@@ -196,6 +196,10 @@ histórico não pode ser alterado nem apagado (migração 016).
 (ela aparece uma única vez). O usuário é obrigado a trocá-la no próximo acesso, e as sessões que ele já tinha abertas
 deixam de valer na hora (migração 015: `senha_redefinida_em`).
 
+**Fretes e endereço de entrega:** a locação tem frete de entrega e frete de recolhimento (cada um somado uma vez
+ao valor), além de um endereço de entrega (se vazio, usa o local de uso). Os dois aparecem no contrato e na fatura,
+e podem ser ajustados enquanto a locação está em aberto (a mudança fica no histórico). Migração 017.
+
 **Recados:** menu **Recados** do painel. Um aviso (aviso, novidade ou manutenção programada) com validade aparece no
 topo do sistema de **todas** as locadoras até a data de validade ou até você desativar. A locadora pode fechar o
 recado (fica fechado só naquele navegador). O texto aparece como texto, nunca como código.

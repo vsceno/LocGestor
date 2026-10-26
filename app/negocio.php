@@ -785,6 +785,64 @@ function caixa_lancar_locacao(array $loc, string $tipo, float $valor, string $fo
  *   produto_id[], quantidade[], diaria[]
  * Devolve ['id' => uuid, 'numero' => int].
  */
+
+/** Acréscimos e fretes de uma locação (o que soma ao valor; o desconto é subtraído à parte). */
+function locacao_ajuste(array $loc): float
+{
+    return (float) $loc['acrescimo'] + (float) $loc['frete_entrega'] + (float) $loc['frete_recolhimento'] - (float) $loc['desconto'];
+}
+
+/**
+ * Fretes e endereço de entrega de uma locação: [frete_entrega, frete_recolhimento, endereco].
+ * O endereço, se não for informado, é o local de uso.
+ */
+function entrega_campos(array $d, string $local): array
+{
+    $fe = parse_money($d['frete_entrega'] ?? '');
+    $fr = parse_money($d['frete_recolhimento'] ?? '');
+    if ($fe < 0 || $fr < 0 || $fe > 9999999999 || $fr > 9999999999) {
+        throw new UserError('Os fretes não podem ser negativos.');
+    }
+    $endereco = trim((string) ($d['endereco_entrega'] ?? ''));
+    if (mb_strlen($endereco) > 200) {
+        throw new UserError('O endereço de entrega aceita no máximo 200 caracteres.');
+    }
+    return [$fe, $fr, $endereco !== '' ? $endereco : $local];
+}
+
+/**
+ * Edita os fretes e o endereço de entrega de uma locação em aberto (o histórico registra a mudança).
+ */
+function locacao_entrega_salvar(string $locacaoId, array $d): void
+{
+    tx(function () use ($locacaoId, $d) {
+        $loc = one('SELECT id, numero, status, local_uso, frete_entrega, frete_recolhimento, endereco_entrega
+                      FROM locacoes WHERE id = :id FOR UPDATE', ['id' => $locacaoId]);
+        if ($loc === null) {
+            throw new UserError('Locação não encontrada.');
+        }
+        if ($loc['status'] !== 'aberta') {
+            throw new UserError('Só é possível alterar o frete e o endereço de locação em aberto.');
+        }
+        [$fe, $fr, $endereco] = entrega_campos($d, $loc['local_uso']);
+        q('UPDATE locacoes SET frete_entrega = :fe, frete_recolhimento = :fr, endereco_entrega = :end WHERE id = :id',
+          ['fe' => $fe, 'fr' => $fr, 'end' => $endereco, 'id' => $locacaoId]);
+        $mudou = [];
+        if ((float) $loc['frete_entrega'] !== $fe) {
+            $mudou[] = 'frete de entrega ' . money($loc['frete_entrega']) . ' → ' . money($fe);
+        }
+        if ((float) $loc['frete_recolhimento'] !== $fr) {
+            $mudou[] = 'frete de recolhimento ' . money($loc['frete_recolhimento']) . ' → ' . money($fr);
+        }
+        if ($loc['endereco_entrega'] !== $endereco) {
+            $mudou[] = 'endereço de entrega alterado';
+        }
+        if ($mudou) {
+            locacao_historico($locacaoId, 'Entrega: ' . implode('; ', $mudou) . '.');
+        }
+    });
+}
+
 function locacao_criar(array $d): array
 {
     $cliente = cliente_resolver((string) ($d['cliente'] ?? ''));
@@ -817,6 +875,7 @@ function locacao_criar(array $d): array
     if (mb_strlen($local) > 200) {
         throw new UserError('O local de uso aceita no máximo 200 caracteres.');
     }
+    [$freteEntrega, $freteRecolhimento, $endereco] = entrega_campos($d, $local);
 
     $reservaId = (string) ($d['reserva_id'] ?? '');
     $reservaId = $reservaId === '' ? null : $reservaId;
@@ -826,7 +885,8 @@ function locacao_criar(array $d): array
 
     $itens = itens_do_form($d, 'locação');
 
-    return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens) {
+    return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens,
+                               $freteEntrega, $freteRecolhimento, $endereco) {
         if ($reservaId !== null) {
             $st = val('SELECT status FROM reservas WHERE id = :id FOR UPDATE', ['id' => $reservaId]);
             if ($st !== 'ativa') {
@@ -858,10 +918,12 @@ function locacao_criar(array $d): array
 
         $numero = (int) val("SELECT proximo_numero('locacao')");
         $id = (string) val('INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso,
-                                                  desconto, acrescimo, obs, reserva_id, usuario_id)
-                            VALUES (:n, :c, :s, :p, :local, :desc, :acr, :obs, :res, :u) RETURNING id',
+                                                  desconto, acrescimo, obs, reserva_id, usuario_id,
+                                                  frete_entrega, frete_recolhimento, endereco_entrega)
+                            VALUES (:n, :c, :s, :p, :local, :desc, :acr, :obs, :res, :u, :fe, :fr, :end) RETURNING id',
             ['n' => $numero, 'c' => $cliente['id'], 's' => $saida, 'p' => $prev, 'local' => $local,
-             'desc' => $desconto, 'acr' => $acrescimo, 'obs' => $obs, 'res' => $reservaId, 'u' => uid()]);
+             'desc' => $desconto, 'acr' => $acrescimo, 'obs' => $obs, 'res' => $reservaId, 'u' => uid(),
+             'fe' => $freteEntrega, 'fr' => $freteRecolhimento, 'end' => $endereco]);
         foreach ($itens as $pid => $it) {
             // Semanal e mensal vêm do cadastro (o formulário só permite ajustar a diária)
             q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal)

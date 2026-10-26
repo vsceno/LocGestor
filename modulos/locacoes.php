@@ -258,8 +258,17 @@ function locacoes_nova(): void
         <div class="card">
             <h2>Valores</h2>
             <div class="linha">
-                <label>Acréscimo (frete, montagem) R$
+                <label>Acréscimo (montagem etc.) R$
                     <input type="text" name="acrescimo" id="acrescimo" value="<?= e(old('acrescimo')) ?>" inputmode="decimal" placeholder="0,00">
+                </label>
+                <label>Frete de entrega R$
+                    <input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(old('frete_entrega')) ?>" inputmode="decimal" placeholder="0,00">
+                </label>
+                <label>Frete de recolhimento R$
+                    <input type="text" name="frete_recolhimento" id="frete-recolhimento" value="<?= e(old('frete_recolhimento')) ?>" inputmode="decimal" placeholder="0,00">
+                </label>
+                <label>Endereço de entrega
+                    <input type="text" name="endereco_entrega" value="<?= e(old('endereco_entrega')) ?>" maxlength="200" placeholder="Se vazio, o local de uso">
                 </label>
                 <label>Desconto R$
                     <input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00">
@@ -351,7 +360,10 @@ function locacoes_ver(): void
                     <?php if ($atraso > 0): ?><span class="selo vermelho"><?= num($atraso) ?> dia(s) de atraso</span><?php endif; ?></dd>
                 <?php if ($loc['local_uso'] !== ''): ?><dt>Local de uso</dt><dd><?= e($loc['local_uso']) ?></dd><?php endif; ?>
                 <?php if ((float) $loc['acrescimo'] > 0): ?><dt>Acréscimo</dt><dd><?= money($loc['acrescimo']) ?></dd><?php endif; ?>
+                <?php if ((float) $loc['frete_entrega'] > 0): ?><dt>Frete de entrega</dt><dd><?= money($loc['frete_entrega']) ?></dd><?php endif; ?>
+                <?php if ((float) $loc['frete_recolhimento'] > 0): ?><dt>Frete de recolhimento</dt><dd><?= money($loc['frete_recolhimento']) ?></dd><?php endif; ?>
                 <?php if ((float) $loc['desconto'] > 0): ?><dt>Desconto</dt><dd><?= money($loc['desconto']) ?></dd><?php endif; ?>
+                <?php if ($loc['endereco_entrega'] !== ''): ?><dt>Endereço de entrega</dt><dd><?= e($loc['endereco_entrega']) ?></dd><?php endif; ?>
                 <?php if ($loc['reserva_id']): ?><dt>Origem</dt><dd>Reserva nº <?= e(val('SELECT numero FROM reservas WHERE id = :id', ['id' => $loc['reserva_id']])) ?></dd><?php endif; ?>
                 <dt>Registrada em</dt><dd><?= e(dt($loc['criado_em'], true)) ?></dd>
                 <?php if ($loc['obs'] !== ''): ?><dt>Observações</dt><dd><?= nl2br(e($loc['obs'])) ?></dd><?php endif; ?>
@@ -463,6 +475,21 @@ function locacoes_ver(): void
         </div>
     </div>
 
+    <?php if ($aberta): ?>
+    <div class="card">
+        <h2>Entrega e recolhimento</h2>
+        <form method="post" action="<?= e(url('locacoes', ['a' => 'entrega_salvar'])) ?>" class="form">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= e($loc['id']) ?>">
+            <div class="linha">
+                <label>Frete de entrega R$<input type="text" name="frete_entrega" value="<?= e(num($loc['frete_entrega'], 2)) ?>" inputmode="decimal"></label>
+                <label>Frete de recolhimento R$<input type="text" name="frete_recolhimento" value="<?= e(num($loc['frete_recolhimento'], 2)) ?>" inputmode="decimal"></label>
+            </div>
+            <label>Endereço de entrega e recolhimento<input type="text" name="endereco_entrega" value="<?= e($loc['endereco_entrega']) ?>" maxlength="200"></label>
+            <button class="btn btn-sec btn-peq">Salvar entrega</button>
+        </form>
+    </div>
+    <?php endif; ?>
     <?php locacao_patrimonio_card($loc, $itens); ?>
 
     <div class="card">
@@ -592,7 +619,8 @@ function locacoes_devolucao(): void
     foreach ($itens as $it) {
         $desta += ($it['quantidade'] - $it['qtd_devolvida']) * preco_item($it, $dias);
     }
-    $saldoSugerido = max(0, $apurado + $desta + $loc['acrescimo'] - $loc['desconto'] - $loc['valor_pago']);
+    $ajuste = locacao_ajuste($loc);
+    $saldoSugerido = max(0, $apurado + $desta + $ajuste - $loc['valor_pago']);
     $qtdOld = (array) old('qtd', []);
     // Unidades (patrimônio) na rua: marcadas = voltaram nesta devolução
     $naRua = [];
@@ -607,7 +635,7 @@ function locacoes_devolucao(): void
     ?>
     <form method="post" action="<?= e(url('locacoes', ['a' => 'devolver'])) ?>" class="form" id="form-devolucao"
           data-saida="<?= e($loc['data_saida']) ?>" data-prev="<?= e($loc['data_prev_devolucao']) ?>"
-          data-apurado="<?= e($apurado) ?>" data-acrescimo="<?= e($loc['acrescimo']) ?>"
+          data-apurado="<?= e($apurado) ?>" data-acrescimo="<?= e(sprintf('%.2f', (float) $loc['acrescimo'] + (float) $loc['frete_entrega'] + (float) $loc['frete_recolhimento'])) ?>"
           data-desconto="<?= e($loc['desconto']) ?>" data-pago="<?= e($loc['valor_pago']) ?>">
         <?= csrf_field() ?>
         <input type="hidden" name="id" value="<?= e($loc['id']) ?>">
@@ -670,7 +698,7 @@ function locacoes_devolucao(): void
                 <dl class="dados resumo">
                     <dt>Desta devolução</dt><dd class="num" id="r-desta">—</dd>
                     <dt>Já apurado antes</dt><dd class="num"><?= money($apurado) ?></dd>
-                    <dt>Acréscimo − desconto</dt><dd class="num"><?= money($loc['acrescimo'] - $loc['desconto']) ?></dd>
+                    <dt>Acréscimos e fretes − desconto</dt><dd class="num"><?= money($ajuste) ?></dd>
                     <dt>Total apurado</dt><dd class="num" id="r-total">—</dd>
                     <dt>Já pago</dt><dd class="num"><?= money($loc['valor_pago']) ?></dd>
                     <dt><strong>Saldo</strong></dt><dd class="num"><strong id="r-saldo">—</strong></dd>
@@ -761,6 +789,8 @@ function locacoes_contrato(): void
         <tfoot>
             <tr><td colspan="6" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
             <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="6" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="6" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="6" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
             <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="6" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
             <tr><td colspan="6" class="num">Valor previsto</td><td class="num"><?= money($loc['valor_previsto']) ?></td></tr>
         </tfoot>
@@ -835,6 +865,8 @@ function locacoes_fatura(): void
             <?php if ((float) $extras['multa'] > 0): ?><tr><td colspan="5" class="num">Multa</td><td class="num"><?= money($extras['multa']) ?></td></tr><?php endif; ?>
             <?php if ((float) $extras['avaria'] > 0): ?><tr><td colspan="5" class="num">Avaria</td><td class="num"><?= money($extras['avaria']) ?></td></tr><?php endif; ?>
             <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="5" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="5" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="5" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
             <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="5" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
             <tr><td colspan="5" class="num">Total da locação</td><td class="num"><?= money($loc['valor_atual']) ?></td></tr>
             <tr><td colspan="5" class="num">Valor pago</td><td class="num"><?= money($loc['valor_pago']) ?></td></tr>
@@ -1058,6 +1090,14 @@ function locacao_patrimonio_card(array $loc, array $itens): void
         </form>
     </div>
     <?php
+}
+
+function locacoes_entrega_salvar(): void
+{
+    $loc = locacao_do_post();
+    locacao_entrega_salvar($loc['id'], $_POST);
+    flash('Entrega e fretes atualizados.');
+    redirect(url_locacao($loc));
 }
 
 function locacoes_unidades_salvar(): void

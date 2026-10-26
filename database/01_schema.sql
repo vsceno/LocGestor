@@ -315,6 +315,9 @@ CREATE TABLE locacoes (
     local_uso           VARCHAR(200)  NOT NULL DEFAULT '',
     desconto            NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (desconto >= 0),
     acrescimo           NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (acrescimo >= 0),
+    frete_entrega       NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (frete_entrega >= 0),
+    frete_recolhimento  NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (frete_recolhimento >= 0),
+    endereco_entrega    VARCHAR(200)  NOT NULL DEFAULT '',
     obs                 TEXT          NOT NULL DEFAULT '',
     reserva_id          uuid,
     usuario_id          uuid,
@@ -794,12 +797,12 @@ SELECT l.tenant_id,
        l.id AS locacao_id,
        l.numero,
        l.status,
-       (COALESCE(it.previsto_itens, 0) + l.acrescimo - l.desconto)::NUMERIC(12,2) AS valor_previsto,
+       (COALESCE(it.previsto_itens, 0) + l.acrescimo + l.frete_entrega + l.frete_recolhimento - l.desconto)::NUMERIC(12,2) AS valor_previsto,
        CASE WHEN l.status = 'cancelada' THEN 0
             ELSE COALESCE(dv.valor_itens, 0)
                + COALESCE(dv.multa_avaria, 0)
                + CASE WHEN l.status = 'aberta' THEN COALESCE(it.pendente_hoje, 0) ELSE 0 END
-               + l.acrescimo - l.desconto
+               + l.acrescimo + l.frete_entrega + l.frete_recolhimento - l.desconto
        END::NUMERIC(12,2) AS valor_atual,
        COALESCE(cx.pago, 0)::NUMERIC(12,2) AS valor_pago
   FROM locacoes l
