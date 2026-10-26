@@ -295,6 +295,12 @@ function locacoes_nova(): void
                 <label>Desconto R$
                     <input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00">
                 </label>
+                <?php if (!is_admin()): ?>
+                <label>Senha do administrador
+                    <input type="password" name="senha_admin" autocomplete="new-password" placeholder="Só com desconto ou acréscimo">
+                    <span class="ajuda">Quem não é administrador precisa dela para dar desconto ou acréscimo.</span>
+                </label>
+                <?php endif; ?>
                 <label>Adiantamento recebido R$
                     <input type="text" name="adiantamento" value="<?= e(old('adiantamento')) ?>" inputmode="decimal" placeholder="0,00">
                 </label>

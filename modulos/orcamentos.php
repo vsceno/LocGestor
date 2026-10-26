@@ -163,6 +163,7 @@ function orcamentos_novo(): void
                 <label>Frete de entrega R$<input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(old('frete_entrega')) ?>" inputmode="decimal" placeholder="0,00"></label>
                 <label>Frete de recolhimento R$<input type="text" name="frete_recolhimento" id="frete-recolhimento" value="<?= e(old('frete_recolhimento')) ?>" inputmode="decimal" placeholder="0,00"></label>
                 <label>Desconto R$<input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00"></label>
+                <?php if (!is_admin()): ?><label>Senha do administrador<input type="password" name="senha_admin" autocomplete="new-password" placeholder="Só com desconto ou acréscimo"></label><?php endif; ?>
             </div>
             <p class="total-previsto">Total previsto: <strong id="total-previsto">R$ 0,00</strong>
                 <span class="muted" id="total-detalhe"></span></p>

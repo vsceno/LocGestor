@@ -70,15 +70,17 @@ function orcamento_salvar(array $d, ?string $id = null): array
         }
     }
 
-    return tx(function () use ($cliente, $saida, $prev, $validade, $valores, $local, $obs, $itens, $cadastro, $id) {
+    $autorizado = desconto_autorizador($valores['acrescimo'], $valores['desconto'], (string) ($d['senha_admin'] ?? ''));
+    return tx(function () use ($cliente, $saida, $prev, $validade, $valores, $local, $obs, $itens, $cadastro, $id, $autorizado) {
         if ($id === null) {
             $numero = (int) val("SELECT proximo_numero('orcamento')");
             $id = (string) val('INSERT INTO orcamentos (numero, cliente_id, validade, data_saida, data_prev_devolucao, local_uso,
-                                                        acrescimo, desconto, frete_entrega, frete_recolhimento, obs, usuario_id)
-                                VALUES (:n, :c, :v, :s, :p, :l, :acr, :desc, :fe, :fr, :o, :u) RETURNING id',
+                                                        acrescimo, desconto, frete_entrega, frete_recolhimento, obs, usuario_id,
+                                                        desconto_autorizado_por)
+                                VALUES (:n, :c, :v, :s, :p, :l, :acr, :desc, :fe, :fr, :o, :u, :aut) RETURNING id',
                 ['n' => $numero, 'c' => $cliente['id'], 'v' => $validade, 's' => $saida, 'p' => $prev, 'l' => $local,
                  'acr' => $valores['acrescimo'], 'desc' => $valores['desconto'], 'fe' => $valores['frete_entrega'],
-                 'fr' => $valores['frete_recolhimento'], 'o' => $obs, 'u' => uid()]);
+                 'fr' => $valores['frete_recolhimento'], 'o' => $obs, 'u' => uid(), 'aut' => $autorizado]);
         } else {
             $st = val("SELECT status FROM orcamentos WHERE id = :id FOR UPDATE", ['id' => $id]);
             if ($st === null) {
@@ -89,11 +91,11 @@ function orcamento_salvar(array $d, ?string $id = null): array
             }
             $numero = (int) val('UPDATE orcamentos SET cliente_id = :c, validade = :v, data_saida = :s, data_prev_devolucao = :p,
                                        local_uso = :l, acrescimo = :acr, desconto = :desc, frete_entrega = :fe,
-                                       frete_recolhimento = :fr, obs = :o
+                                       frete_recolhimento = :fr, obs = :o, desconto_autorizado_por = :aut
                                  WHERE id = :id RETURNING numero',
                 ['c' => $cliente['id'], 'v' => $validade, 's' => $saida, 'p' => $prev, 'l' => $local,
                  'acr' => $valores['acrescimo'], 'desc' => $valores['desconto'], 'fe' => $valores['frete_entrega'],
-                 'fr' => $valores['frete_recolhimento'], 'o' => $obs, 'id' => $id]);
+                 'fr' => $valores['frete_recolhimento'], 'o' => $obs, 'aut' => $autorizado, 'id' => $id]);
             q('DELETE FROM orcamento_itens WHERE orcamento_id = :id', ['id' => $id]);
         }
         foreach ($itens as $pid => $it) {
@@ -147,7 +149,7 @@ function orcamento_converter(string $id, string $tipo): array
                                 'frete_recolhimento' => number_format((float) $orc['frete_recolhimento'], 2, '.', ''),
                                 'obs' => trim('Do orçamento nº ' . $orc['numero'] . '. ' . $orc['obs']),
                                 'produto_id' => $linhasProd['produto_id'], 'quantidade' => $linhasProd['quantidade'],
-                                'diaria' => $linhasProd['diaria']]);
+                                'diaria' => $linhasProd['diaria']], $orc['desconto_autorizado_por'] ?: null);
             q("UPDATE orcamentos SET status = 'convertido', locacao_id = :l WHERE id = :id", ['l' => $r['id'], 'id' => $id]);
             return ['tipo' => 'locacao', 'numero' => $r['numero'], 'id' => $r['id']];
         }

@@ -304,6 +304,13 @@ e Enter) acha o produto pelo código de barras exato.
 - **Romaneio de troca** (botão **Romaneio de troca**): mesma lista, com colunas *Saiu* e *Entrou* e linhas em branco
   para itens que entram no lugar. Só imprime: não muda o estoque nem a locação.
 
+### Desconto e acréscimo com permissão
+
+Dar desconto ou acréscimo numa locação ou num orçamento exige permissão. Quem é **administrador** lança direto. Quem é
+**operador** precisa digitar a **senha de um administrador** no mesmo formulário; sem ela (ou com senha errada) a
+locação não é gravada. O sistema guarda quem autorizou (*desconto_autorizado_por*), e o log de auditoria registra
+quem lançou e quem autorizou. Orçamento autorizado que vira locação leva a autorização junto, sem pedir senha de novo.
+
 ### Busca geral
 
 O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
@@ -582,6 +589,7 @@ psql -U postgres -d locgestor -f database\migrations\017_frete_endereco.sql
 psql -U postgres -d locgestor -f database\migrations\018_orcamentos.sql
 psql -U postgres -d locgestor -f database\migrations\019_codigos_barras.sql
 psql -U postgres -d locgestor -f database\migrations\020_recibos.sql
+psql -U postgres -d locgestor -f database\migrations\021_desconto_autorizacao.sql
 php tests\isolamento.php
 ```
 
@@ -607,6 +615,7 @@ php tests\isolamento.php
 | `018_orcamentos.sql` | tabelas `orcamentos` e `orcamento_itens` (cotação com validade, convertível em locação ou reserva) |
 | `019_codigos_barras.sql` | tabela `produto_barras` (códigos de barras do produto; um principal e os similares) |
 | `020_recibos.sql` | tabela `recibos` (recibos numerados, sem alteração nem exclusão; CPF/CNPJ mascarado na auditoria) |
+| `021_desconto_autorizacao.sql` | coluna `desconto_autorizado_por` em `locacoes` e `orcamentos` (quem autorizou o desconto ou acréscimo) |
 
 ### 10.2 Proteções do login (já ativas)
 

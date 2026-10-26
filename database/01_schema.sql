@@ -1150,3 +1150,22 @@ CREATE TRIGGER auditoria AFTER INSERT ON recibos
 GRANT SELECT, INSERT ON recibos TO locgestor_app;
 
 RESET ROLE;
+
+-- Autorização de desconto e acréscimo (migração 021)
+SET ROLE locgestor_owner;
+
+ALTER TABLE locacoes ADD COLUMN IF NOT EXISTS desconto_autorizado_por uuid;
+ALTER TABLE orcamentos ADD COLUMN IF NOT EXISTS desconto_autorizado_por uuid;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'locacoes_desconto_aut_fk') THEN
+        ALTER TABLE locacoes ADD CONSTRAINT locacoes_desconto_aut_fk
+            FOREIGN KEY (tenant_id, desconto_autorizado_por) REFERENCES usuarios (tenant_id, id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orcamentos_desconto_aut_fk') THEN
+        ALTER TABLE orcamentos ADD CONSTRAINT orcamentos_desconto_aut_fk
+            FOREIGN KEY (tenant_id, desconto_autorizado_por) REFERENCES usuarios (tenant_id, id);
+    END IF;
+END $$;
+
+RESET ROLE;

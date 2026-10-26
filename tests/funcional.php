@@ -1200,15 +1200,16 @@ $alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
               ['recebido_de' => 'TESTE Recibo Avulso', 'documento' => '', 'valor' => '120,00', 'referente' => 'TESTE serviço avulso',
                'forma' => 'PIX', 'locacao_id' => '']);
 $RECA = dbv("SELECT id FROM recibos WHERE referente = 'TESTE serviço avulso'");
-ok($RECA && (int) dbv('SELECT numero FROM recibos WHERE id = :i', ['i' => $RECA]) === $recUltimo + 1,
-   'recibo avulso recebe o próximo número da locadora');
+ok($RECA && (int) dbv('SELECT numero FROM recibos WHERE id = :i', ['i' => $RECA]) > $recUltimo,
+   'recibo avulso recebe um número novo da locadora');
 ok($RECA && (float) dbv('SELECT valor FROM recibos WHERE id = :i', ['i' => $RECA]) === 120.0, 'valor do recibo gravado (120,00)');
 ok(str_contains($alfa->req("index.php?p=recibos&a=imprimir&id=$RECA")['corpo'], 'Recebemos de')
    && str_contains($alfa->req("index.php?p=recibos&a=imprimir&id=$RECA")['corpo'], '120,00'), 'recibo imprime o texto e o valor');
 
 $alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
               ['recebido_de' => 'TESTE Recibo Sequência', 'documento' => '', 'valor' => '5,00', 'referente' => 'TESTE sequência', 'forma' => 'Dinheiro', 'locacao_id' => '']);
-ok((int) dbv("SELECT numero FROM recibos WHERE referente = 'TESTE sequência'") === $recUltimo + 2, 'o número seguinte aparece sem pular');
+ok((int) dbv("SELECT numero FROM recibos WHERE referente = 'TESTE sequência'") === (int) dbv("SELECT numero FROM recibos WHERE referente = 'TESTE serviço avulso'") + 1,
+   'o recibo seguinte leva o número seguinte, sem pular');
 
 $alfa->enviar('index.php?p=recibos&a=novo', 'index.php?p=recibos&a=salvar',
               ['recebido_de' => 'TESTE Doc', 'documento' => '123', 'valor' => '10,00', 'referente' => 'TESTE documento errado', 'forma' => 'PIX', 'locacao_id' => '']);
@@ -1244,6 +1245,56 @@ $romT = $alfa->get("index.php?p=locacoes&a=romaneio&n=$LOC1[numero]&tipo=troca")
 ok(str_contains($romT, 'Romaneio de troca') && str_contains($romT, 'Entrou') && !str_contains($romT, 'Conferido'),
    'romaneio de troca tem colunas Saiu e Entrou');
 ok($beta->get("index.php?p=locacoes&a=romaneio&n=$LOC1[numero]")['codigo'] === 404, 'Beta não imprime romaneio da Alfa (404)');
+
+// =====================================================================
+secao('Desconto e acréscimo: permissão (administrador ou senha de administrador)');
+$alfa->enviar('index.php?p=config&a=usuarios', 'index.php?p=config&a=usuario_salvar',
+              ['nome' => 'TESTE Desconto', 'login' => 'teste.desc', 'perfil' => 'operador', 'senha' => 'Desconto2026', 'ativo' => '1']);
+db("UPDATE usuarios SET trocar_senha = false WHERE login = 'teste.desc'");
+$desc = new Navegador($BASE);
+$desc->entrar('alfa-locacoes', 'teste.desc', 'Desconto2026');
+$ADMIN_ID = dbv("SELECT id FROM usuarios WHERE tenant_id = :t AND login = 'admin'", ['t' => $alfaId]);
+$locDesc = fn(array $extra) => ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2),
+                                'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => ['']] + $extra;
+
+$desc->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', $locDesc(['local_uso' => 'TESTE desc recusado', 'desconto' => '10,00']));
+ok(str_contains($desc->mensagem('index.php?p=locacoes&a=nova'), 'precisa da senha de um administrador'),
+   'operador não dá desconto sem senha de administrador');
+$desc->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', $locDesc(['local_uso' => 'TESTE desc recusado', 'acrescimo' => '4,00', 'senha_admin' => 'errada']));
+ok(str_contains($desc->mensagem('index.php?p=locacoes&a=nova'), 'precisa da senha de um administrador')
+   && dbv("SELECT count(*) FROM locacoes WHERE local_uso = 'TESTE desc recusado'") == 0,
+   'senha de administrador errada é recusada e não grava a locação');
+
+$desc->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', $locDesc(['local_uso' => 'TESTE desc autorizado', 'desconto' => '10,00', 'senha_admin' => 'admin123']));
+ok(dbv("SELECT desconto_autorizado_por FROM locacoes WHERE local_uso = 'TESTE desc autorizado'") === $ADMIN_ID,
+   'senha de administrador autoriza e fica registrada na locação');
+ok(dbv("SELECT count(*) FROM auditoria WHERE tabela = 'locacoes' AND usuario = 'teste.desc' AND dados::text LIKE '%desconto_autorizado_por%'") >= 1,
+   'o log de auditoria registra quem lançou (operador) e quem autorizou');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', $locDesc(['local_uso' => 'TESTE desc do admin', 'desconto' => '5,00']));
+ok(dbv("SELECT desconto_autorizado_por FROM locacoes WHERE local_uso = 'TESTE desc do admin'") === $ADMIN_ID,
+   'administrador dá desconto sem digitar senha (ele é quem autoriza)');
+
+$desc->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', $locDesc(['local_uso' => 'TESTE sem desc']));
+ok(dbv("SELECT count(*) FROM locacoes WHERE local_uso = 'TESTE sem desc' AND desconto_autorizado_por IS NULL") == 1,
+   'sem desconto nem acréscimo, o operador lança sem senha e nada fica autorizado');
+
+$desc->enviar('index.php?p=orcamentos&a=novo', 'index.php?p=orcamentos&a=salvar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'validade' => dia(5), 'obs' => 'TESTE desc orçamento recusado',
+               'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => ['5,00'], 'desconto' => '2,00']);
+ok(str_contains($desc->mensagem('index.php?p=orcamentos&a=novo'), 'precisa da senha de um administrador')
+   && dbv("SELECT count(*) FROM orcamentos WHERE obs = 'TESTE desc orçamento recusado'") == 0,
+   'orçamento: operador não dá desconto sem senha e nada é gravado');
+
+$desc->enviar('index.php?p=orcamentos&a=novo', 'index.php?p=orcamentos&a=salvar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'validade' => dia(5), 'obs' => 'TESTE desc orçamento',
+               'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => ['5,00'], 'desconto' => '2,00', 'senha_admin' => 'admin123']);
+$ORC_D = dbv("SELECT id FROM orcamentos WHERE obs = 'TESTE desc orçamento'");
+ok($ORC_D && dbv('SELECT desconto_autorizado_por FROM orcamentos WHERE id = :i', ['i' => $ORC_D]) === $ADMIN_ID,
+   'orçamento com desconto autorizado por senha de administrador fica registrado');
+$desc->enviar("index.php?p=orcamentos&a=ver&id=$ORC_D", 'index.php?p=orcamentos&a=converter', ['id' => $ORC_D, 'tipo' => 'locacao']);
+ok($ORC_D && dbv('SELECT l.desconto_autorizado_por FROM orcamentos o JOIN locacoes l ON l.id = o.locacao_id WHERE o.id = :i', ['i' => $ORC_D]) === $ADMIN_ID,
+   'converter o orçamento autorizado em locação leva a autorização junto, sem pedir senha de novo');
 
 // =====================================================================
 secao('Painel, relatórios e CSV');

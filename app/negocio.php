@@ -849,6 +849,28 @@ function entrega_campos(array $d, string $local): array
 }
 
 /**
+ * Desconto ou acréscimo só entra com permissão: quem lança é administrador, ou digita a senha de um
+ * administrador ativo. Devolve o id de quem autorizou (null se não há desconto nem acréscimo).
+ */
+function desconto_autorizador(float $acrescimo, float $desconto, string $senhaAdmin): ?string
+{
+    if ($acrescimo <= 0 && $desconto <= 0) {
+        return null;
+    }
+    if (is_admin()) {
+        return uid();
+    }
+    if ($senhaAdmin !== '') {
+        foreach (all("SELECT id, senha_hash FROM usuarios WHERE perfil = 'admin' AND ativo") as $adm) {
+            if (password_verify($senhaAdmin, $adm['senha_hash'])) {
+                return $adm['id'];
+            }
+        }
+    }
+    throw new UserError('Desconto ou acréscimo precisa da senha de um administrador.');
+}
+
+/**
  * Edita os fretes e o endereço de entrega de uma locação em aberto (o histórico registra a mudança).
  */
 function locacao_entrega_salvar(string $locacaoId, array $d): void
@@ -881,7 +903,7 @@ function locacao_entrega_salvar(string $locacaoId, array $d): void
     });
 }
 
-function locacao_criar(array $d): array
+function locacao_criar(array $d, ?string $autorizadoPor = null): array
 {
     $cliente = cliente_resolver((string) ($d['cliente'] ?? ''));
     if ($cliente['bloqueado']) {
@@ -907,6 +929,7 @@ function locacao_criar(array $d): array
     if ($acrescimo < 0 || $desconto < 0 || $adiantamento < 0) {
         throw new UserError('Acréscimo, desconto e adiantamento não podem ser negativos.');
     }
+    $autorizadoPor ??= desconto_autorizador($acrescimo, $desconto, (string) ($d['senha_admin'] ?? ''));
     $forma = $adiantamento > 0 ? forma_valida((string) ($d['forma'] ?? '')) : '';
     $local = trim((string) ($d['local_uso'] ?? ''));
     $obs = trim((string) ($d['obs'] ?? ''));
@@ -924,7 +947,7 @@ function locacao_criar(array $d): array
     $itens = itens_do_form($d, 'locação');
 
     return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens,
-                               $freteEntrega, $freteRecolhimento, $endereco) {
+                               $freteEntrega, $freteRecolhimento, $endereco, $autorizadoPor) {
         if ($reservaId !== null) {
             $st = val('SELECT status FROM reservas WHERE id = :id FOR UPDATE', ['id' => $reservaId]);
             if ($st !== 'ativa') {
@@ -957,11 +980,11 @@ function locacao_criar(array $d): array
         $numero = (int) val("SELECT proximo_numero('locacao')");
         $id = (string) val('INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso,
                                                   desconto, acrescimo, obs, reserva_id, usuario_id,
-                                                  frete_entrega, frete_recolhimento, endereco_entrega)
-                            VALUES (:n, :c, :s, :p, :local, :desc, :acr, :obs, :res, :u, :fe, :fr, :end) RETURNING id',
+                                                  frete_entrega, frete_recolhimento, endereco_entrega, desconto_autorizado_por)
+                            VALUES (:n, :c, :s, :p, :local, :desc, :acr, :obs, :res, :u, :fe, :fr, :end, :aut) RETURNING id',
             ['n' => $numero, 'c' => $cliente['id'], 's' => $saida, 'p' => $prev, 'local' => $local,
              'desc' => $desconto, 'acr' => $acrescimo, 'obs' => $obs, 'res' => $reservaId, 'u' => uid(),
-             'fe' => $freteEntrega, 'fr' => $freteRecolhimento, 'end' => $endereco]);
+             'fe' => $freteEntrega, 'fr' => $freteRecolhimento, 'end' => $endereco, 'aut' => $autorizadoPor]);
         foreach ($itens as $pid => $it) {
             // Semanal e mensal vêm do cadastro (o formulário só permite ajustar a diária)
             q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal)
