@@ -843,6 +843,8 @@ GRANT SELECT, UPDATE ON plataforma_usuarios TO locgestor_plataforma;
 GRANT SELECT, INSERT ON empresa, categorias TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE ON usuarios TO locgestor_plataforma;
 GRANT SELECT ON clientes, locacoes TO locgestor_plataforma;
+-- Tela de uso por locadora: só contagens (RLS da locadora continua valendo)
+GRANT SELECT ON vistorias, vistoria_fotos, entregas, unidades, manutencoes, kits, contas_pagar TO locgestor_plataforma;
 GRANT EXECUTE ON FUNCTION app_tenant_id(), provisionar_dados_padrao(TEXT) TO locgestor_plataforma;
 
 -- Proteção do login (as duas áreas)

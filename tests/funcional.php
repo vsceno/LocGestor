@@ -1163,7 +1163,7 @@ if (!$senhaSuporte) {
     db("UPDATE tenants SET vencimento = CURRENT_DATE - 10 WHERE id = :id", ['id' => $tid]);
     $nv->req('index.php?p=dashboard');
     ok($nv->mensagem('index.php?p=login') === 'Acesso suspenso por falta de pagamento da mensalidade. Entre em contato com o suporte.',
-       'passou da carência: a sessão aberta cai na hora, com o motivo');
+       'passou da carência: a sessão aberta cai na hora, com o motivo', 'veio: ' . $nv->mensagem('index.php?p=login'));
     $nv->entrar('teste-ci', 'admin', 'NovaSenha2026');
     ok($nv->mensagem('index.php?p=login') === 'Dados de acesso inválidos.', 'novo login da inadimplente: mensagem genérica');
     $pl->get('plataforma.php?p=tenants');
@@ -1322,6 +1322,32 @@ if (!$senhaSuporte) {
     db("DELETE FROM auditoria WHERE tenant_id = :t", ['t' => $cid]);
     db('DELETE FROM tenants WHERE id = :t', ['t' => $cid]);
     db('DELETE FROM login_tentativas');
+
+    // Uso por locadora
+    $usoHtml = $pl->get('plataforma.php?p=uso')['corpo'];
+    $locDb = (int) dbv("SELECT count(*) FROM locacoes WHERE status <> 'cancelada' AND data_saida >= date_trunc('month', CURRENT_DATE)::date");
+    $somaTela = 0;
+    if (preg_match('#Locações no mês \(todas\)</span><strong>([\d.,]+)</strong>#u', $usoHtml, $mu)) {
+        $somaTela = (int) str_replace('.', '', $mu[1]);
+    }
+    ok($pl->get('plataforma.php?p=uso')['codigo'] === 200 && $somaTela === $locDb,
+       "uso: locações do mês batem com o banco ($locDb)", "tela: $somaTela");
+    ok(str_contains($usoHtml, 'Nenhum dado de cliente aparece aqui') && str_contains($menuNum, 'plataforma.php?p=uso'),
+       'uso: aparece no menu e não mostra dados de clientes');
+    $uid = dbv("INSERT INTO tenants (slug, nome, plano_id, plano, vencimento, carencia_dias)
+                VALUES ('teste-uso', 'TESTE Uso', :p, 'Básico', :v, 5) RETURNING id", ['p' => $basico['id'], 'v' => dia(20)]);
+    for ($i = 1; $i <= 3; $i++) {
+        db("INSERT INTO usuarios (tenant_id, nome, login, senha_hash, perfil) VALUES (:t, 'U$i', 'u$i', 'x', 'operador')", ['t' => $uid]);
+    }
+    db("INSERT INTO kits (tenant_id, codigo, nome) VALUES (:t, 'TESTE-USO', 'TESTE kit de uso')", ['t' => $uid]);
+    $usoHtml = $pl->get('plataforma.php?p=uso')['corpo'];
+    $linhaUso = texto(substr($usoHtml, strpos($usoHtml, 'TESTE Uso')));
+    ok(str_contains($linhaUso, 'perto do limite de usuários') && str_contains($linhaUso, 'sugerir o plano') && str_contains($linhaUso, 'Kits (1 de 6)'),
+       'locadora com 3 usuários de um limite de 3: alerta de limite, sugestão de plano e o recurso usado', mb_substr($linhaUso, 0, 300));
+    db('DELETE FROM kits WHERE tenant_id = :t', ['t' => $uid]);
+    db('DELETE FROM usuarios WHERE tenant_id = :t', ['t' => $uid]);
+    db('DELETE FROM auditoria WHERE tenant_id = :t', ['t' => $uid]);
+    db('DELETE FROM tenants WHERE id = :t', ['t' => $uid]);
 }
 
 /** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */

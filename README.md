@@ -187,6 +187,10 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+Menu **Uso**: por locadora, locações do mês, usuários que entraram nos últimos 30 dias (de quantos existem e do limite),
+espaço das fotos de vistoria, quais funções usa (vistorias, roteiro, patrimônio, manutenção, kits, contas) e
+sugestão de plano quando está perto do limite de usuários. Não mostra dados de clientes.
+
 Menu **Números**: receita do mês e dos últimos 12 meses (mensalidades recebidas), locadoras novas e canceladas por
 mês, taxa de cancelamento e ticket médio. **Cancelar contrato** (no detalhe da locadora) encerra o contrato: o acesso
 fica bloqueado, as cobranças pendentes no Asaas são canceladas e a locadora não volta pelo painel. Os gráficos
