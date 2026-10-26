@@ -316,3 +316,18 @@ document.addEventListener('DOMContentLoaded', function () {
         tipo.addEventListener('change', atualizar);
     }
 });
+
+/* Recados fechados: guardados no navegador de cada pessoa (ignora erro em janela privada) */
+(function () {
+    var chave = 'lg_recados_fechados';
+    function lidos() { try { return JSON.parse(localStorage.getItem(chave) || '[]'); } catch (e) { return []; } }
+    function guardar(lista) { try { localStorage.setItem(chave, JSON.stringify(lista.slice(-50))); } catch (e) { /* sem armazenamento: o recado volta na próxima tela */ } }
+    document.addEventListener('DOMContentLoaded', function () {
+        var fechados = lidos();
+        document.querySelectorAll('.recado[data-recado]').forEach(function (el) {
+            if (fechados.indexOf(el.getAttribute('data-recado')) !== -1) { el.hidden = true; }
+            var botao = el.querySelector('.recado-fechar');
+            if (botao) { botao.addEventListener('click', function () { el.hidden = true; var f = lidos(); f.push(el.getAttribute('data-recado')); guardar(f); }); }
+        });
+    });
+})();

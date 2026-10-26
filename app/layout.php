@@ -21,6 +21,7 @@ const MENU_PLATAFORMA = [
     'tenants' => ['Locadoras', 'produtos'],
     'numeros' => ['Números', 'painel'],
     'uso'     => ['Uso', 'painel'],
+    'recados' => ['Recados', 'mensagem'],
     'planos'  => ['Planos', 'caixa'],
     'conta'   => ['Minha senha', 'config'],
 ];
@@ -199,6 +200,24 @@ function aviso_assinatura(): string
     return '';
 }
 
+/** Recados do painel da plataforma ainda no prazo (todas as locadoras veem). Fechar fica guardado no navegador. */
+function recados_html(): string
+{
+    if (AREA !== 'locadora' || user() === null) {
+        return '';
+    }
+    $lista = all('SELECT id, tipo, titulo, texto, expira_em FROM recados WHERE ativo AND expira_em >= CURRENT_DATE
+                   ORDER BY criado_em DESC LIMIT 3');
+    $html = '';
+    foreach ($lista as $r) {
+        $html .= '<div class="flash recado recado-' . e($r['tipo']) . '" data-recado="' . e($r['id']) . '" role="note">'
+               . '<strong>' . e($r['titulo']) . '</strong> · ' . e($r['texto'])
+               . ' <small class="muted">(até ' . e(dt($r['expira_em'])) . ')</small>'
+               . ' <button type="button" class="recado-fechar" aria-label="Fechar recado">×</button></div>';
+    }
+    return $html;
+}
+
 /** Faixa de aviso quando a sessão é de suporte (somente leitura, com prazo e botão para encerrar). */
 function suporte_faixa(): string
 {
@@ -276,6 +295,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
     </header>
     <main class="conteudo">
         <?= suporte_faixa() ?>
+        <?= recados_html() ?>
         <?= aviso_assinatura() ?>
         <?= flashes_html() ?>
 <?php

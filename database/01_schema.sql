@@ -866,6 +866,20 @@ GRANT SELECT ON clientes, locacoes TO locgestor_plataforma;
 GRANT SELECT ON vistorias, vistoria_fotos, entregas, unidades, manutencoes, kits, contas_pagar TO locgestor_plataforma;
 -- Acesso de suporte (painel "Entrar como a locadora"): registro do painel e troca do código pela locadora
 GRANT SELECT, INSERT ON acessos_suporte TO locgestor_plataforma;
+-- Recados do painel para todas as locadoras (sem tenant_id: são avisos gerais)
+CREATE TABLE recados (
+    id         uuid PRIMARY KEY DEFAULT uuidv7(),
+    tipo       VARCHAR(12)  NOT NULL CHECK (tipo IN ('aviso', 'novidade', 'manutencao')),
+    titulo     VARCHAR(120) NOT NULL CHECK (char_length(titulo) >= 3),
+    texto      VARCHAR(600) NOT NULL CHECK (char_length(texto) >= 5),
+    expira_em  DATE         NOT NULL,
+    ativo      BOOLEAN      NOT NULL DEFAULT TRUE,
+    usuario    VARCHAR(40)  NOT NULL DEFAULT '',
+    criado_em  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX recados_ativos_idx ON recados (ativo, expira_em);
+GRANT SELECT, INSERT, UPDATE ON recados TO locgestor_plataforma;
+GRANT SELECT ON recados TO locgestor_app;
 GRANT SELECT (id, tenant_id, login_suporte, motivo, token_hash, expira_em, usado_em), UPDATE (usado_em) ON acessos_suporte TO locgestor_app;
 GRANT EXECUTE ON FUNCTION app_tenant_id(), provisionar_dados_padrao(TEXT) TO locgestor_plataforma;
 

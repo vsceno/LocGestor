@@ -187,6 +187,10 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+**Recados:** menu **Recados** do painel. Um aviso (aviso, novidade ou manutenção programada) com validade aparece no
+topo do sistema de **todas** as locadoras até a data de validade ou até você desativar. A locadora pode fechar o
+recado (fica fechado só naquele navegador). O texto aparece como texto, nunca como código.
+
 **Acesso de suporte:** na tela de uma locadora, **Entrar como a locadora** (com o motivo, de 10 caracteres ou mais)
 abre o sistema dela como ela vê, **somente leitura**, por 30 minutos. O link tem um código de uso único que vale
 2 minutos (só o hash fica no banco). A locadora vê uma faixa no topo enquanto durar, e o acesso (quem, quando e o

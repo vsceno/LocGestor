@@ -455,3 +455,8 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 .atencao-lista { list-style: none; margin: 0; padding: 0; }
 .atencao-lista li { padding: 6px 0; border-bottom: 1px solid var(--borda); display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .atencao-lista li:last-child { border-bottom: 0; }
+
+/* Recados do painel (aparecem no topo do sistema das locadoras) */
+.recado { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.recado[hidden] { display: none; }
+.recado-fechar { margin-left: auto; background: none; border: 0; font-size: 1.2rem; line-height: 1; cursor: pointer; color: inherit; }

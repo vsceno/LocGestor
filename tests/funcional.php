@@ -1392,6 +1392,34 @@ if (!$senhaSuporte) {
     db("DELETE FROM acessos_suporte WHERE tenant_id = :t", ['t' => $alfaId]);
     db("DELETE FROM acessos_suporte WHERE tenant_id = :t", ['t' => $betaId]);
     db("DELETE FROM auditoria WHERE tenant_id = :t AND tabela = 'acesso_suporte'", ['t' => $betaId]);
+
+    // Recados do painel para todas as locadoras
+    $recHtml = fn() => $pl->get('plataforma.php?p=recados')['corpo'];
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=criar',
+                ['tipo' => 'manutencao', 'titulo' => 'TESTE manutenção', 'texto' => 'Sistema fora do ar sábado das 22h às 23h.', 'expira_em' => dia(7)]);
+    ok(str_contains($recHtml(), 'TESTE manutenção') && str_contains($recHtml(), 'no ar'), 'recado publicado aparece na lista do painel');
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=criar',
+                ['tipo' => 'aviso', 'titulo' => 'TESTE aviso', 'texto' => '<script>alert(1)</script> olá', 'expira_em' => dia(7)]);
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=criar',
+                ['tipo' => 'aviso', 'titulo' => 'TESTE antigo', 'texto' => 'Recado já vencido no prazo.', 'expira_em' => dia(-1)]);
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=criar',
+                ['tipo' => 'inventado', 'titulo' => 'TESTE x', 'texto' => 'texto de teste', 'expira_em' => dia(3)]);
+    ok(str_contains($pl->mensagem('plataforma.php?p=recados'), 'Escolha o tipo'), 'recado com tipo inválido é recusado');
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=criar',
+                ['tipo' => 'aviso', 'titulo' => 'TESTE x', 'texto' => 'texto de teste', 'expira_em' => dia(-3)]);
+    ok(str_contains($pl->mensagem('plataforma.php?p=recados'), 'hoje ou depois'), 'data de validade no passado é recusada');
+    $recados = new Navegador($BASE);
+    $recados->entrar('alfa-locacoes', 'admin', 'admin123');
+    $tela = $recados->get('index.php?p=dashboard')['corpo'];
+    ok(str_contains($tela, 'TESTE manutenção') && str_contains($tela, 'Sistema fora do ar'), 'locadora vê o recado no topo do sistema');
+    ok(!str_contains($tela, 'TESTE antigo'), 'recado com validade vencida não aparece');
+    ok(str_contains($tela, '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($tela, '<script>alert(1)</script>'),
+       'texto do recado é mostrado como texto (sem executar script)');
+    $idRec = dbv("SELECT id FROM recados WHERE titulo = 'TESTE manutenção'");
+    $pl->enviar('plataforma.php?p=recados', 'plataforma.php?p=recados&a=desativar', ['id' => $idRec]);
+    ok(!str_contains($recados->get('index.php?p=dashboard')['corpo'], 'TESTE manutenção') && str_contains($recHtml(), 'desativado'),
+       'desativado pelo painel: some das locadoras e fica marcado na lista');
+    db("DELETE FROM recados WHERE titulo LIKE 'TESTE%'");
 }
 
 /** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */
