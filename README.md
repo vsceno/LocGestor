@@ -271,6 +271,13 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
   data prevista de devolução, locações atrasadas e devolvidas com saldo (na primeira semana) e reservas ativas
   estimadas pelos preços atuais. Saem: as contas em aberto (as vencidas, na primeira semana).
 
+### Exportação para o contador
+
+*Relatórios › Exportação para o contador* (só administrador): escolha o mês e baixe, em CSV (abre no Excel) ou
+tudo num **.zip** com um LEIAME: lançamentos do caixa, recebimentos de locação com **CPF/CNPJ** do cliente,
+contas pagas e o resumo por categoria com saldo inicial e final. É regime de caixa (o que entrou e saiu no fluxo
+de caixa). Como traz CPF/CNPJ, envie só ao contador; cada exportação fica anotada no `logs/app.log` (sem CPF).
+
 ### Auditoria
 
 *Configurações › Auditoria* (só administrador): toda inclusão, alteração e exclusão em locações, devoluções,

@@ -311,6 +311,11 @@ function relatorios_index(): void
            . '</h2><p class="muted">' . e($rel['descricao']) . '</p>'
            . ($rel['periodo'] ? '<span class="selo azul">por período</span>' : '<span class="selo">situação atual</span>') . '</div></a>';
     }
+    if (is_admin()) {
+        echo '<a href="' . e(url('relatorios', ['a' => 'contador'])) . '"><div class="card"><h2>Exportação para o contador</h2>'
+           . '<p class="muted">Lançamentos do caixa, recebimentos de locação com CPF/CNPJ, contas pagas e resumo do mês, em CSV ou .zip.</p>'
+           . '<span class="selo azul">por mês</span></div></a>';
+    }
     echo '</div>';
     layout_end();
 }
@@ -451,5 +456,160 @@ function relatorio_csv(string $chave, array $rel, array $linhas, array $totais):
         fputcsv($out, $linha, ';', '"', '');
     }
     fclose($out);
+    exit;
+}
+
+// =====================================================================
+// EXPORTAÇÃO PARA O CONTADOR (só administrador: traz CPF/CNPJ dos clientes)
+// Regime de caixa: o que entrou e saiu no mês, pelos lançamentos do fluxo de caixa.
+// =====================================================================
+
+const MESES_CONTADOR = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto',
+                          'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+/** CSV no padrão dos relatórios (BOM UTF-8, ";", vírgula decimal, proteção contra fórmula). */
+function csv_texto(array $colunas, array $linhas): string
+{
+    $out = fopen('php://temp', 'w+');
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, array_map(fn($c) => $c[0], $colunas), ';', '"', '');
+    foreach ($linhas as $l) {
+        fputcsv($out, array_map(fn($campo, $c) => ($l[$campo] ?? null) === null ? '' : relatorio_csv_valor($c[1], $l[$campo]),
+                                    array_keys($colunas), $colunas), ';', '"', '');
+    }
+    rewind($out);
+    $txt = (string) stream_get_contents($out);
+    fclose($out);
+    return $txt;
+}
+
+/** Os arquivos do mês 'AAAA-MM': [nome => [titulo, colunas, linhas]]. */
+function contador_arquivos(string $mes): array
+{
+    $de = "$mes-01";
+    $ate = date('Y-m-t', strtotime($de));
+    $p = ['de' => $de, 'ate' => $ate];
+    $caixa = all("SELECT c.data, CASE c.tipo WHEN 'E' THEN 'Entrada' ELSE 'Saída' END AS tipo, c.categoria, c.descricao, c.forma,
+                         CASE WHEN c.tipo = 'E' THEN c.valor END AS entrada, CASE WHEN c.tipo = 'S' THEN c.valor END AS saida,
+                         l.numero AS locacao
+                    FROM caixa c LEFT JOIN locacoes l ON l.id = c.locacao_id
+                   WHERE c.data BETWEEN :de AND :ate ORDER BY c.data, c.criado_em", $p);
+    $receb = all("SELECT c.data, l.numero AS locacao, cl.nome AS cliente, cl.cpf_cnpj, c.forma,
+                         CASE c.tipo WHEN 'E' THEN 'Recebimento' ELSE 'Estorno' END AS tipo,
+                         CASE WHEN c.tipo = 'E' THEN c.valor ELSE -c.valor END AS valor
+                    FROM caixa c JOIN locacoes l ON l.id = c.locacao_id JOIN clientes cl ON cl.id = l.cliente_id
+                   WHERE c.data BETWEEN :de AND :ate ORDER BY c.data, l.numero", $p);
+    foreach ($receb as &$r) {
+        $r['cpf_cnpj'] = doc_formatar($r['cpf_cnpj']);
+    }
+    unset($r);
+    $contas = all('SELECT vencimento, pago_em, descricao, categoria, valor FROM contas_pagar
+                    WHERE pago_em BETWEEN :de AND :ate ORDER BY pago_em, descricao', $p);
+    $anterior = (float) val("SELECT COALESCE(SUM(CASE WHEN tipo = 'E' THEN valor ELSE -valor END), 0) FROM caixa WHERE data < :de", ['de' => $de]);
+    $resumo = all("SELECT categoria, COALESCE(SUM(valor) FILTER (WHERE tipo = 'E'), 0) AS entradas,
+                          COALESCE(SUM(valor) FILTER (WHERE tipo = 'S'), 0) AS saidas,
+                          COALESCE(SUM(CASE WHEN tipo = 'E' THEN valor ELSE -valor END), 0) AS resultado
+                     FROM caixa WHERE data BETWEEN :de AND :ate GROUP BY categoria ORDER BY categoria", $p);
+    $ent = array_sum(array_column($resumo, 'entradas'));
+    $sai = array_sum(array_column($resumo, 'saidas'));
+    $resumo[] = ['categoria' => 'TOTAL DO MÊS', 'entradas' => $ent, 'saidas' => $sai, 'resultado' => $ent - $sai];
+    $resumo[] = ['categoria' => 'Saldo inicial (' . dt($de) . ')', 'resultado' => $anterior];
+    $resumo[] = ['categoria' => 'Saldo final (' . dt($ate) . ')', 'resultado' => $anterior + $ent - $sai];
+
+    return [
+        "caixa_$mes.csv" => ['Lançamentos do caixa', ['data' => ['Data', 'date'], 'tipo' => ['Tipo', 'txt'], 'categoria' => ['Categoria', 'txt'],
+            'descricao' => ['Descrição', 'txt'], 'forma' => ['Forma', 'txt'], 'entrada' => ['Entrada', 'money'], 'saida' => ['Saída', 'money'],
+            'locacao' => ['Locação nº', 'txt']], $caixa],
+        "recebimentos_locacao_$mes.csv" => ['Recebimentos de locação (com CPF/CNPJ do cliente)', ['data' => ['Data', 'date'],
+            'locacao' => ['Locação nº', 'txt'], 'cliente' => ['Cliente', 'txt'], 'cpf_cnpj' => ['CPF/CNPJ', 'txt'], 'tipo' => ['Tipo', 'txt'],
+            'forma' => ['Forma', 'txt'], 'valor' => ['Valor', 'money']], $receb],
+        "contas_pagas_$mes.csv" => ['Contas pagas', ['vencimento' => ['Vencimento', 'date'], 'pago_em' => ['Pagamento', 'date'],
+            'descricao' => ['Descrição', 'txt'], 'categoria' => ['Categoria', 'txt'], 'valor' => ['Valor', 'money']], $contas],
+        "resumo_$mes.csv" => ['Resumo por categoria e saldos', ['categoria' => ['Categoria', 'txt'], 'entradas' => ['Entradas', 'money'],
+            'saidas' => ['Saídas', 'money'], 'resultado' => ['Resultado', 'money']], $resumo],
+    ];
+}
+
+/** Mês 'AAAA-MM' da URL (padrão: mês passado). */
+function contador_mes(): string
+{
+    $mes = get('mes');
+    return preg_match('/^(19|20)\d\d-(0[1-9]|1[0-2])$/', $mes) ? $mes : date('Y-m', strtotime('first day of last month'));
+}
+
+function relatorios_contador(): void
+{
+    require_admin();
+    $mes = contador_mes();
+    $meses = [];
+    for ($i = 0; $i < 24; $i++) {
+        $m = date('Y-m', strtotime("first day of -$i month"));
+        $meses[$m] = MESES_CONTADOR[(int) substr($m, 5)] . ' de ' . substr($m, 0, 4);
+    }
+    $arquivos = contador_arquivos($mes);
+    layout_start('Exportação para o contador', 'relatorios');
+    ?>
+    <div class="card">
+        <h2>Exportação para o contador</h2>
+        <p class="ajuda">Arquivos do mês em CSV (abrem no Excel), no regime de caixa: o que entrou e saiu pelo fluxo de caixa.
+            Os recebimentos de locação trazem o CPF/CNPJ do cliente: envie só ao seu contador.</p>
+        <form method="get" class="filtros">
+            <input type="hidden" name="p" value="relatorios"><input type="hidden" name="a" value="contador">
+            <select name="mes" aria-label="Mês"><?= options($meses, $mes) ?></select>
+            <button class="btn btn-sec">Ver</button>
+        </form>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Arquivo</th><th>Conteúdo</th><th class="num">Linhas</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($arquivos as $nome => [$titulo, , $linhas]): ?>
+                    <tr><td><code><?= e($nome) ?></code></td><td><?= e($titulo) ?></td><td class="num"><?= num(count($linhas)) ?></td>
+                        <td><a class="btn btn-sec btn-peq" href="<?= e(url('relatorios', ['a' => 'contador_baixar', 'mes' => $mes, 'arquivo' => $nome])) ?>">Baixar</a></td></tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php if (class_exists('ZipArchive')): ?>
+            <a class="btn" href="<?= e(url('relatorios', ['a' => 'contador_baixar', 'mes' => $mes, 'arquivo' => 'zip'])) ?>">Baixar tudo (.zip)</a>
+        <?php endif; ?>
+    </div>
+    <?php
+    layout_end();
+}
+
+function relatorios_contador_baixar(): never
+{
+    require_admin();
+    $mes = contador_mes();
+    $arquivo = get('arquivo');
+    $arquivos = contador_arquivos($mes);
+    if (!isset($arquivos[$arquivo]) && !($arquivo === 'zip' && class_exists('ZipArchive'))) {
+        pagina_erro(404, 'Arquivo não encontrado.');
+    }
+    log_app('INFO', "Exportação para o contador: $mes ($arquivo).");
+    header('Cache-Control: no-store');
+    if ($arquivo === 'zip') {
+        $tmp = tempnam(sys_get_temp_dir(), 'lgz');
+        $zip = new ZipArchive();
+        $zip->open($tmp, ZipArchive::OVERWRITE);
+        $leia = "LocGestor - exportação para o contador\r\nEmpresa: " . (empresa()['razao_social'] ?? '') . "\r\nMês: $mes\r\n"
+              . "Regime de caixa: entradas e saídas registradas no fluxo de caixa do sistema.\r\n\r\n";
+        foreach ($arquivos as $nome => [$titulo, $colunas, $linhas]) {
+            $zip->addFromString($nome, csv_texto($colunas, $linhas));
+            $leia .= "$nome: $titulo (" . count($linhas) . " linhas)\r\n";
+        }
+        $zip->addFromString('LEIAME.txt', $leia);
+        $zip->close();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="contador_' . $mes . '.zip"');
+        header('Content-Length: ' . filesize($tmp));
+        readfile($tmp);
+        unlink($tmp);
+        exit;
+    }
+    [, $colunas, $linhas] = $arquivos[$arquivo];
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $arquivo . '"');
+    echo csv_texto($colunas, $linhas);
     exit;
 }

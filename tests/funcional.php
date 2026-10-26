@@ -980,6 +980,37 @@ foreach (['atraso', 'debito', 'estoque', 'mais_alugados', 'sem_movimento', 'fatu
 $csvBeta = $beta->req('index.php?p=relatorios&a=ver&r=estoque&csv=1')['corpo'];
 ok(!str_contains($csvBeta, 'BET-400') && str_contains($csvBeta, ';'), 'CSV de estoque da Beta não traz produto da Alfa e usa ";"');
 
+// Exportação para o contador (mês atual: os testes lançaram no caixa hoje)
+$mesAtual = date('Y-m');
+$baixar = fn(Navegador $n, string $arq) => $n->req("index.php?p=relatorios&a=contador_baixar&mes=$mesAtual&arquivo=$arq");
+$t = $op->get('index.php?p=relatorios&a=contador')['corpo'] . $baixar($op, "recebimentos_locacao_$mesAtual.csv")['corpo'];
+ok(str_contains($t, 'Acesso restrito ao administrador.') && !str_contains($t, '111.444.777-35'), 'operador não acessa a exportação (traz CPF)');
+$cx = $baixar($alfa, "caixa_$mesAtual.csv");
+ok($cx['codigo'] === 200 && str_starts_with($cx['corpo'], "\xEF\xBB\xBFData;Tipo;Categoria;Descrição;Forma;Entrada;Saída;\"Locação nº\"")
+   && str_contains($cx['corpo'], 'TESTE gerador com patrimônio') && str_contains($cx['cabecalhos'], 'text/csv'),
+   'caixa do mês em CSV (cabeçalho, ";" e os lançamentos)');
+$rc = $baixar($alfa, "recebimentos_locacao_$mesAtual.csv")['corpo'];
+ok(preg_match("/;$N;\"Maria Lúcia Bezerra\";111\\.444\\.777-35;Recebimento;PIX;100,00/u", $rc) === 1,
+   "recebimentos de locação com CPF formatado (adiantamento da locação nº $N)");
+$rs = $baixar($alfa, "resumo_$mesAtual.csv")['corpo'];
+$fimMes = (float) dbv("SELECT COALESCE(SUM(CASE WHEN tipo = 'E' THEN valor ELSE -valor END), 0) FROM caixa
+                        WHERE tenant_id = :t AND data <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month - 1 day')::date", ['t' => $alfaId]);
+ok(str_contains($rs, '"Saldo final (' . date('t/m/Y') . ')";;;' . number_format($fimMes, 2, ',', '')), 'resumo: saldo final do mês confere com o caixa');
+$zip = $baixar($alfa, 'zip');
+$ok = false;
+if (class_exists('ZipArchive') && str_starts_with($zip['corpo'], 'PK')) {
+    $tmp = tempnam(sys_get_temp_dir(), 'lgt');
+    file_put_contents($tmp, $zip['corpo']);
+    $z = new ZipArchive();
+    $z->open($tmp);
+    $ok = $z->numFiles === 5 && $z->getFromName("caixa_$mesAtual.csv") === $cx['corpo'] && str_contains((string) $z->getFromName('LEIAME.txt'), 'Regime de caixa');
+    $z->close();
+    unlink($tmp);
+}
+ok($ok, '.zip com os 4 CSV (iguais aos avulsos) e o LEIAME');
+ok(!str_contains($baixar($beta, "caixa_$mesAtual.csv")['corpo'], 'TESTE gerador com patrimônio'), 'exportação da Beta não traz lançamento da Alfa');
+ok($alfa->req("index.php?p=relatorios&a=contador_baixar&mes=$mesAtual&arquivo=..%2Fconfig.php")['codigo'] === 404, 'nome de arquivo fora da lista: 404');
+
 // =====================================================================
 secao('Proteção do login');
 $t = new Navegador($BASE);
