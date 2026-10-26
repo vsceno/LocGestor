@@ -28,4 +28,4 @@ if (user() !== null) {
     q("SELECT set_config('app.usuario', :u, false)", ['u' => mb_substr('plataforma: ' . (user()['login'] ?? ''), 0, 80)]);
 }
 
-executar_rota(['login', 'tenants', 'planos', 'conta'], __DIR__ . '/modulos_plataforma', 'tenants');
+executar_rota(['login', 'tenants', 'planos', 'numeros', 'conta'], __DIR__ . '/modulos_plataforma', 'tenants');

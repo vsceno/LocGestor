@@ -459,6 +459,9 @@ function tenants_editar(): void
             </div>
             <div class="card">
                 <h2>Acesso</h2>
+                <?php if ($t['status'] === 'cancelada'): ?>
+                    <p class="muted">Contrato cancelado em <?= e(dt($t['cancelada_em'])) ?>. O acesso está bloqueado e não volta pelo painel.</p>
+                <?php else: ?>
                 <form method="post" action="<?= e(url('tenants', ['a' => 'status'])) ?>"
                       data-confirmar="<?= e($t['status'] === 'ativa' ? "Suspender {$t['nome']}? Os usuários dela perdem o acesso imediatamente." : "Reativar {$t['nome']}?") ?>">
                     <?= csrf_field() ?>
@@ -471,6 +474,13 @@ function tenants_editar(): void
                         <button class="btn">Reativar acesso</button>
                     <?php endif; ?>
                 </form>
+                <form method="post" action="<?= e(url('tenants', ['a' => 'cancelar'])) ?>" style="margin-top:12px"
+                      data-confirmar="Cancelar o contrato de <?= e($t['nome']) ?>? O acesso é bloqueado, as mensalidades em aberto são canceladas e a locadora não volta pelo painel.">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                    <button class="btn btn-sec btn-peq">Cancelar contrato</button>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -512,6 +522,9 @@ function tenants_salvar(): void
     $t = locadora_por_id(post('id'));
     if ($t === null) {
         throw new UserError('Locadora não encontrada.');
+    }
+    if ($t['status'] === 'cancelada') {
+        throw new UserError('Locadora cancelada: o contrato não pode mais ser alterado.');
     }
     $nome = post('nome');
     $cnpj = so_digitos(post('cnpj'));
@@ -557,6 +570,9 @@ function tenants_salvar(): void
 function tenants_pagamento(): void
 {
     $id = post('id');
+    if (val("SELECT 1 FROM tenants WHERE id = :id AND status = 'cancelada'", ['id' => is_uuid($id) ? $id : '']) !== null) {
+        throw new UserError('Locadora cancelada: não há mensalidade a registrar.');
+    }
     $meses = filter_var(post('meses'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 24]]);
     $data = post('data');
     $obs = mb_substr(post('obs'), 0, 200);
@@ -731,12 +747,42 @@ function tenants_cobranca_cancelar(): void
     redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
 }
 
+/**
+ * Cancela o contrato: bloqueia o acesso, cancela as cobranças pendentes no Asaas (se houver) e
+ * zera o vencimento. É definitivo pelo painel (a data fica em cancelada_em para os números).
+ */
+function tenants_cancelar(): void
+{
+    $id = post('id');
+    $t = is_uuid($id) ? locadora_por_id($id) : null;
+    if ($t === null) {
+        throw new UserError('Locadora não encontrada.');
+    }
+    if ($t['status'] === 'cancelada') {
+        throw new UserError('Esta locadora já está cancelada.');
+    }
+    tx(function () use ($t) {
+        $pendentes = all("SELECT id FROM assinatura_cobrancas WHERE locadora_id = :id AND status = 'pendente'", ['id' => $t['id']]);
+        foreach ($pendentes as $c) {
+            com_asaas(fn() => cobranca_cancelar($c['id']));
+        }
+        q("UPDATE tenants SET status = 'cancelada', cancelada_em = CURRENT_DATE, vencimento = NULL,
+                  motivo_suspensao = '', cobranca_automatica = false WHERE id = :id", ['id' => $t['id']]);
+    });
+    log_app('INFO', "Contrato da locadora {$t['slug']} cancelado.");
+    flash("Contrato de {$t['nome']} cancelado. O acesso está bloqueado.");
+    redirect(url('tenants', ['a' => 'editar', 'id' => $t['id']]));
+}
+
 function tenants_status(): void
 {
     $id = post('id');
     $status = post('status');
     if (!is_uuid($id) || !in_array($status, ['ativa', 'suspensa'], true)) {
         throw new UserError('Requisição inválida.');
+    }
+    if (val("SELECT 1 FROM tenants WHERE id = :id AND status = 'cancelada'", ['id' => $id]) !== null) {
+        throw new UserError('Locadora cancelada: o acesso não volta pelo painel.');
     }
     $t = val('UPDATE tenants SET status = :s, motivo_suspensao = :m WHERE id = :id RETURNING nome',
              ['s' => $status, 'm' => $status === 'suspensa' ? 'manual' : '', 'id' => $id]);

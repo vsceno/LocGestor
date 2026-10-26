@@ -1274,6 +1274,60 @@ if (!$senhaSuporte) {
     ok(str_contains($r['local'], 'p=tenants'), 'a senha nova entra no painel');
     db("DELETE FROM plataforma_usuarios WHERE login = 'teste-conta'");
     db('DELETE FROM login_tentativas');
+
+    // Números do negócio e cancelamento de contrato
+    $kpi = function (string $rotulo): int {
+        $h = $GLOBALS['pl']->get('plataforma.php?p=numeros')['corpo'];
+        return preg_match('#' . preg_quote($rotulo, '#') . '</span><strong>([\d.,]+)</strong>#u', $h, $m) ? (int) str_replace('.', '', $m[1]) : -1;
+    };
+    $novasBanco = (int) dbv("SELECT count(*) FROM tenants WHERE date_trunc('month', criado_em) = date_trunc('month', now())");
+    ok($pl->get('plataforma.php?p=numeros')['codigo'] === 200 && $kpi('Novas locadoras no mês') === $novasBanco,
+       "números: novas locadoras do mês batem com o banco ($novasBanco)");
+    $recBanco = (float) dbv("SELECT COALESCE(SUM(valor), 0) FROM assinatura_pagamentos WHERE date_trunc('month', data) = date_trunc('month', CURRENT_DATE)");
+    ok(str_contains($pl->get('plataforma.php?p=numeros')['corpo'], money_br($recBanco)), 'números: receita do mês bate com os pagamentos registrados');
+    $menuNum = $pl->get('plataforma.php?p=tenants')['corpo'];
+    ok(str_contains($menuNum, 'href="plataforma.php?p=numeros"') && str_contains($menuNum, 'Números'), 'painel tem o item "Números" no menu');
+
+    $cid = dbv("INSERT INTO tenants (slug, nome, plano_id, plano, vencimento, carencia_dias)
+                VALUES ('teste-canc', 'TESTE Cancelada', :p, 'Básico', :v, 5) RETURNING id", ['p' => $basico['id'], 'v' => dia(10)]);
+    db("INSERT INTO usuarios (tenant_id, nome, login, senha_hash, perfil) VALUES (:t, 'Dono', 'admin', :h, 'admin')",
+       ['t' => $cid, 'h' => password_hash('SenhaCanc1', PASSWORD_DEFAULT)]);
+    $cancAntes = $kpi('Cancelamentos no mês');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$cid", 'plataforma.php?p=tenants&a=cancelar', ['id' => $cid]);
+    $linha = db('SELECT status, cancelada_em, vencimento FROM tenants WHERE id = :id', ['id' => $cid])->fetch();
+    ok($linha['status'] === 'cancelada' && $linha['cancelada_em'] === date('Y-m-d') && $linha['vencimento'] === null,
+       'cancelar: status cancelada, data do cancelamento e sem vencimento', json_encode($linha));
+    ok($kpi('Cancelamentos no mês') === $cancAntes + 1, 'números: o cancelamento entra no contador do mês');
+    $edit = $pl->get("plataforma.php?p=tenants&a=editar&id=$cid")['corpo'];
+    ok(str_contains($edit, 'Contrato cancelado em') && !str_contains($edit, 'Cancelar contrato') && !str_contains($edit, 'Suspender acesso'),
+       'tela da locadora cancelada: mostra a data e não oferece suspender, reativar nem cancelar');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$cid", 'plataforma.php?p=tenants&a=salvar',
+                ['id' => $cid, 'nome' => 'TESTE Mudou', 'cnpj' => '', 'email_contato' => '', 'telefone' => '', 'plano_id' => $basico['id'],
+                 'vencimento' => dia(40), 'carencia_dias' => '5', 'limite_usuarios' => '']);
+    ok(str_contains($pl->mensagem("plataforma.php?p=tenants&a=editar&id=$cid"), 'Locadora cancelada: o contrato não pode mais ser alterado.')
+       && dbv('SELECT nome FROM tenants WHERE id = :id', ['id' => $cid]) === 'TESTE Cancelada', 'contrato cancelado não é alterado');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$cid", 'plataforma.php?p=tenants&a=pagamento',
+                ['id' => $cid, 'meses' => '1', 'data' => dia(0), 'forma' => 'PIX']);
+    ok(str_contains($pl->mensagem("plataforma.php?p=tenants&a=editar&id=$cid"), 'não há mensalidade') && dbv('SELECT count(*) FROM assinatura_pagamentos WHERE locadora_id = :id', ['id' => $cid]) == 0,
+       'não registra pagamento de locadora cancelada');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$cid", 'plataforma.php?p=tenants&a=status', ['id' => $cid, 'status' => 'ativa']);
+    ok(dbv('SELECT status FROM tenants WHERE id = :id', ['id' => $cid]) === 'cancelada', 'não reativa pelo painel');
+    $pl->enviar("plataforma.php?p=tenants&a=editar&id=$cid", 'plataforma.php?p=tenants&a=cancelar', ['id' => $cid]);
+    ok(str_contains($pl->mensagem("plataforma.php?p=tenants&a=editar&id=$cid"), 'já está cancelada'), 'não cancela duas vezes');
+    $cli = new Navegador($BASE);
+    $r = $cli->entrar('teste-canc', 'admin', 'SenhaCanc1');
+    ok(!str_contains($r['local'], 'p=dashboard'), 'admin da locadora cancelada não entra no sistema');
+    // Usuários primeiro (a exclusão deles também gera auditoria), depois a auditoria, depois a locadora
+    db('DELETE FROM usuarios WHERE tenant_id = :t', ['t' => $cid]);
+    db("DELETE FROM auditoria WHERE tenant_id = :t", ['t' => $cid]);
+    db('DELETE FROM tenants WHERE id = :t', ['t' => $cid]);
+    db('DELETE FROM login_tentativas');
+}
+
+/** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */
+function money_br(float $v): string
+{
+    return 'R$ ' . number_format($v, 2, ',', '.');
 }
 
 /** Login com sucesso? (vai para o painel) */

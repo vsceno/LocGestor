@@ -51,7 +51,7 @@ CREATE TABLE tenants (
     cnpj            VARCHAR(14)  NOT NULL DEFAULT '',
     email_contato   VARCHAR(120) NOT NULL DEFAULT '',
     telefone        VARCHAR(20)  NOT NULL DEFAULT '',
-    status          VARCHAR(10)  NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa', 'suspensa')),
+    status          VARCHAR(10)  NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa', 'suspensa', 'cancelada')),
     plano           VARCHAR(40)  NOT NULL DEFAULT 'Básico',
     limite_usuarios INTEGER      NOT NULL DEFAULT 3 CHECK (limite_usuarios >= 1),
     criado_em       TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -61,13 +61,15 @@ CREATE TABLE tenants (
     vencimento       DATE,
     carencia_dias    INTEGER     NOT NULL DEFAULT 5,
     motivo_suspensao VARCHAR(20) NOT NULL DEFAULT '',
+    cancelada_em    DATE,                       -- dia do cancelamento (status 'cancelada')
     -- Cobrança automática pelo Asaas (desligada por padrão) e o id do cliente lá
     cobranca_automatica BOOLEAN     NOT NULL DEFAULT FALSE,
     asaas_cliente_id    VARCHAR(40) NOT NULL DEFAULT '',
     CONSTRAINT tenants_slug_uk UNIQUE (slug),
     CONSTRAINT tenants_slug_ck CHECK (slug ~ '^[a-z0-9-]{3,40}$'),
     CONSTRAINT tenants_carencia_ck CHECK (carencia_dias BETWEEN 0 AND 60),
-    CONSTRAINT tenants_motivo_ck CHECK (motivo_suspensao IN ('', 'manual', 'inadimplencia'))
+    CONSTRAINT tenants_motivo_ck CHECK (motivo_suspensao IN ('', 'manual', 'inadimplencia')),
+    CONSTRAINT tenants_cancelada_ck CHECK ((status = 'cancelada') = (cancelada_em IS NOT NULL))
 );
 
 CREATE TABLE plataforma_usuarios (

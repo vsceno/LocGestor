@@ -187,6 +187,11 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+Menu **Números**: receita do mês e dos últimos 12 meses (mensalidades recebidas), locadoras novas e canceladas por
+mês, taxa de cancelamento e ticket médio. **Cancelar contrato** (no detalhe da locadora) encerra o contrato: o acesso
+fica bloqueado, as cobranças pendentes no Asaas são canceladas e a locadora não volta pelo painel. Os gráficos
+precisam do arquivo `assets/vendor/chart.umd.js`; se o `.htaccess` do Laragon bloquear `/vendor/`, eles ficam vazios.
+
 Em **+ Nova locadora**, informe nome, identificador de acesso (ex.: `alfa-locacoes`), plano e limite de usuários.
 O sistema cria, numa única transação:
 

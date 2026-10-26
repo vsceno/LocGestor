@@ -19,6 +19,7 @@ const MENU = [
 ];
 const MENU_PLATAFORMA = [
     'tenants' => ['Locadoras', 'produtos'],
+    'numeros' => ['Números', 'painel'],
     'planos'  => ['Planos', 'caixa'],
     'conta'   => ['Minha senha', 'config'],
 ];
