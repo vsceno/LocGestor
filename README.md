@@ -256,6 +256,20 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
 - **Histórico da unidade**: todas as locações e manutenções dela. **Baixa** (venda, perda, sucata) tira a unidade
   do patrimônio e diminui 1 do estoque; só vale para peça que não está na rua nem em manutenção.
 
+### Auditoria
+
+*Configurações › Auditoria* (só administrador): toda inclusão, alteração e exclusão em locações, devoluções,
+reservas, clientes, produtos, kits, categorias, patrimônio, manutenções, caixa, usuários e dados da empresa, com
+**quem**, **quando** e **o que mudou** (antes → depois). Filtros por período, tipo, ação e usuário; o link
+*histórico* mostra a vida inteira de um registro.
+
+- É gravada por **gatilhos no banco**: vale para qualquer tela e não depende de lembrar de registrar no código.
+- O sistema **só inclui e lê**: o histórico não pode ser alterado nem apagado (o banco não dá essa permissão).
+- **LGPD:** CPF/CNPJ, RG, telefones, e-mail e endereço dos clientes, a chave PIX e o hash das senhas aparecem como
+  *(oculto)*: a auditoria mostra que mudaram, não os valores.
+- O login só atualiza o último acesso e não entra na auditoria. Alterações feitas pelo painel da plataforma
+  aparecem como `plataforma: <login>`.
+
 ---
 
 ## 4. Estrutura do projeto
@@ -391,6 +405,9 @@ Preparação para o futuro:
   aplicação (`logs/app.log`) remove os detalhes das mensagens do banco e mascara números com cara de CPF/CNPJ.
 - Violação de política RLS aparece ao usuário como "Operação não permitida" e é registrada como
   **ALERTA DE SEGURANÇA** no log.
+- **Auditoria** de toda alteração nos cadastros e movimentos (seção 3), sem dados pessoais nem senhas.
+- Pilhas de erro do PHP sem os argumentos das funções (`zend.exception_ignore_args`): a senha do banco nunca
+  chega ao `php-erros.log`.
 - Pastas `app/`, `modulos/`, `modulos_plataforma/`, `database/`, `tests/` e `logs/` são bloqueadas para a web.
 
 ---
@@ -427,6 +444,7 @@ psql -U postgres -d locgestor -f database\migrations\004_vistorias.sql
 psql -U postgres -d locgestor -f database\migrations\005_precos_kits.sql
 psql -U postgres -d locgestor -f database\migrations\006_cobranca_asaas.sql
 psql -U postgres -d locgestor -f database\migrations\007_patrimonio_manutencao.sql
+psql -U postgres -d locgestor -f database\migrations\008_auditoria.sql
 php tests\isolamento.php
 ```
 
@@ -439,6 +457,7 @@ php tests\isolamento.php
 | `005_precos_kits.sql` | preço semanal/mensal (`produtos`, `locacao_itens`), função `preco_periodo`, view de valores e tabelas `kits`/`kit_itens` |
 | `006_cobranca_asaas.sql` | cobrança automática: colunas em `tenants`, tabelas `assinatura_cobrancas` (com RLS) e `gateway_eventos` |
 | `007_patrimonio_manutencao.sql` | tabelas `unidades`, `manutencoes` e `locacao_unidades`, view `vw_produto_manutencao` |
+| `008_auditoria.sql` | tabela `auditoria` (com RLS, só inclusão e leitura), função `auditar()` e gatilhos nas tabelas principais |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -576,7 +595,7 @@ Não implementado nesta versão:
 - **recuperação de senha** por e-mail (precisa de uma conta SMTP) e envio de contrato/fatura por e-mail;
 - envio **automático** pelo WhatsApp (API paga: WhatsApp Business, Z-API, Twilio) e PDF anexado (hoje: links `wa.me` com a mensagem pronta e "Salvar como PDF" do navegador);
 - **baixa automática** do PIX das locações (precisa da API do banco da locadora; as mensalidades já têm cobrança automática pelo Asaas);
-- **auditoria** detalhada (quem alterou o quê) e exclusão/anonimização de cliente a pedido (LGPD);
+- exclusão/anonimização de cliente a pedido (LGPD) e prazo de guarda da auditoria (hoje ela não expira);
 - **anexos** de documentos do cliente (fotos de avaria e assinatura já existem nas vistorias);
 
 Sugestões de próximos passos, em ordem:

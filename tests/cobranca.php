@@ -135,11 +135,13 @@ function limpar(): void
 {
     global $SLUGS;
     $em = "(SELECT id FROM tenants WHERE slug IN ('" . implode("','", $SLUGS) . "'))";
+    db("SELECT set_config('app.auditoria', 'off', false)");
     db("DELETE FROM assinatura_cobrancas WHERE locadora_id IN $em");
     db("DELETE FROM assinatura_pagamentos WHERE locadora_id IN $em");
     foreach (['usuarios', 'categorias', 'empresa', 'tenant_sequencias'] as $t) {
         db("DELETE FROM $t WHERE tenant_id IN $em");
     }
+    db("DELETE FROM auditoria WHERE tenant_id IN $em");
     db("DELETE FROM tenants WHERE slug IN ('" . implode("','", $SLUGS) . "')");
     db("DELETE FROM gateway_eventos WHERE id LIKE 'evt_teste_%'");
     db('DELETE FROM login_tentativas');

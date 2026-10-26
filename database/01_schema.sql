@@ -522,6 +522,23 @@ CREATE INDEX locacao_unidades_item_idx ON locacao_unidades (tenant_id, locacao_i
 -- Uma unidade não está na rua em duas locações ao mesmo tempo
 CREATE UNIQUE INDEX locacao_unidades_na_rua_uk ON locacao_unidades (tenant_id, unidade_id) WHERE devolucao_id IS NULL;
 
+-- Auditoria: cada inclusão, alteração e exclusão nas tabelas principais (gravada por gatilho, ver auditar())
+CREATE TABLE auditoria (
+    id          uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id   uuid         NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
+    quando      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    usuario_id  uuid,                                  -- sem FK: o histórico não depende do cadastro do usuário
+    usuario     VARCHAR(80)  NOT NULL DEFAULT '',      -- login no momento ("plataforma: ...", "sistema")
+    tabela      VARCHAR(40)  NOT NULL,
+    registro_id uuid,
+    rotulo      VARCHAR(160) NOT NULL DEFAULT '',      -- identificação legível: nº, código, nome
+    acao        CHAR(1)      NOT NULL CHECK (acao IN ('I', 'U', 'D')),
+    dados       JSONB        NOT NULL,                 -- I/D: o registro; U: {campo: [antes, depois]}
+    CONSTRAINT auditoria_tenant_id_uk UNIQUE (tenant_id, id)
+);
+CREATE INDEX auditoria_quando_idx ON auditoria (tenant_id, quando DESC);
+CREATE INDEX auditoria_registro_idx ON auditoria (tenant_id, registro_id);
+
 -- Numeração própria de cada locadora ('locacao', 'reserva', ...)
 CREATE TABLE tenant_sequencias (
     tenant_id   uuid        NOT NULL DEFAULT app_tenant_id() REFERENCES tenants (id),
@@ -542,7 +559,7 @@ BEGIN
                              'reservas', 'reserva_itens', 'locacoes', 'locacao_itens',
                              'devolucoes', 'devolucao_itens', 'caixa', 'tenant_sequencias',
                              'vistorias', 'vistoria_itens', 'vistoria_fotos', 'kits', 'kit_itens',
-                             'unidades', 'manutencoes', 'locacao_unidades']
+                             'unidades', 'manutencoes', 'locacao_unidades', 'auditoria']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -594,6 +611,77 @@ $$
                            CASE WHEN p_mensal > 0 THEN d % 30 ELSE d END AS r
                       FROM (SELECT GREATEST(1, p_dias) AS d) a) b) c
 $$;
+
+-- Auditoria (a explicação completa está em migrations/008_auditoria.sql)
+-- Argumentos do gatilho: colunas mascaradas, colunas ignoradas (CSV) e a coluna do rótulo
+CREATE FUNCTION auditar() RETURNS trigger LANGUAGE plpgsql AS
+$$
+DECLARE
+    v_mascarar TEXT[] := string_to_array(NULLIF(TG_ARGV[0], ''), ',');
+    v_ignorar  TEXT[] := ARRAY['tenant_id', 'criado_em'] || COALESCE(string_to_array(NULLIF(TG_ARGV[1], ''), ','), '{}');
+    v_antes    JSONB  := CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) END;
+    v_depois   JSONB  := CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) END;
+    v_reg      JSONB  := COALESCE(v_depois, v_antes);
+    v_dados    JSONB;
+BEGIN
+    IF current_setting('app.auditoria', true) = 'off'
+       AND current_user NOT IN ('locgestor_app', 'locgestor_plataforma') THEN
+        RETURN NULL;
+    END IF;
+    v_mascarar := COALESCE(v_mascarar, '{}');
+    IF TG_OP = 'UPDATE' THEN
+        SELECT jsonb_object_agg(a.key, CASE WHEN a.key = ANY (v_mascarar) THEN '["***", "***"]'::jsonb
+                                            ELSE jsonb_build_array(a.value, d.value) END)
+          INTO v_dados
+          FROM jsonb_each(v_antes) a JOIN jsonb_each(v_depois) d ON d.key = a.key
+         WHERE a.value IS DISTINCT FROM d.value AND NOT a.key = ANY (v_ignorar);
+        IF v_dados IS NULL THEN
+            RETURN NULL;   -- nada relevante mudou (ex.: só o último acesso)
+        END IF;
+    ELSE
+        SELECT COALESCE(jsonb_object_agg(r.key, CASE WHEN r.key = ANY (v_mascarar) AND r.value <> '""'::jsonb
+                                                     THEN '"***"'::jsonb ELSE r.value END), '{}'::jsonb)
+          INTO v_dados
+          FROM jsonb_each(v_reg) r
+         WHERE NOT r.key = ANY (v_ignorar);
+    END IF;
+    INSERT INTO auditoria (tenant_id, usuario_id, usuario, tabela, registro_id, rotulo, acao, dados)
+    VALUES ((v_reg->>'tenant_id')::uuid,
+            NULLIF(current_setting('app.usuario_id', true), '')::uuid,
+            COALESCE(NULLIF(current_setting('app.usuario', true), ''),
+                     CASE current_user WHEN 'locgestor_plataforma' THEN 'plataforma' ELSE 'sistema' END),
+            TG_TABLE_NAME,
+            (v_reg->>'id')::uuid,
+            left(COALESCE(v_reg->>TG_ARGV[2], ''), 160),
+            left(TG_OP, 1),
+            v_dados);
+    RETURN NULL;
+END
+$$;
+REVOKE EXECUTE ON FUNCTION auditar() FROM PUBLIC;
+
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN SELECT * FROM (VALUES
+        ('clientes',    'cpf_cnpj,rg_ie,telefone,celular,email,cep,endereco,numero,bairro', '', 'nome'),
+        ('usuarios',    'senha_hash', 'ultimo_acesso', 'login'),
+        ('empresa',     'pix_chave', '', 'nome_fantasia'),
+        ('categorias',  '', '', 'nome'),
+        ('produtos',    '', '', 'codigo'),
+        ('kits',        '', '', 'codigo'),
+        ('reservas',    '', '', 'numero'),
+        ('locacoes',    '', '', 'numero'),
+        ('devolucoes',  '', '', 'data'),
+        ('caixa',       '', '', 'descricao'),
+        ('unidades',    '', '', 'patrimonio'),
+        ('manutencoes', '', '', 'numero')
+    ) AS t(tabela, mascarar, ignorar, rotulo) LOOP
+        EXECUTE format('CREATE TRIGGER auditoria AFTER INSERT OR UPDATE OR DELETE ON %I
+                          FOR EACH ROW EXECUTE FUNCTION auditar(%L, %L, %L)', r.tabela, r.mascarar, r.ignorar, r.rotulo);
+    END LOOP;
+END $$;
 
 -- =====================================================================
 -- VIEWS (security_invoker = true é OBRIGATÓRIO: sem isso o RLS é ignorado)
@@ -675,6 +763,8 @@ GRANT SELECT, UPDATE ON empresa TO locgestor_app;
 -- Vistorias são prova: só leitura e inclusão
 GRANT SELECT, INSERT ON vistorias, vistoria_itens, vistoria_fotos TO locgestor_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON unidades, manutencoes, locacao_unidades TO locgestor_app;
+-- Auditoria: só leitura e inclusão (a inclusão é do gatilho, com o papel de quem alterou)
+GRANT SELECT, INSERT ON auditoria TO locgestor_app;
 GRANT SELECT ON vw_produto_alugado, vw_locacao_valores, vw_produto_manutencao TO locgestor_app;
 -- tenants não tem RLS: o app só lê as colunas necessárias ao login e ao limite de usuários
 GRANT SELECT (id, slug, nome, status, plano, limite_usuarios, vencimento, carencia_dias) ON tenants TO locgestor_app;
@@ -686,6 +776,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON planos TO locgestor_plataforma;
 GRANT SELECT, INSERT, DELETE ON assinatura_pagamentos TO locgestor_plataforma;
 GRANT SELECT, INSERT, UPDATE, DELETE ON assinatura_cobrancas TO locgestor_plataforma;
 GRANT SELECT, INSERT ON gateway_eventos TO locgestor_plataforma;
+GRANT INSERT ON auditoria TO locgestor_plataforma;
 GRANT SELECT (locadora_id, vencimento, valor, status, link) ON assinatura_cobrancas TO locgestor_app;
 GRANT SELECT, UPDATE ON plataforma_usuarios TO locgestor_plataforma;
 GRANT SELECT, INSERT ON empresa, categorias TO locgestor_plataforma;

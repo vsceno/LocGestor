@@ -427,3 +427,7 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 .patrimonio-item:last-of-type { border-bottom: 0; margin-bottom: 8px; }
 .patrimonio-opcoes, .unidades-dev { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 4px; }
 .patrimonio-opcoes .check, .unidades-dev .check { margin: 0; font-weight: 400; }
+
+/* Auditoria */
+.auditoria-dados { font-size: .85rem; color: var(--texto-2); max-width: 520px; overflow-wrap: anywhere; }
+.auditoria-dados strong { color: var(--texto); font-weight: 600; }

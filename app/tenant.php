@@ -108,4 +108,7 @@ function tenant_iniciar_sessao(): void
     }
     unset($u['ativo']);
     $_SESSION['usuario'] = $u; // perfil/nome sempre atualizados
+    // Quem está alterando: os gatilhos de auditoria gravam este usuário
+    q("SELECT set_config('app.usuario_id', :id, false), set_config('app.usuario', :login, false)",
+      ['id' => $u['id'], 'login' => mb_substr($u['login'], 0, 80)]);
 }

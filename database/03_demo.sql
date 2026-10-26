@@ -13,6 +13,8 @@
 SET client_encoding = 'UTF8';
 SET TIME ZONE 'America/Fortaleza';
 SET ROLE locgestor_owner;
+-- A carga da demonstração não entra na auditoria (o interruptor só vale para o dono do banco)
+SELECT set_config('app.auditoria', 'off', false);
 
 -- Alfa: mensalidade em dia (vence em 12 dias). Beta: vencida há 2 dias, ainda na carência de 5
 -- (o admin da Beta vê o aviso de mensalidade vencida, mas continua usando o sistema).

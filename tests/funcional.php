@@ -207,6 +207,8 @@ register_shutdown_function(function () use ($base, $inicio) {
     $q = fn($s, $p = []) => db($s, $p);
     try {
         db('BEGIN');
+        // A limpeza não entra na auditoria (o interruptor vale para o superusuário) e apaga a do teste
+        db("SELECT set_config('app.auditoria', 'off', true)");
         foreach ($base as $t) {
             $locs = "SELECT id FROM locacoes WHERE tenant_id = :t AND numero > :n";
             $p = ['t' => $t['id'], 'n' => $t['loc']];
@@ -247,6 +249,7 @@ register_shutdown_function(function () use ($base, $inicio) {
         foreach (['tenant_sequencias', 'usuarios', 'categorias', 'empresa'] as $tab) {
             $q("DELETE FROM $tab WHERE tenant_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         }
+        $q('DELETE FROM auditoria WHERE quando >= :i', ['i' => $inicio]);
         $q("DELETE FROM assinatura_cobrancas WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM assinatura_pagamentos WHERE locadora_id IN (SELECT id FROM tenants WHERE slug LIKE 'teste-%')");
         $q("DELETE FROM tenants WHERE slug LIKE 'teste-%'");
@@ -833,6 +836,44 @@ $alfa->enviar('index.php?p=caixa', 'index.php?p=caixa&a=excluir', ['id' => dbv('
 ok(str_starts_with($alfa->mensagem('index.php?p=caixa'), 'Lançamentos de locação não podem ser excluídos.'), 'admin NÃO exclui lançamento ligado a locação');
 $alfa->enviar('index.php?p=caixa', 'index.php?p=caixa&a=excluir', ['id' => $LID]);
 ok(dbv('SELECT count(*) FROM caixa WHERE id = :i', ['i' => $LID]) == 0, 'admin exclui lançamento manual');
+
+// =====================================================================
+secao('Auditoria');
+$aud = fn(string $cond, array $p = []) => db("SELECT * FROM auditoria WHERE tenant_id = :t AND quando >= :i AND $cond ORDER BY quando, id",
+                                             ['t' => $alfaId, 'i' => $inicio] + $p)->fetchAll();
+$ins = $aud("tabela = 'caixa' AND registro_id = :r", ['r' => $LID]);
+$dx = json_decode($ins[1]['dados'] ?? '{}', true);
+ok(count($ins) === 2 && $ins[0]['acao'] === 'I' && $ins[1]['acao'] === 'D' && $ins[1]['usuario'] === 'admin'
+   && $ins[1]['rotulo'] === 'TESTE despesa' && (float) ($dx['valor'] ?? 0) === 12.34,
+   'lançamento de caixa: inclusão e exclusão registradas, com usuário e valor', json_encode($ins));
+$sx = $aud("tabela = 'usuarios' AND acao = 'U' AND rotulo = 'teste.operador'");
+ok(count($sx) >= 1 && $sx[0]['usuario'] === 'teste.operador' && (json_decode($sx[0]['dados'], true)['senha_hash'] ?? null) === ['***', '***']
+   && !str_contains($sx[0]['dados'], '$2y$'), 'troca de senha registrada sem o hash da senha');
+$antes = count($aud("tabela = 'usuarios'"));
+(new Navegador($BASE))->entrar('alfa-locacoes', 'admin', 'admin123');
+ok(count($aud("tabela = 'usuarios'")) === $antes, 'login (só o último acesso muda) não entra na auditoria');
+$lx = $aud("tabela = 'locacoes' AND rotulo = :n", ['n' => (string) $N]);
+ok(count($lx) >= 2 && $lx[0]['acao'] === 'I' && end($lx)['acao'] === 'U' && end($lx)['usuario'] === 'admin'
+   && (json_decode(end($lx)['dados'], true)['status'] ?? null) === ['aberta', 'devolvida'], "locação nº $N: criação e mudança de situação (aberta → devolvida)");
+$alfa->enviar('index.php?p=clientes&a=novo', 'index.php?p=clientes&a=salvar',
+              ['tipo' => 'PF', 'nome' => 'TESTE Auditoria', 'cpf_cnpj' => '390.533.447-05', 'celular' => '(85) 98888-7777', 'ativo' => '1']);
+$CA = dbv("SELECT id FROM clientes WHERE nome = 'TESTE Auditoria'");
+$alfa->enviar("index.php?p=clientes&a=editar&id=$CA", 'index.php?p=clientes&a=salvar',
+              ['id' => $CA, 'tipo' => 'PF', 'nome' => 'TESTE Auditoria Silva', 'cpf_cnpj' => '390.533.447-05', 'celular' => '(85) 97777-6666', 'ativo' => '1']);
+$cx = $aud("tabela = 'clientes' AND registro_id = :r", ['r' => $CA]);
+$c0 = json_decode($cx[0]['dados'] ?? '{}', true);
+$c1 = json_decode($cx[1]['dados'] ?? '{}', true);
+ok(count($cx) === 2 && $c0['cpf_cnpj'] === '***' && $c0['celular'] === '***' && $c0['nome'] === 'TESTE Auditoria'
+   && !str_contains($cx[0]['dados'] . $cx[1]['dados'], '39053344705') && !str_contains($cx[0]['dados'] . $cx[1]['dados'], '98888'),
+   'cliente novo: CPF e celular ficam ocultos na auditoria');
+ok(($c1['nome'] ?? null) === ['TESTE Auditoria', 'TESTE Auditoria Silva'] && ($c1['celular'] ?? null) === ['***', '***'] && !isset($c1['cpf_cnpj']),
+   'cliente alterado: nome com antes/depois, celular só "alterado", CPF igual não aparece', json_encode($c1));
+$tela = $alfa->get("index.php?p=config&a=auditoria&registro=$CA&de=2000-01-01")['corpo'];
+ok(str_contains($tela, '2 registro(s)') && str_contains(texto($tela), 'nome: TESTE Auditoria → TESTE Auditoria Silva')
+   && str_contains($tela, '(oculto, alterado)'), 'tela de auditoria (admin): histórico do cliente com antes → depois');
+$tela = $op->get('index.php?p=config&a=auditoria&de=2000-01-01')['corpo'];
+ok(str_contains($tela, 'Acesso restrito ao administrador.') && !str_contains($tela, 'TESTE Auditoria'), 'operador não abre a auditoria');
+ok(!str_contains($beta->get('index.php?p=config&a=auditoria&de=2000-01-01')['corpo'], 'TESTE Auditoria'), 'Beta não vê a auditoria da Alfa');
 
 // =====================================================================
 secao('Painel, relatórios e CSV');

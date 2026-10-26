@@ -9,7 +9,7 @@ declare(strict_types=1);
 function config_abas(string $ativa): void
 {
     $abas = is_admin()
-        ? ['index' => 'Empresa e documentos', 'usuarios' => 'Usuários', 'senha' => 'Minha senha']
+        ? ['index' => 'Empresa e documentos', 'usuarios' => 'Usuários', 'auditoria' => 'Auditoria', 'senha' => 'Minha senha']
         : ['senha' => 'Minha senha'];
     echo '<nav class="abas">';
     foreach ($abas as $a => $rot) {
@@ -184,4 +184,130 @@ function config_senha_salvar(): void
     senha_trocar($_POST['senha_atual'] ?? '', $_POST['senha_nova'] ?? '', $_POST['senha_confirma'] ?? '');
     flash('Senha alterada.');
     redirect(url('config', ['a' => 'senha']));
+}
+
+// ---------------------------------------------------------------------
+// Auditoria: quem incluiu, alterou ou excluiu o quê (gravada por gatilho no banco)
+// ---------------------------------------------------------------------
+const AUDITORIA_TABELAS = [
+    'locacoes' => 'Locação', 'devolucoes' => 'Devolução', 'reservas' => 'Reserva', 'clientes' => 'Cliente',
+    'produtos' => 'Produto', 'kits' => 'Kit', 'categorias' => 'Categoria', 'unidades' => 'Unidade (patrimônio)',
+    'manutencoes' => 'Manutenção', 'caixa' => 'Caixa', 'usuarios' => 'Usuário', 'empresa' => 'Empresa',
+];
+const AUDITORIA_ACOES = ['I' => 'incluiu', 'U' => 'alterou', 'D' => 'excluiu'];
+
+/** Valor de um campo para a tela (texto curto). */
+function auditoria_valor($v): string
+{
+    return match (true) {
+        $v === null  => '—',
+        $v === true  => 'sim',
+        $v === false => 'não',
+        $v === '***' => '(oculto)',
+        is_array($v) => json_encode($v, JSON_UNESCAPED_UNICODE),
+        default      => mb_strimwidth((string) $v, 0, 60, '…'),
+    };
+}
+
+/** "Locação nº 12", "Cliente Maria..." com link para o registro, quando ele tem tela e ainda existe. */
+function auditoria_link(array $a): string
+{
+    $numerado = in_array($a['tabela'], ['locacoes', 'reservas', 'manutencoes'], true);
+    $texto = (AUDITORIA_TABELAS[$a['tabela']] ?? $a['tabela']) . ($a['rotulo'] !== '' ? ($numerado ? ' nº ' : ' ') . $a['rotulo'] : '');
+    if ($a['acao'] === 'D' || $a['registro_id'] === null) {
+        return e($texto);
+    }
+    $url = match ($a['tabela']) {
+        'locacoes'    => url('locacoes', ['a' => 'ver', 'n' => $a['rotulo']]),
+        'clientes'    => url('clientes', ['a' => 'ver', 'id' => $a['registro_id']]),
+        'produtos'    => url('produtos', ['a' => 'editar', 'id' => $a['registro_id']]),
+        'unidades'    => url('produtos', ['a' => 'unidade', 'id' => $a['registro_id']]),
+        'manutencoes' => url('manutencoes', ['a' => 'ver', 'id' => $a['registro_id']]),
+        'kits'        => url('produtos', ['a' => 'kit_editar', 'id' => $a['registro_id']]),
+        default       => null,
+    };
+    return $url === null ? e($texto) : '<a href="' . e($url) . '">' . e($texto) . '</a>';
+}
+
+function config_auditoria(): void
+{
+    require_admin();
+    $de = valid_date(get('de')) ? get('de') : date('Y-m-d', strtotime('-30 days'));
+    $ate = valid_date(get('ate')) ? get('ate') : today();
+    $tabela = isset(AUDITORIA_TABELAS[get('tabela')]) ? get('tabela') : '';
+    $acao = isset(AUDITORIA_ACOES[get('acao')]) ? get('acao') : '';
+    $usuario = mb_substr(get('usuario'), 0, 80);
+    $registro = is_uuid(get('registro')) ? get('registro') : '';
+
+    $where = ['a.quando >= CAST(:de AS date)', "a.quando < CAST(:ate AS date) + INTERVAL '1 day'"];
+    $params = ['de' => $de, 'ate' => $ate];
+    foreach (['tabela' => $tabela, 'acao' => $acao, 'usuario' => $usuario, 'registro_id' => $registro] as $col => $v) {
+        if ($v !== '') {
+            $where[] = "a.$col = :$col";
+            $params[$col] = $v;
+        }
+    }
+    $sqlWhere = implode(' AND ', $where);
+    $pg = paginate("SELECT count(*) FROM auditoria a WHERE $sqlWhere", $params, 50);
+    $linhas = all("SELECT a.* FROM auditoria a WHERE $sqlWhere ORDER BY a.quando DESC, a.id DESC
+                   LIMIT {$pg['por']} OFFSET {$pg['offset']}", $params);
+    $usuarios = array_column(all('SELECT DISTINCT usuario FROM auditoria ORDER BY usuario'), 'usuario');
+    $cores = ['I' => 'verde', 'U' => 'azul', 'D' => 'vermelho'];
+
+    layout_start('Configurações', 'config');
+    config_abas('auditoria');
+    ?>
+    <div class="card">
+        <div class="card-titulo"><h2>Auditoria</h2><span class="muted"><?= num($pg['total']) ?> registro(s)</span></div>
+        <p class="ajuda">Toda inclusão, alteração e exclusão em locações, clientes, produtos, caixa, usuários e demais cadastros,
+            com quem fez e quando. O histórico não pode ser alterado nem apagado pelo sistema. Dados pessoais e senhas
+            aparecem como <em>(oculto)</em>: o registro mostra que mudaram, não os valores.</p>
+        <form method="get" class="filtros">
+            <input type="hidden" name="p" value="config"><input type="hidden" name="a" value="auditoria">
+            <?php if ($registro !== ''): ?><input type="hidden" name="registro" value="<?= e($registro) ?>"><?php endif; ?>
+            <input type="date" name="de" value="<?= e($de) ?>" aria-label="De">
+            <input type="date" name="ate" value="<?= e($ate) ?>" aria-label="Até">
+            <select name="tabela" aria-label="O quê"><?= options(AUDITORIA_TABELAS, $tabela, 'Tudo') ?></select>
+            <select name="acao" aria-label="Ação"><?= options(AUDITORIA_ACOES, $acao, 'Todas as ações') ?></select>
+            <select name="usuario" aria-label="Usuário"><?= options($usuarios, $usuario, 'Todos os usuários') ?></select>
+            <button class="btn btn-sec">Filtrar</button>
+            <?php if ($registro !== ''): ?><a href="<?= e(url('config', ['a' => 'auditoria'])) ?>">ver tudo</a><?php endif; ?>
+        </form>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>O quê</th><th>Detalhes</th></tr></thead>
+                <tbody>
+                <?php foreach ($linhas as $a): $dados = json_decode($a['dados'], true) ?: []; ?>
+                    <tr>
+                        <td class="nowrap"><?= e(dt($a['quando'], true)) ?></td>
+                        <td><?= e($a['usuario']) ?></td>
+                        <td><span class="selo <?= $cores[$a['acao']] ?>"><?= e(AUDITORIA_ACOES[$a['acao']]) ?></span></td>
+                        <td><?= auditoria_link($a) ?>
+                            <?php if ($a['registro_id']): ?>
+                                <a class="muted" title="Todo o histórico deste registro"
+                                   href="<?= e(url('config', ['a' => 'auditoria', 'registro' => $a['registro_id'], 'de' => '2000-01-01'])) ?>">histórico</a>
+                            <?php endif; ?></td>
+                        <td class="auditoria-dados">
+                            <?php if ($a['acao'] === 'U'): ?>
+                                <?php foreach ($dados as $campo => [$antes, $depois]): ?>
+                                    <div><strong><?= e(str_replace('_', ' ', $campo)) ?>:</strong>
+                                        <?= $antes === '***' ? '(oculto, alterado)' : e(auditoria_valor($antes)) . ' → ' . e(auditoria_valor($depois)) ?></div>
+                                <?php endforeach; ?>
+                            <?php else: // inclusão/exclusão: só os campos preenchidos
+                                $preenchidos = array_filter($dados, fn($v, $k) => $k !== 'id' && $v !== null && $v !== '', ARRAY_FILTER_USE_BOTH); ?>
+                                <?= e(implode(' · ', array_map(fn($k, $v) => str_replace('_', ' ', $k) . ': ' . auditoria_valor($v),
+                                    array_keys($preenchidos), array_values($preenchidos)))) ?>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (!$linhas): ?><tr><td colspan="5" class="vazio">Nada registrado no período.</td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?= pager($pg, 'config', array_filter(['a' => 'auditoria', 'de' => $de, 'ate' => $ate, 'tabela' => $tabela, 'acao' => $acao,
+                                                'usuario' => $usuario, 'registro' => $registro])) ?>
+    </div>
+    <?php
+    layout_end();
 }

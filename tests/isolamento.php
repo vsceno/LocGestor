@@ -45,6 +45,7 @@ const TABELAS = [
     'unidades'          => 'id',
     'manutencoes'       => 'id',
     'locacao_unidades'  => 'id',
+    'auditoria'         => 'id',
 ];
 const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores', 'vw_produto_manutencao'];
 
@@ -397,6 +398,16 @@ deve_falhar($pdo, 'DELETE em vistoria_fotos (prova não se apaga)', 'DELETE FROM
 deve_falhar($pdo, 'SELECT do id do gateway em assinatura_cobrancas', 'SELECT gateway_id FROM assinatura_cobrancas', [], '42501');
 deve_falhar($pdo, 'UPDATE em assinatura_cobrancas (marcar como paga)', "UPDATE assinatura_cobrancas SET status = 'paga'", [], '42501');
 deve_falhar($pdo, 'SELECT em gateway_eventos', 'SELECT * FROM gateway_eventos', [], '42501');
+// Auditoria: o histórico não se altera nem se apaga, e o sistema não consegue desligar a gravação
+deve_falhar($pdo, 'UPDATE em auditoria (reescrever o histórico)', "UPDATE auditoria SET usuario = 'outro'", [], '42501');
+deve_falhar($pdo, 'DELETE em auditoria (apagar o histórico)', 'DELETE FROM auditoria', [], '42501');
+$pdo->beginTransaction();
+q($pdo, "SELECT set_config('app.auditoria', 'off', true), set_config('app.usuario', 'teste-isolamento', true)");
+$cat = val($pdo, 'SELECT id FROM categorias ORDER BY nome LIMIT 1');
+q($pdo, "UPDATE categorias SET nome = nome || ' *' WHERE id = :id", ['id' => $cat]);
+$gravou = (int) val($pdo, "SELECT count(*) FROM auditoria WHERE registro_id = :id AND usuario = 'teste-isolamento'", ['id' => $cat]);
+$pdo->rollBack();
+confere($gravou === 1, "app.auditoria = 'off' não desliga a auditoria para locgestor_app", "registros gravados: $gravou");
 
 // =====================================================================
 teste('T-ISO-08  Mesmo CPF e mesmo código de produto em locadoras diferentes');
