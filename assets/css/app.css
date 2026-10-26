@@ -449,3 +449,9 @@ a.kpi:hover { box-shadow: 0 2px 8px rgba(20, 24, 35, .12); }
 /* Cadastro público */
 .cadastro-caixa { max-width: 560px; }
 .isca { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+/* Painel da plataforma: locadoras que precisam de atenção */
+.atencao-faixa { border-left: 4px solid var(--amarelo); }
+.atencao-lista { list-style: none; margin: 0; padding: 0; }
+.atencao-lista li { padding: 6px 0; border-bottom: 1px solid var(--borda); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.atencao-lista li:last-child { border-bottom: 0; }

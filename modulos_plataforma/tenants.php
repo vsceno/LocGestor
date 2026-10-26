@@ -48,6 +48,56 @@ function locadora_por_id(string $id): ?array
         : null;
 }
 
+const FILTROS_LOCADORA = [
+    'todas'       => 'Todas',
+    'atencao'     => 'Precisam de atenção',
+    'vencidas'    => 'Mensalidade vencida',
+    'vencendo'    => 'Vencem em até 5 dias',
+    'suspensas'   => 'Suspensas',
+    'sem_acesso'  => 'Sem acesso há 7 dias',
+    'sem_cobranca' => 'Sem cobrança',
+];
+
+/**
+ * Motivos para olhar esta locadora agora (lista vazia = tudo certo). Usado pela faixa "Precisa de atenção"
+ * e pelos filtros. $t precisa de: status, motivo_suspensao, vencimento, ultimo_acesso, criado_em.
+ */
+function locadora_alertas(array $t): array
+{
+    $motivos = [];
+    if ($t['status'] === 'suspensa') {
+        $motivos[] = $t['motivo_suspensao'] === 'inadimplencia' ? 'suspensa por inadimplência' : 'suspensa';
+    }
+    if (!empty($t['vencimento'])) {
+        $dias = days_between(today(), $t['vencimento']);
+        if ($dias < 0) {
+            $motivos[] = 'mensalidade vencida há ' . (-$dias) . ' dia(s)';
+        } elseif ($dias <= 5) {
+            $motivos[] = $dias === 0 ? 'mensalidade vence hoje' : "mensalidade vence em $dias dia(s)";
+        }
+    }
+    $ultimo = $t['ultimo_acesso'] ?? null;
+    $referencia = $ultimo ?? $t['criado_em'];
+    if ($t['status'] === 'ativa' && $referencia !== null && strtotime((string) $referencia) < strtotime('-7 days')) {
+        $motivos[] = $ultimo ? 'sem acesso desde ' . dt($ultimo) : 'nunca acessou';
+    }
+    return $motivos;
+}
+
+/** Atende ao filtro escolhido na lista (ver FILTROS_LOCADORA). */
+function locadora_passa_filtro(array $t, string $filtro): bool
+{
+    return match ($filtro) {
+        'atencao'      => $t['alertas'] !== [],
+        'vencidas'     => !empty($t['vencimento']) && days_between(today(), $t['vencimento']) < 0,
+        'vencendo'     => !empty($t['vencimento']) && ($dias = days_between(today(), $t['vencimento'])) >= 0 && $dias <= 5,
+        'suspensas'    => $t['status'] === 'suspensa',
+        'sem_acesso'   => array_filter($t['alertas'], fn($m) => str_contains($m, 'acesso') || str_contains($m, 'acessou')) !== [],
+        'sem_cobranca' => empty($t['vencimento']),
+        default        => true,
+    };
+}
+
 function tenants_index(): void
 {
     suspender_inadimplentes();
@@ -70,10 +120,19 @@ function tenants_index(): void
         tenant_limpar();
     }
 
+    foreach ($tenants as &$t) {
+        $t['alertas'] = locadora_alertas($t);
+    }
+    unset($t);
+
+    $filtro = array_key_exists(get('filtro'), FILTROS_LOCADORA) ? get('filtro') : 'todas';
+    $visiveis = array_values(array_filter($tenants, fn($t) => locadora_passa_filtro($t, $filtro)));
+
     $ativas = array_filter($tenants, fn($t) => $t['status'] === 'ativa');
     // Receita mensal recorrente: locadoras ativas com cobrança
     $mrr = array_sum(array_map(fn($t) => $t['vencimento'] ? (float) $t['preco_mensal'] : 0, $ativas));
     $inadimplentes = count(array_filter($tenants, fn($t) => $t['motivo_suspensao'] === 'inadimplencia' && $t['status'] === 'suspensa'));
+    $atencao = array_filter($tenants, fn($t) => $t['alertas'] !== []);
 
     layout_start('Locadoras', 'tenants');
     ?>
@@ -82,6 +141,20 @@ function tenants_index(): void
         <div class="kpi verde"><span>Receita mensal recorrente</span><strong><?= money($mrr) ?></strong><small>locadoras ativas com cobrança</small></div>
         <div class="kpi vermelho"><span>Suspensas por inadimplência</span><strong><?= num($inadimplentes) ?></strong></div>
     </div>
+    <?php if ($atencao): ?>
+        <div class="card atencao-faixa">
+            <div class="card-titulo">
+                <h2>Precisam de atenção <span class="selo amarelo"><?= num(count($atencao)) ?></span></h2>
+                <a class="btn btn-sec btn-peq" href="<?= e(url('tenants', ['filtro' => 'atencao'])) ?>">Ver só essas</a>
+            </div>
+            <ul class="atencao-lista">
+                <?php foreach ($atencao as $t): ?>
+                    <li><a href="<?= e(url('tenants', ['a' => 'editar', 'id' => $t['id']])) ?>"><strong><?= e($t['nome']) ?></strong></a>
+                        <span class="muted"><?= e(implode(' · ', $t['alertas'])) ?></span></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
     <div class="card">
         <div class="card-titulo">
             <h2>Locadoras cadastradas</h2>
@@ -90,6 +163,12 @@ function tenants_index(): void
                 <a class="btn" href="<?= e(url('tenants', ['a' => 'nova'])) ?>">+ Nova locadora</a>
             </div>
         </div>
+        <form method="get" class="filtros">
+            <input type="hidden" name="p" value="tenants">
+            <select name="filtro" aria-label="Filtrar locadoras"><?= options(FILTROS_LOCADORA, $filtro) ?></select>
+            <button class="btn btn-sec btn-peq">Filtrar</button>
+            <span class="muted"><?= num(count($visiveis)) ?> de <?= num(count($tenants)) ?></span>
+        </form>
         <div class="tabela-wrap">
             <table class="tabela">
                 <thead>
@@ -97,7 +176,7 @@ function tenants_index(): void
                     <th class="num">Clientes</th><th class="num">Loc. abertas</th><th>Último acesso</th><th></th></tr>
                 </thead>
                 <tbody>
-                <?php foreach ($tenants as $t): [$sit, $cor] = assinatura_situacao($t); ?>
+                <?php foreach ($visiveis as $t): [$sit, $cor] = assinatura_situacao($t); ?>
                     <tr>
                         <td>
                             <a href="<?= e(url('tenants', ['a' => 'editar', 'id' => $t['id']])) ?>"><strong><?= e($t['nome']) ?></strong></a><br>
@@ -116,8 +195,8 @@ function tenants_index(): void
                         <td class="nowrap"><a class="btn btn-sec btn-peq" href="<?= e(url('tenants', ['a' => 'editar', 'id' => $t['id']])) ?>">Gerenciar</a></td>
                     </tr>
                 <?php endforeach; ?>
-                <?php if (!$tenants): ?>
-                    <tr><td colspan="9" class="vazio">Nenhuma locadora cadastrada.</td></tr>
+                <?php if (!$visiveis): ?>
+                    <tr><td colspan="9" class="vazio"><?= $tenants ? 'Nenhuma locadora neste filtro.' : 'Nenhuma locadora cadastrada.' ?></td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

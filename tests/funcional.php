@@ -1193,6 +1193,54 @@ if (!$senhaSuporte) {
     ok(dbv('SELECT motivo_suspensao FROM tenants WHERE id = :id', ['id' => $tid]) === 'manual', 'suspensão manual fica registrada como "manual"');
     $nv->req('index.php?p=dashboard');
     ok(str_contains($nv->mensagem('index.php?p=login'), 'Acesso suspenso'), 'suspensa pelo painel: a sessão aberta cai com "Acesso suspenso"');
+
+    // Atenção e filtros: locadoras de teste com situações conhecidas (criadas direto no banco)
+    $planoBasico = dbv("SELECT id FROM planos WHERE nome = 'Básico'");
+    $criar = fn(string $slug, string $nome, ?string $venc, string $status = 'ativa', string $motivo = '', string $criado = 'now()') =>
+        dbv("INSERT INTO tenants (slug, nome, plano_id, plano, vencimento, carencia_dias, status, motivo_suspensao, criado_em)
+             VALUES (:s, :n, :p, 'Básico', :v, 5, :st, :m, $criado - INTERVAL '0 days') RETURNING id",
+            ['s' => $slug, 'n' => $nome, 'p' => $planoBasico, 'v' => $venc, 'st' => $status, 'm' => $motivo]);
+    $vencida = $criar('teste-atn-venc', 'TESTE Atencao vencida', dia(-10), 'ativa', '', "now() - INTERVAL '30 days'");
+    $vence = $criar('teste-atn-vence', 'TESTE Atencao vence logo', dia(3));
+    $semCob = $criar('teste-atn-sem', 'TESTE Atencao sem cobranca', null);
+    $suspensa = $criar('teste-atn-susp', 'TESTE Atencao suspensa', dia(3), 'suspensa', 'inadimplencia');
+    $parada = $criar('teste-atn-parada', 'TESTE Atencao parada', dia(20), 'ativa', '', "now() - INTERVAL '30 days'");
+    db("INSERT INTO usuarios (tenant_id, nome, login, senha_hash, perfil, ultimo_acesso)
+        VALUES (:t, 'Parado', 'parado', 'x', 'admin', now() - INTERVAL '10 days')", ['t' => $parada]);
+    $tudo = texto($pl->get('plataforma.php?p=tenants')['corpo']);
+    // Só a tabela (a faixa "Precisam de atenção" fica no topo de toda página e citaria todas)
+    $lista = function (string $f) use ($pl): string {
+        $h = $pl->get("plataforma.php?p=tenants&filtro=$f")['corpo'];
+        $p = strpos($h, 'Último acesso');
+        return texto($p === false ? '' : substr($h, $p));
+    };
+    // A rotina diária suspende sozinha a vencida além da carência: o motivo mostrado é esse
+    ok(str_contains($tudo, 'Precisam de atenção') && str_contains($tudo, 'TESTE Atencao vencida suspensa por inadimplência · mensalidade vencida há 10 dia(s)')
+       && str_contains($tudo, 'TESTE Atencao suspensa suspensa por inadimplência'), 'faixa "Precisam de atenção" traz o motivo de cada uma');
+    ok(str_contains($tudo, 'TESTE Atencao parada sem acesso desde') && str_contains($tudo, 'TESTE Atencao sem cobranca nunca acessou') === false,
+       'locadora sem acesso há 7+ dias entra na faixa; sem cobrança e recém-criada, não');
+    $v = $lista('vencidas');
+    ok(str_contains($v, 'TESTE Atencao vencida') && !str_contains($v, 'TESTE Atencao vence logo'), 'filtro "Mensalidade vencida" mostra só as vencidas');
+    $vc = $lista('vencendo');
+    ok(str_contains($vc, 'TESTE Atencao vence logo') && !str_contains($vc, 'TESTE Atencao vencida') && !str_contains($vc, 'TESTE Atencao parada'),
+       'filtro "Vencem em até 5 dias" mostra só as que vencem logo');
+    ok(str_contains($lista('suspensas'), 'TESTE Atencao suspensa') && !str_contains($lista('suspensas'), 'TESTE Atencao vence logo'),
+       'filtro "Suspensas" mostra só as suspensas');
+    ok(str_contains($lista('sem_acesso'), 'TESTE Atencao parada') && !str_contains($lista('sem_acesso'), 'TESTE Atencao vence logo'),
+       'filtro "Sem acesso há 7 dias" mostra a locadora parada');
+    ok(str_contains($lista('sem_cobranca'), 'TESTE Atencao sem cobranca') && !str_contains($lista('sem_cobranca'), 'TESTE Atencao vencida'),
+       'filtro "Sem cobrança" mostra só as isentas');
+    ok(str_contains($lista('atencao'), 'TESTE Atencao suspensa') && !str_contains($lista('atencao'), 'TESTE Atencao sem cobranca'),
+       'filtro "Precisam de atenção" esconde as que estão em dia');
+    ok(str_contains($lista('nao-existe'), 'Alfa Locações') && str_contains($lista('todas'), 'Alfa Locações'), 'filtro inválido mostra todas');
+    ok(str_contains($lista('vencidas'), 'Nenhuma locadora neste filtro') === false, 'lista com resultado não mostra a mensagem de vazio');
+
+    // limpa as de teste de atenção (o cleanup geral remove o resto)
+    db("DELETE FROM usuarios WHERE tenant_id = :t", ['t' => $parada]);
+    foreach ([$vencida, $vence, $semCob, $suspensa, $parada] as $id) {
+        db('DELETE FROM auditoria WHERE tenant_id = :id', ['id' => $id]);   // o que o próprio teste gerou
+        db('DELETE FROM tenants WHERE id = :id', ['id' => $id]);
+    }
 }
 
 /** Login com sucesso? (vai para o painel) */
