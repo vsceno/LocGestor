@@ -1025,7 +1025,8 @@ function devolucao_registrar(string $locacaoId, array $d): array
     $qtds = (array) ($d['qtd'] ?? []);
     $unidades = (array) ($d['unidades'] ?? []);
 
-    return tx(function () use ($locacaoId, $data, $multa, $avaria, $receber, $forma, $obs, $qtds, $unidades) {
+    $perdaQtds = (array) ($d['perda'] ?? []);
+    return tx(function () use ($locacaoId, $data, $multa, $avaria, $receber, $forma, $obs, $qtds, $perdaQtds, $unidades) {
         $loc = one('SELECT l.*, c.nome AS cliente_nome FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
                      WHERE l.id = :id FOR UPDATE OF l', ['id' => $locacaoId]);
         if ($loc === null) {
@@ -1038,11 +1039,12 @@ function devolucao_registrar(string $locacaoId, array $d): array
             throw new UserError('A data da devolução deve estar entre a saída (' . dt($loc['data_saida']) . ') e hoje.');
         }
 
-        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao
+        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.id AS produto_id, p.valor_reposicao
                         FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                        WHERE li.locacao_id = :id ORDER BY p.descricao FOR UPDATE OF li', ['id' => $locacaoId]);
         $dias = max(1, days_between($loc['data_saida'], $data));
         $devolver = [];
+        $perdas = [];
         foreach ($itens as $it) {
             $txt = trim((string) ($qtds[$it['id']] ?? '0'));
             $q = $txt === '' ? 0 : filter_var($txt, FILTER_VALIDATE_INT);
@@ -1052,6 +1054,22 @@ function devolucao_registrar(string $locacaoId, array $d): array
             }
             if ($q > $pendente) {
                 throw new UserError("Não é possível devolver $q de {$it['descricao']}: só há $pendente pendente(s).");
+            }
+            // Perdido ou extraviado: não volta, sai do estoque e é cobrado pelo valor de reposição
+            $txtPerda = trim((string) ($perdaQtds[$it['id']] ?? '0'));
+            $p = $txtPerda === '' ? 0 : filter_var($txtPerda, FILTER_VALIDATE_INT);
+            if ($p === false || $p < 0) {
+                throw new UserError("Quantidade perdida inválida para {$it['descricao']}.");
+            }
+            if ($q + $p > $pendente) {
+                throw new UserError("Devolvidos e perdidos de {$it['descricao']} somam mais que o pendente ($pendente).");
+            }
+            if ($p > 0) {
+                if (val('SELECT 1 FROM locacao_unidades WHERE locacao_item_id = :i AND devolucao_id IS NULL', ['i' => $it['id']]) !== null) {
+                    throw new UserError("{$it['descricao']} tem patrimônio: a perda de unidade não é registrada aqui.");
+                }
+                $perdas[] = ['item' => $it, 'qtd' => $p, 'reposicao' => (float) $it['valor_reposicao'],
+                             'valor' => round($p * (float) $it['valor_reposicao'], 2)];
             }
             if ($q > 0) {
                 $devolver[] = ['item' => $it, 'qtd' => $q, 'valor' => round($q * preco_item($it, $dias), 2)];
@@ -1064,17 +1082,28 @@ function devolucao_registrar(string $locacaoId, array $d): array
                 throw new UserError('Item inválido na devolução.');
             }
         }
-        if (!$devolver) {
+        if (!$devolver && !$perdas) {
             throw new UserError('Informe a quantidade de pelo menos um item a devolver.');
         }
+        // A reposição das perdas entra na avaria (já vai para o total e para o saldo da locação)
+        $perdaTotal = array_sum(array_column($perdas, 'valor'));
+        $linhasPerda = array_map(fn($x) => "Perda/extravio: {$x['qtd']} x {$x['item']['descricao']} = " . money($x['valor'])
+                                           . ' (valor de reposição).', $perdas);
+        $obsDev = trim(implode("\n", array_filter([$obs, ...$linhasPerda])));
 
         $devId = (string) val('INSERT INTO devolucoes (locacao_id, data, multa, avaria, obs, usuario_id)
                                VALUES (:l, :d, :m, :a, :o, :u) RETURNING id',
-            ['l' => $locacaoId, 'd' => $data, 'm' => $multa, 'a' => $avaria, 'o' => $obs, 'u' => uid()]);
+            ['l' => $locacaoId, 'd' => $data, 'm' => $multa, 'a' => $avaria + $perdaTotal, 'o' => $obsDev, 'u' => uid()]);
         foreach ($devolver as $dv) {
             q('INSERT INTO devolucao_itens (devolucao_id, locacao_item_id, quantidade, dias, valor) VALUES (:d, :i, :q, :n, :v)',
               ['d' => $devId, 'i' => $dv['item']['id'], 'q' => $dv['qtd'], 'n' => $dias, 'v' => $dv['valor']]);
             q('UPDATE locacao_itens SET qtd_devolvida = qtd_devolvida + :q WHERE id = :i', ['q' => $dv['qtd'], 'i' => $dv['item']['id']]);
+        }
+        foreach ($perdas as $pd) {
+            q('INSERT INTO devolucao_perdas (devolucao_id, locacao_item_id, quantidade, valor_reposicao, valor) VALUES (:d, :i, :q, :r, :v)',
+              ['d' => $devId, 'i' => $pd['item']['id'], 'q' => $pd['qtd'], 'r' => $pd['reposicao'], 'v' => $pd['valor']]);
+            q('UPDATE locacao_itens SET qtd_devolvida = qtd_devolvida + :q WHERE id = :i', ['q' => $pd['qtd'], 'i' => $pd['item']['id']]);
+            q('UPDATE produtos SET qtd_total = qtd_total - :q WHERE id = :p', ['q' => $pd['qtd'], 'p' => $pd['item']['produto_id']]);
         }
         devolucao_unidades($devId, $devolver, $unidades);
 

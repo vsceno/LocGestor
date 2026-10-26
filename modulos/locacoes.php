@@ -654,6 +654,7 @@ function locacoes_devolucao(): void
     $ajuste = locacao_ajuste($loc);
     $saldoSugerido = max(0, $apurado + $desta + $ajuste - $loc['valor_pago']);
     $qtdOld = (array) old('qtd', []);
+    $perdaOld = (array) old('perda', []);
     // Unidades (patrimônio) na rua: marcadas = voltaram nesta devolução
     $naRua = [];
     foreach (all('SELECT lu.locacao_item_id, lu.unidade_id, u.patrimonio FROM locacao_unidades lu
@@ -686,7 +687,7 @@ function locacoes_devolucao(): void
             <h2>Itens a devolver</h2>
             <div class="tabela-wrap">
                 <table class="tabela">
-                    <thead><tr><th>Produto</th><th class="num">Pendente</th><th class="num">Devolver agora</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
+                    <thead><tr><th>Produto</th><th class="num">Pendente</th><th class="num">Devolver agora</th><th class="num">Perdido</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
                     <tbody>
                     <?php foreach ($itens as $it): $pend = $it['quantidade'] - $it['qtd_devolvida']; ?>
                         <tr class="linha-dev" data-diaria="<?= e($it['valor_diaria']) ?>" data-semanal="<?= e($it['valor_semanal']) ?>"
@@ -704,6 +705,9 @@ function locacoes_devolucao(): void
                             <td class="num"><?= num($pend) ?> <span class="muted"><?= e($it['unidade']) ?></span></td>
                             <td class="num"><input type="number" name="qtd[<?= e($it['id']) ?>]" class="qtd-dev" min="0" max="<?= $pend ?>" step="1"
                                                    value="<?= e($qtdOld[$it['id']] ?? $pend) ?>" style="width:80px" aria-label="Quantidade a devolver"></td>
+                            <td class="num"><input type="number" name="perda[<?= e($it['id']) ?>]" min="0" max="<?= $pend ?>" step="1"
+                                                   value="<?= e($perdaOld[$it['id']] ?? '') ?>" style="width:80px" aria-label="Quantidade perdida ou extraviada"
+                                                   title="Não voltou: cobra o valor de reposição"></td>
                             <td class="num"><?= precos_html($it) ?></td>
                             <td class="num valor-dev">—</td>
                         </tr>

@@ -311,6 +311,14 @@ Dar desconto ou acréscimo numa locação ou num orçamento exige permissão. Qu
 locação não é gravada. O sistema guarda quem autorizou (*desconto_autorizado_por*), e o log de auditoria registra
 quem lançou e quem autorizou. Orçamento autorizado que vira locação leva a autorização junto, sem pedir senha de novo.
 
+### Perda ou extravio na devolução
+
+Na devolução, a coluna **Perdido** marca quantas unidades **não voltaram**. Cada unidade perdida é cobrada pelo
+**valor de reposição** do produto (cadastro), entra na avaria da devolução (e portanto no saldo da locação) e sai do
+estoque. A perda fica registrada na tabela de perdas e aparece na observação da devolução. A perda fecha o item como
+se tivesse voltado, então o pendente diminui. Não se cobra diária da unidade perdida: só a reposição.
+Produto com patrimônio (unidades) ainda não aceita perda nessa tela: a baixa da unidade é feita em *Produtos*.
+
 ### Busca geral
 
 O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
@@ -590,6 +598,7 @@ psql -U postgres -d locgestor -f database\migrations\018_orcamentos.sql
 psql -U postgres -d locgestor -f database\migrations\019_codigos_barras.sql
 psql -U postgres -d locgestor -f database\migrations\020_recibos.sql
 psql -U postgres -d locgestor -f database\migrations\021_desconto_autorizacao.sql
+psql -U postgres -d locgestor -f database\migrations\022_devolucao_perdas.sql
 php tests\isolamento.php
 ```
 
@@ -616,6 +625,7 @@ php tests\isolamento.php
 | `019_codigos_barras.sql` | tabela `produto_barras` (códigos de barras do produto; um principal e os similares) |
 | `020_recibos.sql` | tabela `recibos` (recibos numerados, sem alteração nem exclusão; CPF/CNPJ mascarado na auditoria) |
 | `021_desconto_autorizacao.sql` | coluna `desconto_autorizado_por` em `locacoes` e `orcamentos` (quem autorizou o desconto ou acréscimo) |
+| `022_devolucao_perdas.sql` | tabela `devolucao_perdas` (equipamentos perdidos ou extraviados na devolução, com o valor de reposição) |
 
 ### 10.2 Proteções do login (já ativas)
 

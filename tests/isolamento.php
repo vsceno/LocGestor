@@ -53,6 +53,7 @@ const TABELAS = [
     'orcamentos'        => 'id',
     'orcamento_itens'   => 'id',
     'recibos'           => 'id',
+    'devolucao_perdas'  => 'id',
     'entregas'          => 'id',
 ];
 const VIEWS = ['vw_produto_alugado', 'vw_locacao_valores', 'vw_produto_manutencao'];

@@ -1297,6 +1297,36 @@ ok($ORC_D && dbv('SELECT l.desconto_autorizado_por FROM orcamentos o JOIN locaco
    'converter o orçamento autorizado em locação leva a autorização junto, sem pedir senha de novo');
 
 // =====================================================================
+secao('Perda ou extravio na devolução (cobrança pelo valor de reposição)');
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-PERDA', 'descricao' => 'TESTE equipamento que pode se perder', 'unidade' => 'UN', 'qtd_total' => '3',
+               'valor_diaria' => '20,00', 'valor_reposicao' => '350,00', 'ativo' => '1', 'categoria_id' => $catSem]);
+$PERDA = $produto($alfaId, 'TESTE-PERDA');
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'local_uso' => 'TESTE perda',
+               'produto_id' => [$PERDA], 'quantidade' => ['2'], 'diaria' => ['']]);
+$LP = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE perda'");
+$IP = dbv('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $LP]);
+$devP = "index.php?p=locacoes&a=devolucao&id=$LP";
+
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1', "perda[$IP]" => '2']);
+ok(str_contains($alfa->mensagem($devP), 'somam mais que o pendente')
+   && dbv('SELECT count(*) FROM devolucoes WHERE locacao_id = :l', ['l' => $LP]) == 0,
+   'devolvido + perdido maior que o pendente é recusado e nada é gravado');
+
+$alfa->enviar($devP, 'index.php?p=locacoes&a=devolver', ['id' => $LP, 'data' => dia(0), "qtd[$IP]" => '1', "perda[$IP]" => '1']);
+ok((float) dbv('SELECT avaria FROM devolucoes WHERE locacao_id = :l', ['l' => $LP]) === 350.0,
+   'a perda de 1 cobra o valor de reposição (350,00) na avaria da devolução');
+ok((float) dbv('SELECT valor FROM devolucao_perdas WHERE locacao_item_id = :i', ['i' => $IP]) === 350.0
+   && dbv('SELECT quantidade FROM devolucao_perdas WHERE locacao_item_id = :i', ['i' => $IP]) == 1,
+   'a perda fica registrada com quantidade e valor');
+ok(dbv('SELECT qtd_total FROM produtos WHERE id = :p', ['p' => $PERDA]) == 2, 'o equipamento perdido sai do estoque');
+ok(dbv('SELECT status FROM locacoes WHERE id = :l', ['l' => $LP]) === 'devolvida', 'com a perda registrada, nada fica pendente e a locação encerra');
+ok(str_contains((string) dbv('SELECT obs FROM devolucoes WHERE locacao_id = :l', ['l' => $LP]), 'Perda/extravio: 1 x TESTE equipamento'),
+   'a observação da devolução registra a perda');
+ok(str_contains($alfa->get("index.php?p=locacoes&a=ver&id=$LP")['corpo'], 'R$ 350,00'), 'o saldo da locação já inclui a reposição');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",
