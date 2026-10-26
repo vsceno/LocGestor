@@ -193,6 +193,7 @@ const AUDITORIA_TABELAS = [
     'locacoes' => 'Locação', 'devolucoes' => 'Devolução', 'reservas' => 'Reserva', 'clientes' => 'Cliente',
     'produtos' => 'Produto', 'kits' => 'Kit', 'categorias' => 'Categoria', 'unidades' => 'Unidade (patrimônio)',
     'manutencoes' => 'Manutenção', 'caixa' => 'Caixa', 'usuarios' => 'Usuário', 'empresa' => 'Empresa',
+    'acesso_suporte' => 'Acesso de suporte',
 ];
 const AUDITORIA_ACOES = ['I' => 'incluiu', 'U' => 'alterou', 'D' => 'excluiu'];
 

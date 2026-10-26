@@ -187,6 +187,11 @@ Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
 
+**Acesso de suporte:** na tela de uma locadora, **Entrar como a locadora** (com o motivo, de 10 caracteres ou mais)
+abre o sistema dela como ela vê, **somente leitura**, por 30 minutos. O link tem um código de uso único que vale
+2 minutos (só o hash fica no banco). A locadora vê uma faixa no topo enquanto durar, e o acesso (quem, quando e o
+motivo; nunca o código) fica na auditoria dela, como "Acesso de suporte". Nada se grava nessa sessão.
+
 Menu **Uso**: por locadora, locações do mês, usuários que entraram nos últimos 30 dias (de quantos existem e do limite),
 espaço das fotos de vistoria, quais funções usa (vistorias, roteiro, patrimônio, manutenção, kits, contas) e
 sugestão de plano quando está perto do limite de usuários. Não mostra dados de clientes.

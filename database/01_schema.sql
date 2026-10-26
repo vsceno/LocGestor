@@ -131,6 +131,25 @@ ALTER TABLE assinatura_cobrancas FORCE ROW LEVEL SECURITY;
 CREATE POLICY plataforma_todas ON assinatura_cobrancas TO locgestor_plataforma USING (true) WITH CHECK (true);
 CREATE POLICY locadora_propria ON assinatura_cobrancas FOR SELECT TO locgestor_app USING (locadora_id = app_tenant_id());
 
+-- Acesso de suporte a uma locadora (ver migrations/013_acesso_suporte.sql)
+CREATE TABLE acessos_suporte (
+    id            uuid PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id     uuid         NOT NULL REFERENCES tenants (id),
+    login_suporte VARCHAR(40)  NOT NULL,
+    motivo        VARCHAR(300) NOT NULL CHECK (char_length(motivo) >= 10),
+    token_hash    CHAR(64)     NOT NULL,
+    criado_em     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    expira_em     TIMESTAMPTZ  NOT NULL,
+    usado_em      TIMESTAMPTZ,
+    CONSTRAINT acessos_suporte_token_uk UNIQUE (token_hash)
+);
+CREATE INDEX acessos_suporte_tenant_idx ON acessos_suporte (tenant_id, criado_em DESC);
+ALTER TABLE acessos_suporte ENABLE ROW LEVEL SECURITY;
+ALTER TABLE acessos_suporte FORCE ROW LEVEL SECURITY;
+CREATE POLICY isolamento_tenant ON acessos_suporte
+    USING (tenant_id = app_tenant_id()) WITH CHECK (tenant_id = app_tenant_id());
+CREATE POLICY plataforma_todas ON acessos_suporte TO locgestor_plataforma USING (true) WITH CHECK (true);
+
 -- Tentativas de login que falharam (limite contra tentativa e erro).
 -- Guarda só hashes do IP e da conta, nunca o IP ou o login em texto.
 CREATE TABLE login_tentativas (
@@ -845,6 +864,9 @@ GRANT SELECT, INSERT, UPDATE ON usuarios TO locgestor_plataforma;
 GRANT SELECT ON clientes, locacoes TO locgestor_plataforma;
 -- Tela de uso por locadora: só contagens (RLS da locadora continua valendo)
 GRANT SELECT ON vistorias, vistoria_fotos, entregas, unidades, manutencoes, kits, contas_pagar TO locgestor_plataforma;
+-- Acesso de suporte (painel "Entrar como a locadora"): registro do painel e troca do código pela locadora
+GRANT SELECT, INSERT ON acessos_suporte TO locgestor_plataforma;
+GRANT SELECT (id, tenant_id, login_suporte, motivo, token_hash, expira_em, usado_em), UPDATE (usado_em) ON acessos_suporte TO locgestor_app;
 GRANT EXECUTE ON FUNCTION app_tenant_id(), provisionar_dados_padrao(TEXT) TO locgestor_plataforma;
 
 -- Proteção do login (as duas áreas)

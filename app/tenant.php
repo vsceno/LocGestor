@@ -96,6 +96,17 @@ function tenant_iniciar_sessao(): void
         redirect(url('login'));
     }
 
+    // Sessão de suporte: não há usuário da locadora; vale só até o prazo, e é sempre somente leitura
+    if (!empty($_SESSION['suporte'])) {
+        if (!suporte_sessao_ativa()) {
+            tenant_limpar();
+            sessao_encerrar();
+            flash('O acesso de suporte expirou.', 'aviso');
+            redirect(url('login'));
+        }
+        return;
+    }
+
     // O usuário pode ter sido desativado depois do login (consulta já filtrada pelo RLS)
     $u = is_uuid(uid())
         ? one('SELECT id, nome, login, perfil, ativo, trocar_senha FROM usuarios WHERE id = :id', ['id' => uid()])

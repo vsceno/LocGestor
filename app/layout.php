@@ -199,6 +199,18 @@ function aviso_assinatura(): string
     return '';
 }
 
+/** Faixa de aviso quando a sessão é de suporte (somente leitura, com prazo e botão para encerrar). */
+function suporte_faixa(): string
+{
+    if (AREA !== 'locadora' || !suporte_sessao_ativa()) {
+        return '';
+    }
+    $s = $_SESSION['suporte'];
+    return '<div class="flash flash-aviso suporte-faixa" role="status">Acesso de suporte (somente leitura) · '
+         . e($s['login']) . ' · até ' . e(date('H:i', (int) $s['expira'])) . ' · '
+         . '<a href="' . e(url('suporte', ['a' => 'sair'])) . '">Encerrar acesso</a></div>';
+}
+
 /** Nome da locadora mostrado no topo do menu. */
 function nome_locadora(): string
 {
@@ -263,6 +275,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
         <?php endif; ?>
     </header>
     <main class="conteudo">
+        <?= suporte_faixa() ?>
         <?= aviso_assinatura() ?>
         <?= flashes_html() ?>
 <?php

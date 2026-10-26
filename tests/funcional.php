@@ -1348,6 +1348,50 @@ if (!$senhaSuporte) {
     db('DELETE FROM usuarios WHERE tenant_id = :t', ['t' => $uid]);
     db('DELETE FROM auditoria WHERE tenant_id = :t', ['t' => $uid]);
     db('DELETE FROM tenants WHERE id = :t', ['t' => $uid]);
+
+    // Acesso de suporte ("Entrar como a locadora"): código de uso único, somente leitura e registrado
+    $motivoSup = 'TESTE chamado 45: conferir o contrato';
+    $r = $pl->enviar("plataforma.php?p=tenants&a=editar&id=$betaId", 'plataforma.php?p=tenants&a=suporte_entrar',
+                     ['id' => $betaId, 'motivo' => 'curto']);
+    ok(str_contains($pl->mensagem("plataforma.php?p=tenants&a=editar&id=$betaId"), 'de 10 a 300 caracteres'), 'suporte: motivo curto é recusado');
+    $r = $pl->enviar("plataforma.php?p=tenants&a=editar&id=$betaId", 'plataforma.php?p=tenants&a=suporte_entrar',
+                     ['id' => $betaId, 'motivo' => $motivoSup]);
+    $link = $r['local'];
+    $link = 'index.php?p=suporte&a=entrar&t=' . (explode('t=', $link)[1] ?? '');   // o Navegador devolve o endereço completo
+    ok(str_starts_with($link, 'index.php?p=suporte&a=entrar&t=') && preg_match('/t=[0-9a-f-]{36}\.[0-9a-f]{64}$/', $link) === 1,
+       'painel gera o link com código de uso único (locadora.aleatório)', $link);
+    ok(str_contains($pl->get("plataforma.php?p=tenants&a=editar&id=$betaId")['corpo'], 'Acesso de suporte')
+       && str_contains($pl->get("plataforma.php?p=tenants&a=editar&id=$betaId")['corpo'], $motivoSup), 'tela da locadora lista o acesso com o motivo');
+    $sup = new Navegador($BASE);
+    $abre = $sup->get($link);
+    ok(str_contains($abre['local'], 'p=dashboard'), 'o link abre a sessão de suporte e vai para o painel da locadora');
+    $painelSup = texto($sup->get('index.php?p=dashboard')['corpo']);
+    ok(str_contains($painelSup, 'Acesso de suporte (somente leitura)') && str_contains($painelSup, 'Encerrar acesso'), 'faixa de suporte aparece no topo');
+    $antesLanc = dbv("SELECT count(*) FROM caixa WHERE tenant_id = :t", ['t' => $betaId]);
+    $sup->enviar('index.php?p=caixa', 'index.php?p=caixa&a=lancar',
+                 ['data' => dia(0), 'tipo' => 'S', 'categoria' => 'TESTE', 'descricao' => 'TESTE gravado pelo suporte', 'valor' => '9,99', 'forma' => 'PIX']);
+    ok(str_contains($sup->mensagem('index.php?p=caixa'), 'somente leitura') && dbv("SELECT count(*) FROM caixa WHERE tenant_id = :t", ['t' => $betaId]) == $antesLanc,
+       'na sessão de suporte nada é gravado (lançamento recusado)');
+    $segundo = new Navegador($BASE);
+    ok(str_contains($segundo->get($link)['corpo'], 'já foi usado'), 'o mesmo link não serve de novo');
+    $aud = db("SELECT usuario, dados::text AS dados, rotulo FROM auditoria WHERE tenant_id = :t AND tabela = 'acesso_suporte' ORDER BY quando DESC LIMIT 1", ['t' => $betaId])->fetch();
+    ok($aud && $aud['usuario'] === 'suporte: suporte' && str_contains($aud['dados'], 'chamado 45') && !str_contains($aud['dados'], explode('t=', $link)[1] ?? '-'),
+       'acesso fica na auditoria da locadora (quem, motivo) sem o código', json_encode($aud));
+    $sup->get('index.php?p=suporte&a=sair');
+    ok(str_contains($sup->get('index.php?p=dashboard')['local'], 'p=login'), 'encerrar acesso: volta para o login');
+    // Código de outra locadora não serve para a Beta
+    $r = $pl->enviar("plataforma.php?p=tenants&a=editar&id=$alfaId", 'plataforma.php?p=tenants&a=suporte_entrar',
+                     ['id' => $alfaId, 'motivo' => 'TESTE para outra locadora']);
+    $codigoAlfa = explode('t=', $r['local'])[1] ?? '';
+    $trocado = $betaId . '.' . explode('.', $codigoAlfa)[1];
+    $intruso = new Navegador($BASE);
+    ok(str_contains($intruso->get('index.php?p=suporte&a=entrar&t=' . $trocado)['corpo'], 'não é desta locadora'), 'código da Alfa não abre a Beta');
+    $expirado = new Navegador($BASE);
+    db("UPDATE acessos_suporte SET expira_em = now() - INTERVAL '1 minute' WHERE tenant_id = :t AND login_suporte = 'suporte'", ['t' => $alfaId]);
+    ok(str_contains($expirado->get('index.php?p=suporte&a=entrar&t=' . $codigoAlfa)['corpo'], 'expirou'), 'código expirado não abre');
+    db("DELETE FROM acessos_suporte WHERE tenant_id = :t", ['t' => $alfaId]);
+    db("DELETE FROM acessos_suporte WHERE tenant_id = :t", ['t' => $betaId]);
+    db("DELETE FROM auditoria WHERE tenant_id = :t AND tabela = 'acesso_suporte'", ['t' => $betaId]);
 }
 
 /** Valor em moeda brasileira, como aparece nas telas (R$ 1.234,56). */

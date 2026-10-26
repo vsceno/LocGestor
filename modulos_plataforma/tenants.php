@@ -486,6 +486,7 @@ function tenants_editar(): void
     </div>
 
     <?php cobranca_card($t, $cobrancas); ?>
+    <?php suporte_card($t); ?>
 
     <div class="card">
         <div class="card-titulo">
@@ -613,6 +614,77 @@ function tenants_estornar(): void
     });
     flash('Último pagamento estornado.');
     redirect(url('tenants', ['a' => 'editar', 'id' => $id]));
+}
+
+// ---------------------------------------------------------------------
+// Acesso de suporte ("Entrar como a locadora")
+// ---------------------------------------------------------------------
+function suporte_card(array $t): void
+{
+    $acessos = all('SELECT login_suporte, motivo, criado_em, expira_em, usado_em FROM acessos_suporte
+                     WHERE tenant_id = :id ORDER BY criado_em DESC LIMIT 10', ['id' => $t['id']]);
+    $pode = $t['status'] === 'ativa';
+    ?>
+    <div class="card">
+        <h2>Acesso de suporte</h2>
+        <p class="ajuda">Abre o sistema desta locadora como ela vê, <strong>somente leitura</strong>, por 30 minutos.
+            O acesso fica registrado na auditoria da locadora (quem, quando e o motivo), e ela vê a faixa no topo enquanto durar.</p>
+        <?php if ($pode): ?>
+            <form method="post" action="<?= e(url('tenants', ['a' => 'suporte_entrar'])) ?>" class="form"
+                  data-confirmar="Abrir o sistema de <?= e($t['nome']) ?> em modo somente leitura? Fica registrado na auditoria da locadora.">
+                <?= csrf_field() ?>
+                <input type="hidden" name="id" value="<?= e($t['id']) ?>">
+                <label class="obrig">Motivo do acesso
+                    <input type="text" name="motivo" required minlength="10" maxlength="300" placeholder="Ex.: cliente relatou erro no contrato nº 123 (chamado 45)">
+                </label>
+                <button class="btn btn-sec">Entrar como a locadora</button>
+            </form>
+        <?php else: ?>
+            <p class="muted">Só é possível abrir o acesso de suporte em locadora ativa.</p>
+        <?php endif; ?>
+        <?php if ($acessos): ?>
+            <div class="tabela-wrap" style="margin-top:12px">
+                <table class="tabela">
+                    <thead><tr><th>Quando</th><th>Suporte</th><th>Motivo</th><th>Situação</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($acessos as $a): ?>
+                        <tr><td class="nowrap"><?= e(dt($a['criado_em'], true)) ?></td><td><?= e($a['login_suporte']) ?></td>
+                            <td><?= e($a['motivo']) ?></td>
+                            <td><?= $a['usado_em'] ? '<span class="selo">aberto em ' . e(dt($a['usado_em'], true)) . '</span>'
+                                                  : '<span class="muted">não usado</span>' ?></td></tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+/**
+ * Cria o código de uso único e manda o suporte para a locadora. Só com locadora ativa e um motivo de
+ * pelo menos 10 caracteres (o motivo fica na auditoria da locadora).
+ */
+function tenants_suporte_entrar(): void
+{
+    $id = post('id');
+    $t = is_uuid($id) ? locadora_por_id($id) : null;
+    if ($t === null) {
+        throw new UserError('Locadora não encontrada.');
+    }
+    if ($t['status'] !== 'ativa') {
+        throw new UserError('Só é possível abrir o acesso de suporte em locadora ativa.');
+    }
+    $motivo = trim(post('motivo'));
+    if (mb_strlen($motivo) < 10 || mb_strlen($motivo) > 300) {
+        throw new UserError('Informe o motivo do acesso (de 10 a 300 caracteres).');
+    }
+    [$codigo, $hash] = suporte_codigo($t['id']);
+    q("INSERT INTO acessos_suporte (tenant_id, login_suporte, motivo, token_hash, expira_em)
+       VALUES (:t, :l, :m, :h, now() + make_interval(mins => :min))",
+      ['t' => $t['id'], 'l' => user()['login'] ?? '', 'm' => $motivo, 'h' => $hash, 'min' => SUPORTE_CODIGO_MIN]);
+    log_app('INFO', "Acesso de suporte aberto na locadora {$t['slug']} por " . (user()['login'] ?? '-') . '.');
+    redirect('index.php?p=suporte&a=entrar&t=' . rawurlencode($codigo));
 }
 
 // ---------------------------------------------------------------------

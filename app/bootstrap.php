@@ -619,11 +619,17 @@ function executar_rota(array $modulos, string $pasta, string $padrao): void
         if (!in_array($pagina, $modulos, true) || !preg_match('/^[a-z_]+$/', $acao)) {
             pagina_erro(404, 'Página não encontrada.');
         }
-        if ($pagina !== 'login' && user() === null) {
+        // Entrada pelo link de suporte não exige login (o código de uso único é a autorização)
+        $entradaSuporte = $pagina === 'suporte' && $acao === 'entrar';
+        if ($pagina !== 'login' && !$entradaSuporte && user() === null) {
             redirect(url('login'));
         }
         if (is_post()) {
             csrf_check();
+            // Sessão de suporte: nada se grava (só o "Sair" é permitido)
+            if (AREA === 'locadora' && suporte_sessao_ativa() && $pagina !== 'login') {
+                throw new UserError('Acesso de suporte: somente leitura. Nada é gravado nesta sessão.');
+            }
         }
         if (!entrada_utf8_valida($_GET) || !entrada_utf8_valida($_POST)) {
             throw new UserError('Os dados enviados têm caracteres inválidos. Confira o texto digitado ou colado e tente de novo.');
@@ -766,6 +772,8 @@ function pagina_erro(int $codigo, string $msg): never
 // Contexto da locadora (só no sistema das locadoras)
 // ---------------------------------------------------------------------
 require __DIR__ . '/tenant.php';
+
+require_once __DIR__ . '/suporte.php';   // antes de tenant_iniciar_sessao (que confere a sessão de suporte)
 
 if (AREA === 'locadora' && !empty($_SESSION['tenant_id'])) {
     // Logo após conectar e ANTES de qualquer consulta de dados
