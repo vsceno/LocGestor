@@ -259,12 +259,8 @@ function locacoes_nova(): void
         </div>
 
         <div class="card">
-            <div class="card-titulo">
+            <div class="card-titulo" style="align-items:flex-end">
                 <h2>Itens</h2>
-                <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
-                    <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
-            </div>
-            <div style="max-width:260px">
                 <label class="obrig">Devolução prevista
                     <span style="display:flex; gap:8px; align-items:center">
                         <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="width:170px; flex:0 0 170px">
@@ -273,8 +269,10 @@ function locacoes_nova(): void
                     </span>
                     <span class="ajuda" id="info-dias"></span>
                 </label>
+                <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
+                    <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
             </div>
-            <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
+                        <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
                     <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Diária (R$)</th>
