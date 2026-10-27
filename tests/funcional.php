@@ -467,7 +467,7 @@ ok($alfa->mensagem('index.php?p=produtos&a=kit_novo') === 'Já existe um kit com
 $alfa->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['codigo' => 'TESTE-VAZIO', 'produto_id' => ['']] + $kit);
 ok(str_contains($alfa->mensagem('index.php?p=produtos&a=kit_novo'), 'pelo menos um item'), 'kit sem itens é recusado');
 $nova = $alfa->get('index.php?p=locacoes&a=nova')['corpo'];
-ok(!str_contains($nova, 'id="kit-sel"') && str_contains($nova, 'id="add-item"'),
+ok(!str_contains($nova, 'id="kit-sel"') && str_contains($nova, 'class="btn btn-sec btn-peq adicionar"'),
    'nova locação sem seletor de kit, com o botão de adicionar item ao lado do remover');
 ok(str_contains($alfa->get('index.php?p=reservas&a=nova')['corpo'], 'TESTE-KIT'), 'nova reserva também oferece o kit');
 $r = $alfa->enviar("index.php?p=produtos&a=kit_editar&id=$KIT", 'index.php?p=produtos&a=kit_salvar',

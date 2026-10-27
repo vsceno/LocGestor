@@ -268,7 +268,7 @@ function locacoes_nova(): void
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
                     <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
-                        <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th style="width:52px"><button type="button" class="btn btn-sec btn-peq" id="add-item" title="Adicionar item" aria-label="Adicionar item" style="width:34px">+</button></th></tr></thead>
+                        <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th style="width:90px"></th></tr></thead>
                     <tbody>
                     <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true); } ?>
                     </tbody>

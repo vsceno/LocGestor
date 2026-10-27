@@ -125,7 +125,7 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, boo
             <td class="num"><input type="date" name="prev[]" class="prev-item" value="<?= e($ln['prev'] ?? '') ?>" style="width:160px" aria-label="Devolução prevista do item"></td>
         <?php endif; ?>
         <td class="num subtotal"<?= $comDiaria ? '' : ' hidden' ?>>—</td>
-        <td><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
+        <td class="nowrap"><?php if ($comPrev): ?><button type="button" class="btn btn-sec btn-peq adicionar" title="Adicionar item" aria-label="Adicionar item">+</button> <?php endif; ?><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
     </tr>
     <?php
 }

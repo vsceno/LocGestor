@@ -80,7 +80,7 @@ var LG = {
                       + LG.numero(campo('#frete-recolhimento').value) - LG.numero(campo('#desconto').value);
             campo('#total-previsto').textContent = LG.moeda(total);
             campo('#total-detalhe').textContent = '(' + d + ' dia' + (d > 1 ? 's' : '') + ')';
-            var info = form.querySelector('#info-dias');
+            var info = campo('#info-dias');
             info.textContent = LG.dias(saida.value, prev.value) < 0 ? 'A devolução não pode ser antes da saída.' : d + ' dia(s)';
             info.className = 'ajuda' + (LG.dias(saida.value, prev.value) < 0 ? ' alerta' : '');
             // Campo "Dias" acompanha a data, exceto enquanto o usuário está digitando nele
@@ -173,18 +173,18 @@ var LG = {
         corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
         corpo.querySelectorAll('.prev-item').forEach(function (i) { if (!i.value) { i.value = prev.value; } });
         atualizarPrev();
-        var addItem = form.querySelector('#add-item');
-        if (addItem) {
-            addItem.addEventListener('click', function () {
-                var tr = modelo.content.firstElementChild.cloneNode(true);
-                corpo.appendChild(tr);
-                prepararLinha(tr);
-                var piNovo = tr.querySelector('.prev-item');
-                if (piNovo) { piNovo.value = prev.value; }
-                tr.querySelector('.sel-produto').focus();
-                recalcular();
-            });
-        }
+        corpo.addEventListener('click', function (ev) {
+            var botao = ev.target.closest ? ev.target.closest('.adicionar') : null;
+            if (!botao) { return; }
+            var atual = botao.closest('tr.linha-item');
+            var tr = modelo.content.firstElementChild.cloneNode(true);
+            atual.parentNode.insertBefore(tr, atual.nextSibling);
+            prepararLinha(tr);
+            var piNovo = tr.querySelector('.prev-item');
+            if (piNovo) { piNovo.value = prev.value; }
+            tr.querySelector('.sel-produto').focus();
+            recalcular();
+        });
         // Kit: cada produto do kit soma na linha que já tem o produto, ou ocupa uma linha vazia/nova
         var kitSel = form.querySelector('#kit-sel');
         if (kitSel) {
