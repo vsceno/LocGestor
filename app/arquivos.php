@@ -1,6 +1,6 @@
 <?php
 /*
- * LocGestor - arquivos enviados (fotos de vistoria e assinaturas).
+ * LocGestor - arquivos enviados (fotos de vistoria, assinaturas e logomarca da locadora).
  *
  * Segurança:
  *   - toda imagem é aberta e REGRAVADA pelo GD: o que fica no disco é sempre um JPEG/PNG
@@ -17,6 +17,8 @@ const FOTO_LADO_MAX = 1600;        // pixels no maior lado
 const FOTO_BYTES_MAX = 15728640;   // 15 MB por arquivo enviado (o navegador já reduz antes)
 const FOTOS_POR_VISTORIA = 12;
 const IMAGEM_PIXELS_MAX = 40000000; // 40 megapixels: acima disso, recusa (evita estourar a memória)
+const LOGO_LADO_MAX = 800;         // logomarca: pixels no maior lado (sobra para a impressão em 60 x 24 mm)
+const LOGO_BYTES_MAX = 5242880;    // 5 MB
 
 function arquivos_base(): string
 {

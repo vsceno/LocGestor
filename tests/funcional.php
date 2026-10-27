@@ -139,14 +139,16 @@ final class Navegador
     }
 
     /** Como enviar(), mas em multipart (com arquivos). $campos já "achatados" (ex.: 'estado[uuid]' => 'ok'). */
-    public function enviarArquivos(string $pagina, string $acao, array $campos, array $arquivos): array
+    public function enviarArquivos(string $pagina, string $acao, array $campos, array $arquivos, string $campo = 'fotos[]'): array
     {
         $tela = $this->req($pagina)['corpo'];
         preg_match('/name="_csrf" value="([^"]+)"/', $tela, $m);
         $c = curl_init($this->base . '/' . ltrim($acao, '/'));
         $dados = ['_csrf' => $m[1] ?? ''] + $campos;
         foreach (array_values($arquivos) as $i => $f) {
-            $dados["fotos[$i]"] = new CURLFile($f['caminho'], $f['tipo'], $f['nome']);
+            // "fotos[]": vários arquivos (fotos[0], fotos[1]...); outro nome ("logo"): um arquivo só nesse campo
+            $nome = str_ends_with($campo, '[]') ? substr($campo, 0, -2) . "[$i]" : $campo;
+            $dados[$nome] = new CURLFile($f['caminho'], $f['tipo'], $f['nome']);
         }
         curl_setopt_array($c, [
             CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_FOLLOWLOCATION => false,
@@ -194,7 +196,8 @@ $base = [];
 foreach (db('SELECT t.id, t.slug,
                     (SELECT COALESCE(max(numero), 0) FROM locacoes l WHERE l.tenant_id = t.id) AS loc,
                     (SELECT COALESCE(max(numero), 0) FROM reservas r WHERE r.tenant_id = t.id) AS res,
-                    (SELECT COALESCE(max(numero), 0) FROM manutencoes m WHERE m.tenant_id = t.id) AS man
+                    (SELECT COALESCE(max(numero), 0) FROM manutencoes m WHERE m.tenant_id = t.id) AS man,
+                    (SELECT COALESCE(max(logo_arquivo), \'\') FROM empresa e WHERE e.tenant_id = t.id) AS logo
                FROM tenants t')->fetchAll() as $t) {
     $base[$t['slug']] = $t;
 }
@@ -235,6 +238,16 @@ register_shutdown_function(function () use ($base, $inicio) {
         $q('DELETE FROM vistorias WHERE criado_em >= :i', ['i' => $inicio]);
         foreach ($arqs as $a) {
             @unlink("$pasta/$a");
+        }
+        // Logomarca trocada pelo teste: apaga o arquivo que ele gravou e volta a que havia antes
+        foreach ($base as $t) {
+            $agora = (string) db('SELECT logo_arquivo FROM empresa WHERE tenant_id = :t', ['t' => $t['id']])->fetchColumn();
+            if ($agora !== $t['logo']) {
+                if ($agora !== '') {
+                    @unlink("$pasta/$agora");
+                }
+                $q('UPDATE empresa SET logo_arquivo = :l WHERE tenant_id = :t', ['l' => $t['logo'], 't' => $t['id']]);
+            }
         }
         $q("DELETE FROM kits WHERE codigo LIKE 'TESTE-%'");
         // Manutenções dos produtos de teste (e o custo lançado no caixa), unidades e produtos
@@ -798,6 +811,48 @@ $beta->enviar('index.php?p=config', 'index.php?p=config&a=empresa_salvar', $form
 $pixBeta = db('SELECT pix_chave, pix_nome, pix_cidade FROM empresa WHERE tenant_id = :t', ['t' => $betaId])->fetch();
 ok($pixBeta['pix_chave'] === '+5585999990000' && $pixBeta['pix_nome'] === 'Beta Eventos e Locacoes L' && $pixBeta['pix_cidade'] === 'Fortaleza',
    'celular vira +5585999990000; nome sem acento cortado em 25; cidade da empresa', json_encode($pixBeta, JSON_UNESCAPED_UNICODE));
+
+// Logomarca (na Beta, que não tem nenhuma; a limpeza devolve o que havia)
+if (!function_exists('imagecreatetruecolor')) {
+    echo "  (pulado: sem a extensão gd não há como gerar a imagem de teste)\n";
+} elseif ($base['beta-eventos']['logo'] !== '') {
+    echo "  (pulado: a Beta já tem logomarca; o teste não mexe nela)\n";
+} else {
+    $pastaLogo = rtrim((string) ($config['pasta_arquivos'] ?? __DIR__ . '/../storage'), '/\\');
+    $tmpLogo = sys_get_temp_dir();
+    $gdLogo = imagecreatetruecolor(1000, 400);
+    imagefill($gdLogo, 0, 0, imagecolorallocate($gdLogo, 232, 113, 10));
+    imagepng($gdLogo, "$tmpLogo/teste-logo.png");
+    file_put_contents("$tmpLogo/teste-logo-falsa.png", 'isto não é uma imagem');
+    $formLogo = array_intersect_key(db('SELECT * FROM empresa WHERE tenant_id = :t', ['t' => $betaId])->fetch(),
+        array_flip(['razao_social', 'nome_fantasia', 'cnpj', 'ie', 'telefone', 'email', 'endereco', 'cidade', 'uf', 'cep',
+                    'termos_contrato', 'obs_fatura', 'pix_chave', 'pix_nome', 'pix_cidade']));
+    $logoBeta = fn() => (string) dbv('SELECT logo_arquivo FROM empresa WHERE tenant_id = :t', ['t' => $betaId]);
+    $enviarLogo = fn(string $arquivo, string $nome) => $beta->enviarArquivos('index.php?p=config', 'index.php?p=config&a=empresa_salvar',
+        $formLogo, [['caminho' => "$tmpLogo/$arquivo", 'tipo' => 'image/png', 'nome' => $nome]], 'logo');
+
+    $enviarLogo('teste-logo-falsa.png', 'falsa.png');
+    ok(str_contains($beta->mensagem('index.php?p=config'), 'não é uma imagem válida') && $logoBeta() === '',
+       'logomarca: arquivo que não é imagem é recusado');
+    $enviarLogo('teste-logo.png', 'logo.png');
+    $relLogo = $logoBeta();
+    $tamLogo = $relLogo !== '' ? @getimagesize("$pastaLogo/$relLogo") : false;
+    ok(preg_match('#^' . $betaId . '/\d{4}/[0-9a-f]{32}\.png$#', $relLogo) === 1 && $tamLogo && $tamLogo[0] === 800 && $tamLogo[1] === 320
+       && str_contains($beta->get('index.php?p=config')['corpo'], 'class="logo-previa"'),
+       'logomarca 1000x400 gravada na pasta da Beta em PNG de 800x320, com prévia em Configurações', $relLogo);
+    $imgLogo = $beta->get('index.php?p=arquivos&a=logo');
+    ok($imgLogo['codigo'] === 200 && str_starts_with($imgLogo['corpo'], "\x89PNG") && str_contains($imgLogo['cabecalhos'], 'image/png'),
+       'logomarca sai pela rota de arquivos');
+    $ctLogo = $beta->get("index.php?p=locacoes&a=contrato&n=$nBeta")['corpo'];
+    ok(str_contains($ctLogo, 'class="logomarca"') && str_contains($ctLogo, 'p=arquivos&amp;a=logo'), 'contrato da Beta mostra a logomarca');
+    ok($alfa->get('index.php?p=arquivos&a=logo')['corpo'] !== $imgLogo['corpo'], 'a Alfa recebe a própria logomarca (ou nenhuma), nunca a da Beta');
+    $beta->enviar('index.php?p=config', 'index.php?p=config&a=empresa_salvar', $formLogo + ['logo_remover' => '1']);
+    ok($logoBeta() === '' && !is_file("$pastaLogo/$relLogo") && $beta->get('index.php?p=arquivos&a=logo')['codigo'] === 404
+       && !str_contains($beta->get("index.php?p=locacoes&a=contrato&n=$nBeta")['corpo'], 'class="logomarca"'),
+       'remover a logomarca apaga o arquivo e ela sai do contrato');
+    @unlink("$tmpLogo/teste-logo.png");
+    @unlink("$tmpLogo/teste-logo-falsa.png");
+}
 
 // =====================================================================
 secao('Isolamento pelas telas e pela API');

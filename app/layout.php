@@ -357,9 +357,16 @@ function print_start(string $titulo, string $voltar = '', string $botoesExtras =
 <?php
 }
 
+/** Endereço da logomarca da locadora logada; muda junto com o arquivo, para o navegador não usar a antiga do cache. */
+function url_logo(): string
+{
+    return url('arquivos', ['a' => 'logo', 'v' => substr(md5(empresa()['logo_arquivo']), 0, 8)]);
+}
+
 /**
- * Cabeçalho das páginas de impressão: dados da locadora logada à esquerda e,
- * à direita, um quadro com o título do documento, o número/período e a data de emissão.
+ * Cabeçalho das páginas de impressão: dados da locadora logada à esquerda e a logomarca (se houver)
+ * à direita. Abaixo da linha, no meio da folha, uma linha em negrito com o título do documento e o
+ * número/período; embaixo dela, menor, a data de emissão.
  */
 function cabecalho_impressao(string $titulo, string $destaque = '', string $info = ''): void
 {
@@ -387,13 +394,15 @@ function cabecalho_impressao(string $titulo, string $destaque = '', string $info
             <?php if ($cidade): ?><div><?= $linha($cidade) ?></div><?php endif; ?>
             <?php if ($contato): ?><div><?= $linha($contato) ?></div><?php endif; ?>
         </div>
-        <div class="doc">
-            <div class="doc-titulo"><?= e($titulo) ?></div>
-            <?php if ($destaque !== ''): ?><div class="doc-numero"><?= e($destaque) ?></div><?php endif; ?>
-            <?php if ($info !== ''): ?><div class="doc-info"><?= e($info) ?></div><?php endif; ?>
-            <div class="doc-info">Emitido em <?= e(date('d/m/Y')) ?></div>
-        </div>
+        <?php if ($emp['logo_arquivo'] !== ''): ?>
+            <img class="logomarca" src="<?= e(url_logo()) ?>" alt="Logomarca de <?= e($emp['nome_fantasia'] ?: $emp['razao_social']) ?>">
+        <?php endif; ?>
     </header>
+    <div class="doc">
+        <span class="doc-titulo"><?= e($titulo) ?></span><?php if ($destaque !== ''): ?> <span class="doc-numero"><?= e($destaque) ?></span><?php endif; ?>
+        <?php if ($info !== ''): ?>· <span class="doc-info"><?= e($info) ?></span><?php endif; ?>
+        <div class="doc-emissao">Emitido em <?= e(date('d/m/Y')) ?></div>
+    </div>
     <?php
 }
 

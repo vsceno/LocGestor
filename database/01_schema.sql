@@ -193,6 +193,8 @@ CLÁUSULA 5ª - DA SUBLOCAÇÃO: É vedado ao LOCATÁRIO sublocar, ceder, empres
     pix_chave       VARCHAR(77)  NOT NULL DEFAULT '',
     pix_nome        VARCHAR(25)  NOT NULL DEFAULT '',
     pix_cidade      VARCHAR(15)  NOT NULL DEFAULT '',
+    -- Logomarca dos documentos impressos: caminho na pasta de arquivos da locadora. Vazia = sem logomarca.
+    logo_arquivo    VARCHAR(80)  NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id)
 );
 

@@ -7,7 +7,8 @@ Várias locadoras usam o mesmo sistema e o mesmo banco, e **cada uma só enxerga
 próprio PostgreSQL (Row Level Security).
 
 **Para a locadora:** clientes, produtos e categorias, locação com disponibilidade em tempo real, devolução total ou
-parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4, painel com gráficos, 10 relatórios (entre eles a rentabilidade por equipamento e por unidade)
+parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4 (com a logomarca da locadora, enviada em
+*Configurações*), painel com gráficos, 10 relatórios (entre eles a rentabilidade por equipamento e por unidade)
 (impressão e CSV para o Excel), usuários com perfis e **WhatsApp**: botões que abrem o WhatsApp do atendente com a
 mensagem pronta (resumo da locação, lembrete de devolução, cobrança do saldo, confirmação de reserva), inclusive
 na lista de devoluções atrasadas e próximas do painel. Sem custo e sem cadastro: usa links `wa.me` com o celular do
@@ -622,6 +623,7 @@ psql -U postgres -d locgestor -f database\migrations\023_devolucao_por_item.sql
 psql -U postgres -d locgestor -f database\migrations\024_periodo_do_item.sql
 psql -U postgres -d locgestor -f database\migrations\025_dias_cobranca.sql
 psql -U postgres -d locgestor -f database\migrations\026_periodo_orcamento_reserva.sql
+psql -U postgres -d locgestor -f database\migrations\027_logomarca.sql
 php tests\isolamento.php
 ```
 
@@ -653,6 +655,7 @@ php tests\isolamento.php
 | `024_periodo_do_item.sql` | período por item (`periodo`, `valor_quinzenal`) e função `preco_plano()`; itens antigos ficam como "automatico" |
 | `025_dias_cobranca.sql` | a view de valores conta o dia da saída (27/10 a 05/11 = 10 dias) |
 | `026_periodo_orcamento_reserva.sql` | período por item no orçamento (`periodo`, `valor_quinzenal`) e na reserva (`periodo`) |
+| `027_logomarca.sql` | coluna `logo_arquivo` na `empresa` (logomarca da locadora nos documentos impressos) |
 
 ### 10.2 Proteções do login (já ativas)
 

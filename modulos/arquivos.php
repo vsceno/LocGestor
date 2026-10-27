@@ -1,6 +1,6 @@
 <?php
 /*
- * Entrega de arquivos (fotos de vistoria e assinaturas).
+ * Entrega de arquivos (fotos de vistoria, assinaturas e logomarca).
  * O arquivo só sai depois de o banco, com o RLS da locadora logada, confirmar que o
  * registro existe para ela: de outra locadora, a resposta é 404, como se não existisse.
  */
@@ -28,6 +28,12 @@ function arquivos_foto(): void
 {
     $id = get('id');
     arquivo_enviar(is_uuid($id) ? val('SELECT arquivo FROM vistoria_fotos WHERE id = :id', ['id' => $id]) : null, 'image/jpeg');
+}
+
+/** index.php?p=arquivos&a=logo: a logomarca da locadora logada (o RLS só mostra a linha dela em empresa) */
+function arquivos_logo(): void
+{
+    arquivo_enviar(val("SELECT NULLIF(logo_arquivo, '') FROM empresa"), 'image/png');
 }
 
 /** index.php?p=arquivos&a=assinatura&id=<uuid da vistoria> */

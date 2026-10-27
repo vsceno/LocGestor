@@ -80,12 +80,12 @@ th { background: #f2f3f5; font-size: 9pt; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 tfoot td { font-weight: 700; }
 
-/* Cabeçalho: locadora à esquerda, quadro do documento à direita */
+/* Cabeçalho: locadora à esquerda e logomarca (se houver) à direita; o título do documento vem abaixo da linha */
 .cabecalho {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8mm;
-    align-items: start;
+    align-items: center;
     border-bottom: 2px solid var(--texto);
     padding-bottom: 4mm;
     margin-bottom: 5mm;
@@ -93,16 +93,14 @@ tfoot td { font-weight: 700; }
 .emitente { font-size: 9.5pt; line-height: 1.5; color: var(--texto-2); }
 .emitente-nome { font-size: 17pt; font-weight: 700; line-height: 1.2; color: var(--texto); margin-bottom: 1.5mm; }
 .emitente-razao { font-weight: 600; color: var(--texto); }
-.doc {
-    min-width: 50mm;
-    text-align: center;
-    border: 1.5px solid var(--texto);
-    border-radius: 2mm;
-    padding: 3mm 5mm;
-}
-.doc-titulo { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
-.doc-numero { font-size: 20pt; font-weight: 700; line-height: 1.2; color: var(--laranja); margin: 1mm 0; white-space: nowrap; }
-.doc-info { font-size: 8.5pt; color: var(--texto-2); white-space: nowrap; }
+.logomarca { display: block; max-width: 60mm; max-height: 24mm; object-fit: contain; }
+/* Título do documento: em negrito, sem caixa, no meio da folha, entre a linha do cabeçalho e o Locatário;
+   a data de emissão vem na linha de baixo, menor */
+.doc { margin: 0 0 2mm; text-align: center; font-size: 12pt; font-weight: 700; line-height: 1.4; }
+.doc-titulo, .doc-numero { text-transform: uppercase; letter-spacing: .3px; }
+.doc-numero { color: var(--laranja); white-space: nowrap; }
+.doc-info { color: var(--texto-2); white-space: nowrap; }
+.doc-emissao { font-size: 9pt; color: var(--texto-2); }   /* embaixo do título, menor e em negrito (herda do .doc) */
 .nowrap { white-space: nowrap; }
 .muted { color: var(--texto-2); }
 /* Contrato: preâmbulo e cláusulas, cada cláusula inteira numa mesma página */
@@ -161,5 +159,5 @@ tfoot td { font-weight: 700; }
 @media screen and (max-width: 760px) {
     .folha { padding: 8mm; min-height: 0; margin: 8px auto; }
     .cabecalho { grid-template-columns: minmax(0, 1fr); }
-    .doc { justify-self: start; }
+    .logomarca { max-width: 50mm; }
 }

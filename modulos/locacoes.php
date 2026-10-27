@@ -779,7 +779,8 @@ function locatario_impressao(array $loc): void
         <tr><th style="width:22%">Nome / razão social</th><td colspan="3"><?= e($c['nome']) ?></td></tr>
         <tr><th><?= $c['tipo'] === 'PJ' ? 'CNPJ' : 'CPF' ?></th><td><?= e(doc_formatar($c['cpf_cnpj'])) ?></td>
             <th style="width:18%"><?= $c['tipo'] === 'PJ' ? 'Insc. estadual' : 'RG' ?></th><td><?= e($c['rg_ie']) ?></td></tr>
-        <tr><th>Endereço</th><td colspan="3"><?= e($end) ?><?= $c['cidade'] !== '' ? ' · ' . e($c['cidade'] . '/' . $c['uf']) : '' ?><?= $c['cep'] !== '' ? ' · CEP ' . e($c['cep']) : '' ?></td></tr>
+        <tr><th>Endereço</th><td colspan="3"><?= e(implode(' · ', array_filter([$end, $c['cidade'] !== '' ? $c['cidade'] . '/' . $c['uf'] : '',
+                                                                                    $c['cep'] !== '' ? 'CEP ' . $c['cep'] : '']))) ?></td></tr>
         <tr><th>Telefone</th><td><?= implode(' · ', array_map(fn($t) => '<span class="nowrap">' . e($t) . '</span>', array_filter([$c['telefone'], $c['celular']]))) ?></td><th>E-mail</th><td><?= e($c['email']) ?></td></tr>
     </table>
     <?php
@@ -800,7 +801,7 @@ function locacoes_romaneio(): void
                    WHERE li.locacao_id = :id ORDER BY p.descricao", ['id' => $loc['id']]);
 
     print_start("$titulo · locação nº {$loc['numero']}", url_locacao($loc));
-    cabecalho_impressao($titulo, 'Locação nº ' . $loc['numero']);
+    cabecalho_impressao($titulo, 'da locação nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
     <h2>Saída e devolução previstas</h2>
@@ -957,9 +958,9 @@ function locacoes_fatura(): void
 
     $whats = whatsapp_locacao($loc)['links'];
     $pix = locacao_pix($loc);
-    print_start('Fatura de locação nº ' . $loc['numero'], url_locacao($loc),
+    print_start('Fatura do contrato de locação nº ' . $loc['numero'], url_locacao($loc),
                 botao_whatsapp($whats['saldo'] ?? $whats['resumo'] ?? null, isset($whats['saldo']) ? 'Cobrar saldo no WhatsApp' : 'Enviar resumo no WhatsApp'));
-    cabecalho_impressao('Fatura de locação', 'Nº ' . $loc['numero']);
+    cabecalho_impressao('Fatura do contrato de locação', 'Nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
     <h2>Período</h2>
@@ -1105,7 +1106,7 @@ function locacoes_vistoria_ver(): void
     $titulo = $v['tipo'] === 'retirada' ? 'Vistoria de retirada' : 'Vistoria de devolução';
 
     print_start("$titulo · locação nº {$v['numero']}", url('locacoes', ['a' => 'ver', 'n' => $v['numero']]));
-    cabecalho_impressao($titulo, 'Locação nº ' . $v['numero'], 'Feita em ' . dt($v['criado_em'], true));
+    cabecalho_impressao($titulo, 'da locação nº ' . $v['numero'], 'Feita em ' . dt($v['criado_em'], true));
     ?>
     <p><strong>Locatário:</strong> <?= e($v['cliente']) ?> · <strong>Responsável pela vistoria:</strong> <?= e($v['usuario'] ?? '') ?></p>
     <h2>Estado dos equipamentos</h2>

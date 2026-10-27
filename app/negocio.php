@@ -1741,6 +1741,41 @@ function empresa_salvar(array $d): void
 }
 
 /**
+ * Logomarca dos documentos impressos. $arquivo é o item de $_FILES (null ou vazio: nenhuma enviada).
+ * A imagem é regravada em PNG de até LOGO_LADO_MAX pixels na pasta da locadora; $remover tira a atual.
+ * Devolve o caminho do arquivo que saiu, para apagar só depois de o banco gravar (null se nada mudou).
+ */
+function empresa_logo_salvar(?array $arquivo, bool $remover): ?string
+{
+    require_admin();
+    $enviado = $arquivo !== null && ($arquivo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+    if (!$enviado && !$remover) {
+        return null;
+    }
+    $novo = '';
+    if ($enviado) {
+        if (in_array($arquivo['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) || (int) $arquivo['size'] > LOGO_BYTES_MAX) {
+            throw new UserError('A logomarca é grande demais (máximo de 5 MB).');
+        }
+        if ($arquivo['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($arquivo['tmp_name'])) {
+            throw new UserError('Não foi possível receber a logomarca. Tente de novo.');
+        }
+        $img = imagem_regravar((string) file_get_contents($arquivo['tmp_name']), LOGO_LADO_MAX, true);
+        $novo = arquivo_gravar($img['bytes'], 'png');
+    }
+    $antigo = (string) val('SELECT logo_arquivo FROM empresa');
+    try {
+        q('UPDATE empresa SET logo_arquivo = :a', ['a' => $novo]); // o RLS restringe à locadora logada
+    } catch (Throwable $e) {
+        if ($novo !== '') {
+            arquivo_apagar($novo);
+        }
+        throw $e;
+    }
+    return $antigo !== '' && $antigo !== $novo ? $antigo : null;
+}
+
+/**
  * Valida e padroniza a chave PIX como o banco espera; null se inválida.
  * CPF/CNPJ: só dígitos (com dígitos verificadores válidos); celular: +55DDDNÚMERO;
  * e-mail e chave aleatória: em minúsculas.

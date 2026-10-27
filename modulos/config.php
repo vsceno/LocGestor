@@ -28,7 +28,7 @@ function config_index(): void
     layout_start('Configurações', 'config');
     config_abas('index');
     ?>
-    <form method="post" action="<?= e(url('config', ['a' => 'empresa_salvar'])) ?>" class="form">
+    <form method="post" action="<?= e(url('config', ['a' => 'empresa_salvar'])) ?>" class="form" enctype="multipart/form-data">
         <?= csrf_field() ?>
         <div class="card">
             <h2>Dados da locadora</h2>
@@ -51,11 +51,22 @@ function config_index(): void
             </div>
         </div>
         <div class="card">
+            <h2>Logomarca</h2>
+            <p class="muted">Aparece no topo do contrato, da fatura, do recibo e dos outros documentos impressos.
+                Envie PNG, JPG ou WebP de até 5 MB; a imagem é reduzida para no máximo 800 pixels.</p>
+            <?php if ($emp['logo_arquivo'] !== ''): ?>
+                <img src="<?= e(url_logo()) ?>" alt="Logomarca atual" class="logo-previa">
+                <label class="check"><input type="checkbox" name="logo_remover" value="1"> Remover a logomarca</label>
+            <?php endif; ?>
+            <label><?= $emp['logo_arquivo'] !== '' ? 'Trocar a logomarca' : 'Enviar a logomarca' ?>
+                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
+        </div>
+        <div class="card">
             <h2>Contrato de locação</h2>
             <label class="obrig">Cláusulas<textarea name="termos_contrato" rows="14" required><?= e($v('termos_contrato')) ?></textarea></label>
         </div>
         <div class="card">
-            <h2>Fatura de locação</h2>
+            <h2>Fatura do contrato de locação</h2>
             <label>Observação fiscal impressa na fatura<textarea name="obs_fatura" rows="3"><?= e($v('obs_fatura')) ?></textarea>
                 <span class="ajuda">Confirme o texto com o seu contador. Esta versão não emite NF-e.</span></label>
         </div>
@@ -82,7 +93,14 @@ function config_index(): void
 
 function config_empresa_salvar(): void
 {
-    empresa_salvar($_POST);
+    // Dados e logomarca juntos: se um falhar, nada muda. O arquivo antigo só sai depois de gravar.
+    $saiu = tx(function () {
+        empresa_salvar($_POST);
+        return empresa_logo_salvar($_FILES['logo'] ?? null, post('logo_remover') === '1');
+    });
+    if ($saiu !== null) {
+        arquivo_apagar($saiu);
+    }
     flash('Dados da locadora salvos.');
     redirect(url('config'));
 }

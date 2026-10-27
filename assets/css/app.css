@@ -294,6 +294,8 @@ code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: .9e
 }
 .form input[type="checkbox"], .form input[type="radio"] { display: inline-block; width: auto; margin: 0 6px 0 0; }
 .form .check { display: flex; align-items: center; font-weight: 400; color: var(--texto); }
+/* Configurações: a logomarca atual, no tamanho em que sai nos documentos */
+.logo-previa { display: block; max-width: 240px; max-height: 90px; margin-bottom: 10px; padding: 6px; border: 1px solid var(--borda); border-radius: 6px; background: #fff; }
 .linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 14px; }
 .ajuda { display: block; font-weight: 400; font-size: .78rem; color: var(--texto-2); margin-top: 3px; }
 .obrig::before { content: "*"; color: var(--vermelho); margin-right: 3px; }
