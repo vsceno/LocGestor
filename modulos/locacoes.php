@@ -235,7 +235,7 @@ function locacoes_nova(): void
         <?php endif; ?>
         <div class="card">
             <h2>Cliente e período</h2>
-            <div class="linha" style="grid-template-columns: minmax(200px, 2fr) minmax(150px, 1fr) minmax(180px, 1.4fr)">
+            <div class="linha" style="grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr)">
                 <label class="obrig">Cliente
                 <input type="text" name="cliente" value="<?= e($clienteTxt) ?>" list="lista-clientes" required autocomplete="off"
                        placeholder="Digite o nome e escolha na lista">
@@ -244,13 +244,15 @@ function locacoes_nova(): void
                 </datalist>
                 <span class="ajuda">Clientes bloqueados não aparecem. <a href="<?= e(url('clientes', ['a' => 'novo'])) ?>">Cadastrar cliente</a></span>
             </label>
-                <label class="obrig">Data de saída
+                <div>
+                    <label class="obrig">Data de saída
                     <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required>
                 </label>
-                <label>Local de uso (obra/evento)
+                    <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
                     <span class="ajuda">É também o endereço da entrega.</span>
                 </label>
+                </div>
             </div>
         </div>
 
