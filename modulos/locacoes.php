@@ -235,7 +235,7 @@ function locacoes_nova(): void
         <?php endif; ?>
         <div class="card">
             <div style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 40px">
-                <h2 style="margin:6px 0 0">Cliente e período</h2>
+                <h2 style="margin:6px 0 0">Cliente</h2>
                 <div style="width:170px">
                     <label class="obrig">Data de saída
                     <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:170px">

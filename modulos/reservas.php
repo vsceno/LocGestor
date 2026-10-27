@@ -137,7 +137,7 @@ function reserva_form(?array $r): void
         <!-- reserva_id: na edição, a própria reserva não conta contra o estoque -->
         <input type="hidden" name="id" id="reserva_id" value="<?= e($r['id'] ?? '') ?>">
         <div class="card">
-            <h2>Cliente e período</h2>
+            <h2>Cliente</h2>
             <label class="obrig">Cliente
                 <input type="text" name="cliente" value="<?= e($clienteTxt) ?>" list="lista-clientes" required autocomplete="off"
                        placeholder="Digite o nome e escolha na lista">

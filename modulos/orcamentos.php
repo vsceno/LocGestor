@@ -114,7 +114,7 @@ function orcamentos_novo(): void
         <?= csrf_field() ?>
         <input type="hidden" name="reserva_id" id="reserva_id" value="">
         <div class="card">
-            <h2>Cliente e período</h2>
+            <h2>Cliente</h2>
             <label class="obrig">Cliente
                 <input type="text" name="cliente" value="<?= e($clienteTxt) ?>" list="lista-clientes" required autocomplete="off"
                        placeholder="Digite o nome e escolha na lista">
