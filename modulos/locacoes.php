@@ -246,10 +246,10 @@ function locacoes_nova(): void
             </label>
                 <div>
                     <label class="obrig">Data de saída
-                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required>
+                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:100%">
                 </label>
                     <label>Local de uso (obra/evento)
-                    <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
+                    <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200" style="width:100%">
                     <span class="ajuda">É também o endereço da entrega.</span>
                 </label>
                 </div>
