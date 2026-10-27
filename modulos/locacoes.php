@@ -234,7 +234,7 @@ function locacoes_nova(): void
             <div class="flash flash-aviso">Retirada da reserva nº <?= e($reserva['numero']) ?>: ao salvar, a reserva será marcada como convertida.</div>
         <?php endif; ?>
         <div class="card">
-            <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px 40px">
+            <div style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 40px">
                 <h2 style="margin:6px 0 0">Cliente e período</h2>
                 <div style="width:170px">
                     <label class="obrig">Data de saída
