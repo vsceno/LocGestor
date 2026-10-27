@@ -38,7 +38,7 @@ function orcamentos_index(): void
         </form>
         <div class="tabela-wrap">
             <table class="tabela">
-                <thead><tr><th>Nº</th><th>Cliente</th><th>Período</th><th>Validade</th><th class="num">Valor previsto</th><th>Situação</th><th></th></tr></thead>
+                <thead><tr><th>Nº</th><th>Cliente</th><th>Período</th><th>Validade</th><th class="num">Valor Total</th><th>Situação</th><th></th></tr></thead>
                 <tbody>
                 <?php foreach ($lista as $o):
                     $vencido = $o['status'] === 'aberto' && $o['validade'] < today(); ?>
@@ -161,12 +161,12 @@ function orcamentos_novo(): void
             <h2>Valores</h2>
             <div class="linha">
                 <label>Acréscimo (montagem etc.) R$<input type="text" name="acrescimo" id="acrescimo" value="<?= e(old('acrescimo')) ?>" inputmode="decimal" placeholder="0,00"></label>
-                <label>Frete de entrega R$<input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(old('frete_entrega')) ?>" inputmode="decimal" placeholder="0,00"></label>
+                <label>Frete R$<input type="text" name="frete_entrega" id="frete-entrega" value="<?= e(old('frete_entrega')) ?>" inputmode="decimal" placeholder="0,00"></label>
                 <label>Frete de recolhimento R$<input type="text" name="frete_recolhimento" id="frete-recolhimento" value="<?= e(old('frete_recolhimento')) ?>" inputmode="decimal" placeholder="0,00"></label>
                 <label>Desconto R$<input type="text" name="desconto" id="desconto" value="<?= e(old('desconto')) ?>" inputmode="decimal" placeholder="0,00"></label>
                 <?php if (!is_admin()): ?><label>Senha do administrador<input type="password" name="senha_admin" autocomplete="new-password" placeholder="Só com desconto ou acréscimo"></label><?php endif; ?>
             </div>
-            <p class="total-previsto">Total previsto: <strong id="total-previsto">R$ 0,00</strong>
+            <p class="total-previsto">Valor Total: <strong id="total-previsto">R$ 0,00</strong>
                 <span class="muted" id="total-detalhe"></span></p>
             <label>Observações<textarea name="obs" maxlength="2000"><?= e(old('obs')) ?></textarea></label>
         </div>
@@ -218,7 +218,7 @@ function orcamentos_ver(): void
                 <dt>Período</dt><dd><?= e(dt($o['data_saida'])) ?> a <?= e(dt($o['data_prev_devolucao'])) ?></dd>
                 <dt>Validade</dt><dd><?= e(dt($o['validade'])) ?></dd>
                 <?php if ($o['local_uso'] !== ''): ?><dt>Local de uso</dt><dd><?= e($o['local_uso']) ?></dd><?php endif; ?>
-                <dt>Valor previsto</dt><dd><strong><?= money($previsto) ?></strong></dd>
+                <dt>Valor Total</dt><dd><strong><?= money($previsto) ?></strong></dd>
             </dl>
             <div class="acoes" style="margin-top:12px">
                 <a class="btn btn-sec" href="<?= e(url('orcamentos', ['a' => 'imprimir', 'id' => $o['id']])) ?>">Imprimir</a>
@@ -279,6 +279,7 @@ function orcamentos_imprimir(): void
     $previsto = orcamento_previsto($o, $itens);
     $dias = dias_cobranca($o['data_saida'], $o['data_prev_devolucao']);
     $emp = empresa();
+    $subtotal = 0.0;
     print_start('Orçamento nº ' . $o['numero'], url('orcamentos', ['a' => 'ver', 'id' => $o['id']]));
     cabecalho_impressao('Orçamento', 'Nº ' . $o['numero']);
     ?>
@@ -289,19 +290,17 @@ function orcamentos_imprimir(): void
        <?= $o['local_uso'] !== '' ? ' · local: ' . e($o['local_uso']) : '' ?></p>
     <h2>Itens</h2>
     <table>
-        <thead><tr><th class="num">Qtd.</th><th>Código</th><th>Descrição</th><th>Período</th><th class="num">Preço</th><th class="num">Subtotal</th></tr></thead>
+        <thead><tr><th>Descrição</th><th>Período</th><th class="num">Qtd.</th><th class="num">Preço (un.)</th><th class="num">Subtotal previsto</th></tr></thead>
         <tbody>
-        <?php foreach ($itens as $it): $sub = (int) $it['quantidade'] * preco_item($it, $dias); ?>
-            <tr><td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
-                <td><?= e($it['descricao']) ?></td><td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td><td class="num"><?= money($sub) ?></td></tr>
+        <?php foreach ($itens as $it): $sub = (int) $it['quantidade'] * preco_item($it, $dias); $subtotal += $sub; ?>
+            <tr><td><?= e($it['descricao']) ?></td><td><?= e(periodo_nome($it)) ?></td><td class="num"><?= num($it['quantidade']) ?></td>
+                <td class="num"><?= money(preco_unitario($it)) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <?php if ((float) $o['acrescimo'] > 0): ?><tr><td colspan="4" class="num">Acréscimo</td><td class="num"><?= money($o['acrescimo']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $o['frete_entrega'] > 0): ?><tr><td colspan="4" class="num">Frete de entrega</td><td class="num"><?= money($o['frete_entrega']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $o['frete_recolhimento'] > 0): ?><tr><td colspan="4" class="num">Frete de recolhimento</td><td class="num"><?= money($o['frete_recolhimento']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $o['desconto'] > 0): ?><tr><td colspan="4" class="num">Desconto</td><td class="num">− <?= money($o['desconto']) ?></td></tr><?php endif; ?>
-            <tr><td colspan="4" class="num">Total previsto</td><td class="num"><?= money($previsto) ?></td></tr>
+            <tr><td colspan="4" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
+            <?= ajustes_linha($o, 5) ?>
+            <tr><td colspan="4" class="num">Valor Total</td><td class="num"><?= money($previsto) ?></td></tr>
         </tfoot>
     </table>
     <p class="obs-fiscal">Orçamento válido até <?= e(dt($o['validade'])) ?>. Não reserva equipamento: a disponibilidade é confirmada na reserva ou na retirada.

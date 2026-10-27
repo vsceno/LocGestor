@@ -397,6 +397,21 @@ function cabecalho_impressao(string $titulo, string $destaque = '', string $info
     <?php
 }
 
+/**
+ * Acréscimo, fretes e desconto numa linha só, com o valor ao lado de cada um, também quando zerados.
+ * É a linha do rodapé das tabelas de impressão (contrato, fatura e orçamento), para ficar igual em todas.
+ * $colunas: quantas colunas a tabela tem, para a linha ocupar a largura toda.
+ */
+function ajustes_linha(array $v, int $colunas): string
+{
+    return '<tr><td colspan="' . $colunas . '" class="ajustes-celula"><div class="ajustes">'
+        . '<span>Acréscimo (montagem etc.) <b>' . money($v['acrescimo']) . '</b></span>'
+        . '<span>Frete <b>' . money($v['frete_entrega']) . '</b></span>'
+        . '<span>Frete de recolhimento <b>' . money($v['frete_recolhimento']) . '</b></span>'
+        . '<span>Desconto <b>' . ((float) $v['desconto'] > 0 ? '− ' : '') . money($v['desconto']) . '</b></span>'
+        . '</div></td></tr>';
+}
+
 /** $scripts: JS extras da página de impressão (ex.: QR Code do PIX). */
 function print_end(array $scripts = []): void
 {

@@ -65,7 +65,7 @@ body {
     max-width: 100%;
     min-height: 297mm;
     margin: 16px auto;
-    padding: 15mm 15mm 18mm;
+    padding: 7.5mm;
     background: #fff;
     box-shadow: 0 2px 12px rgba(0, 0, 0, .15);
 }
@@ -105,7 +105,19 @@ tfoot td { font-weight: 700; }
 .doc-info { font-size: 8.5pt; color: var(--texto-2); white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 .muted { color: var(--texto-2); }
-.clausulas { white-space: pre-line; font-size: 9.5pt; text-align: justify; }
+/* Contrato: preâmbulo e cláusulas, cada cláusula inteira numa mesma página */
+.preambulo { margin: 5mm 0 0; text-align: justify; }
+.clausulas { font-size: 9.5pt; text-align: justify; }
+.clausula { break-inside: avoid; margin-bottom: 2.5mm; }
+.clausula p { margin: 0; }
+.clausula-titulo { font-weight: 700; margin-bottom: .5mm !important; }
+.reposicao-titulo { margin-top: 1.5mm !important; }
+.reposicao { margin: .5mm 0 0; padding-left: 6mm; }
+.data-contrato { margin-top: 6mm; }
+/* Contrato: acréscimo, fretes e desconto numa linha só, cada um com o valor ao lado (também quando zero) */
+.ajustes-celula { padding: 1.5mm 2mm; }
+.ajustes { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2mm 6mm; font-weight: 400; }
+.ajustes b { font-weight: 700; white-space: nowrap; }
 .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 15mm; margin-top: 18mm; text-align: center; }
 .assinaturas div { border-top: 1px solid var(--texto); padding-top: 1.5mm; font-size: 9.5pt; }
 .obs-fiscal { margin-top: 6mm; padding: 3mm; border: 1px dashed var(--borda); font-size: 9pt; color: var(--texto-2); }
@@ -135,12 +147,13 @@ tfoot td { font-weight: 700; }
               resize: none; word-break: break-all; overflow: hidden; }
 .pix-copiar { align-self: flex-start; padding: 3px 10px; border: 1px solid var(--borda); background: #fff; border-radius: 4px; cursor: pointer; }
 
-@page { size: A4; margin: 12mm; }
+/* Margens de 0,75 cm em todas as páginas de impressão */
+@page { size: A4; margin: 7.5mm; }
 
 @media print {
     body { background: #fff; }
     .barra-impressao, .pix-copiar { display: none; }
-    .folha { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    .folha { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }  /* a margem vem do @page */
     h2, table, .assinaturas { break-inside: avoid; }
 }
 

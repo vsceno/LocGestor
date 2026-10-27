@@ -369,9 +369,16 @@ ok($v['status'] === 'devolvida' && $v['valor_atual'] === '635.00' && $v['valor_p
    'restante com avaria R$ 20 e R$ 300 recebidos: devolvida, final R$ 635,00 (5 dias contando a saída), pago R$ 400,00', json_encode($v));
 ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo']), 'Saldo R$ 235,00'), 'tela mostra saldo de R$ 235,00');
 $ct = $alfa->get("index.php?p=locacoes&a=contrato&n=$N")['corpo'];
-ok(str_contains(texto($ct), 'Valor previsto R$ 845,00') && str_contains($ct, 'CLÁUSULA 5ª') && str_contains($ct, "index.php?p=locacoes&amp;a=ver&amp;n=$N\">Voltar"),
-   'contrato: valor previsto, cláusulas e botão Voltar para a locação');
-ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']), 'Total da locação R$ 635,00'), 'fatura com total de R$ 635,00');
+ok(str_contains(texto($ct), 'Valor Total R$ 845,00') && str_contains($ct, 'CLÁUSULA 5ª') && str_contains($ct, "index.php?p=locacoes&amp;a=ver&amp;n=$N\">Voltar"),
+   'contrato: valor total, cláusulas e botão Voltar para a locação');
+ok(str_contains(texto($ct), 'Descrição Período Qtd. Preço (un.) Subtotal previsto') && !str_contains(texto($ct), 'Un.'),
+   'contrato: colunas Descrição, Período, Qtd., Preço (un.) e Subtotal, sem a coluna Un.');
+ok(str_contains(texto($ct), 'Acréscimo (montagem etc.) R$ 50,00') && str_contains(texto($ct), 'Desconto − R$ 10,00'),
+   'contrato mostra acréscimo e desconto com valor, na linha dos fretes');
+$fat = texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']);
+ok(str_contains($fat, 'Total da locação R$ 635,00'), 'fatura com total da locação de R$ 635,00');
+ok(str_contains($fat, 'Descrição Período Qtd. Dias Preço (un.) Valor') && str_contains($fat, 'Acréscimo (montagem etc.) R$ 50,00')
+   && str_contains($fat, 'Desconto − R$ 10,00'), 'fatura: mesma linha de acréscimo, fretes e desconto do contrato, com o valor');
 
 // =====================================================================
 secao('Preço semanal/mensal e kits');
@@ -443,7 +450,7 @@ ok(dbv('SELECT valor_semanal FROM produtos WHERE id = :id', ['id' => $SEM]) === 
 $tl = texto($alfa->get("index.php?p=locacoes&a=ver&n=$NS")['corpo']);
 ok(str_contains($tl, 'R$ 10,00/dia R$ 50,00/semana R$ 150,00/mês R$ 160,00'), 'detalhe: tabela congelada e valor até hoje R$ 160,00 (cálculo do PHP = view)');
 $ct = texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NS")['corpo']);
-ok(str_contains($ct, 'Subtotal R$ 400,00') && str_contains($ct, 'Valor previsto R$ 400,00') && str_contains($ct, '(35 dia(s))'),
+ok(str_contains($ct, 'Subtotal R$ 400,00') && str_contains($ct, 'Valor Total R$ 400,00') && str_contains($ct, '(35 dia(s))'),
    'contrato: subtotal do PHP igual ao previsto da view (R$ 400,00)');
 $ISEM = dbv('SELECT id FROM locacao_itens WHERE locacao_id = :l', ['l' => $v['id']]);
 $devForm = $alfa->get("index.php?p=locacoes&a=devolucao&n=$NS")['corpo'];
@@ -1062,8 +1069,8 @@ ok($vF && $vF['valor_previsto'] === '85.00', 'fretes entram no valor previsto: 1
 $endF = dbv('SELECT endereco_entrega FROM locacoes WHERE id = :id', ['id' => $LF]);
 ok($endF === 'TESTE Obra Central, 10', 'endereço de entrega vazio usa o local de uso', (string) $endF);
 $detF = texto($alfa->get("index.php?p=locacoes&a=ver&n=$NF")['corpo']);
-ok(str_contains($detF, 'Frete de entrega R$ 50,00') && str_contains($detF, 'Frete de recolhimento R$ 30,00'), 'detalhe mostra os dois fretes');
-ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NF")['corpo']), 'Frete de entrega R$ 50,00')
+ok(str_contains($detF, 'Frete R$ 50,00') && str_contains($detF, 'Frete de recolhimento R$ 30,00'), 'detalhe mostra os dois fretes');
+ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=contrato&n=$NF")['corpo']), 'Frete R$ 50,00')
    && str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$NF")['corpo']), 'Frete de recolhimento R$ 30,00'), 'contrato e fatura trazem os fretes');
 $alfa->enviar("index.php?p=locacoes&a=ver&n=$NF", 'index.php?p=locacoes&a=entrega_salvar',
               ['id' => $LF, 'frete_entrega' => '60,00', 'frete_recolhimento' => '30,00', 'endereco_entrega' => 'TESTE Galpão Norte, 99']);
@@ -1095,11 +1102,13 @@ ok(str_contains($alfa->get('index.php?p=orcamentos&a=novo')['corpo'], 'Salvar or
    'tela de novo orçamento com itens e valores');
 $O1 = $novoOrc(dia(-2), dia(7), [], dia(-1));
 $v1 = texto($alfa->get("index.php?p=orcamentos&a=ver&id=$O1")['corpo']);
-ok($O1 !== '' && str_contains($v1, 'Valor previsto R$ 30,00') && str_contains($v1, 'em aberto'),
+ok($O1 !== '' && str_contains($v1, 'Valor Total R$ 30,00') && str_contains($v1, 'em aberto'),
    'orçamento salvo: 2 carrinhos × 2 dias × R$ 5 + frete de R$ 10 = R$ 30,00 (sem reservar estoque)', mb_substr($v1, 0, 300));
 $lista = texto($alfa->get('index.php?p=orcamentos')['corpo']);
 ok(str_contains($lista, 'Maria Lúcia Bezerra') && str_contains($lista, 'em aberto'), 'orçamento aparece na lista');
-ok(str_contains($alfa->get("index.php?p=orcamentos&a=imprimir&id=$O1")['corpo'], 'Total previsto'), 'orçamento tem página para impressão');
+$impO = texto($alfa->get("index.php?p=orcamentos&a=imprimir&id=$O1")['corpo']);
+ok(str_contains($impO, 'Valor Total R$ 30,00') && str_contains($impO, 'Descrição Período Qtd. Preço (un.) Subtotal previsto')
+   && !str_contains($impO, 'Código'), 'orçamento impresso: mesmas colunas do contrato (sem código) e valor total');
 // Converter em locação (saída já feita)
 $r = $alfa->enviar("index.php?p=orcamentos&a=ver&id=$O1", 'index.php?p=orcamentos&a=converter', ['id' => $O1, 'tipo' => 'locacao']);
 $LOC1 = db("SELECT l.id, l.numero, l.frete_entrega, l.obs FROM orcamentos o JOIN locacoes l ON l.id = o.locacao_id WHERE o.id = :id", ['id' => $O1])->fetch();

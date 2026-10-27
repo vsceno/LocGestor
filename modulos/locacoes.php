@@ -308,7 +308,7 @@ function locacoes_nova(): void
                     <select name="forma"><?= options(FORMAS_PGTO, old('forma', 'PIX'), '—') ?></select>
                 </label>
             </div>
-            <p class="total-previsto">Total previsto: <strong id="total-previsto">R$ 0,00</strong>
+            <p class="total-previsto">Valor Total: <strong id="total-previsto">R$ 0,00</strong>
                 <span class="muted" id="total-detalhe"></span></p>
             <label>Observações
                 <textarea name="obs" maxlength="2000"><?= e(old('obs', $reserva['obs'] ?? '')) ?></textarea>
@@ -368,7 +368,7 @@ function locacoes_ver(): void
     layout_start('Locação nº ' . $loc['numero'], 'locacoes');
     ?>
     <div class="kpis">
-        <div class="kpi azul"><span>Valor previsto</span><strong><?= money($loc['valor_previsto']) ?></strong>
+        <div class="kpi azul"><span>Valor Total</span><strong><?= money($loc['valor_previsto']) ?></strong>
             <small><?= num(dias_cobranca($loc['data_saida'], $loc['data_prev_devolucao'])) ?> dia(s) combinados</small></div>
         <div class="kpi"><span><?= $aberta ? 'Até hoje' : ($loc['status'] === 'devolvida' ? 'Valor final' : 'Valor (cancelada)') ?></span>
             <strong><?= money($loc['valor_atual']) ?></strong>
@@ -387,10 +387,10 @@ function locacoes_ver(): void
                 <dt>Devolução prevista</dt><dd><?= e(dt($loc['data_prev_devolucao'])) ?>
                     <?php if ($atraso > 0): ?><span class="selo vermelho"><?= num($atraso) ?> dia(s) de atraso</span><?php endif; ?></dd>
                 <?php if ($loc['local_uso'] !== ''): ?><dt>Local de uso</dt><dd><?= e($loc['local_uso']) ?></dd><?php endif; ?>
-                <?php if ((float) $loc['acrescimo'] > 0): ?><dt>Acréscimo</dt><dd><?= money($loc['acrescimo']) ?></dd><?php endif; ?>
-                <?php if ((float) $loc['frete_entrega'] > 0): ?><dt>Frete de entrega</dt><dd><?= money($loc['frete_entrega']) ?></dd><?php endif; ?>
-                <?php if ((float) $loc['frete_recolhimento'] > 0): ?><dt>Frete de recolhimento</dt><dd><?= money($loc['frete_recolhimento']) ?></dd><?php endif; ?>
-                <?php if ((float) $loc['desconto'] > 0): ?><dt>Desconto</dt><dd><?= money($loc['desconto']) ?></dd><?php endif; ?>
+                <dt>Acréscimo (montagem etc.)</dt><dd><?= money($loc['acrescimo']) ?></dd>
+                <dt>Frete</dt><dd><?= money($loc['frete_entrega']) ?></dd>
+                <dt>Frete de recolhimento</dt><dd><?= money($loc['frete_recolhimento']) ?></dd>
+                <dt>Desconto</dt><dd><?= (float) $loc['desconto'] > 0 ? '− ' : '' ?><?= money($loc['desconto']) ?></dd>
                 <?php if ($loc['endereco_entrega'] !== ''): ?><dt>Endereço de entrega</dt><dd><?= e($loc['endereco_entrega']) ?></dd><?php endif; ?>
                 <?php if ($loc['reserva_id']): ?><dt>Origem</dt><dd>Reserva nº <?= e(val('SELECT numero FROM reservas WHERE id = :id', ['id' => $loc['reserva_id']])) ?></dd><?php endif; ?>
                 <dt>Registrada em</dt><dd><?= e(dt($loc['criado_em'], true)) ?></dd>
@@ -514,7 +514,7 @@ function locacoes_ver(): void
             <?= csrf_field() ?>
             <input type="hidden" name="id" value="<?= e($loc['id']) ?>">
             <div class="linha">
-                <label>Frete de entrega R$<input type="text" name="frete_entrega" value="<?= e(num($loc['frete_entrega'], 2)) ?>" inputmode="decimal"></label>
+                <label>Frete R$<input type="text" name="frete_entrega" value="<?= e(num($loc['frete_entrega'], 2)) ?>" inputmode="decimal"></label>
                 <label>Frete de recolhimento R$<input type="text" name="frete_recolhimento" value="<?= e(num($loc['frete_recolhimento'], 2)) ?>" inputmode="decimal"></label>
             </div>
             <label>Endereço de entrega e recolhimento<input type="text" name="endereco_entrega" value="<?= e($loc['endereco_entrega']) ?>" maxlength="200"></label>
@@ -826,17 +826,53 @@ function locacoes_romaneio(): void
     print_end();
 }
 
+/**
+ * Cláusulas guardadas como texto puro ("CLÁUSULA 1ª - TÍTULO: texto", parágrafos separados por linha em branco).
+ * Cada uma vira um bloco, com o título em negrito; parágrafo que não começa com CLÁUSULA sai como texto normal.
+ */
+function clausulas_html(string $texto, array $reposicao = []): string
+{
+    $html = '';
+    foreach (preg_split('/\n\s*\n/', trim($texto)) as $paragrafo) {
+        $paragrafo = trim($paragrafo);
+        if ($paragrafo === '') {
+            continue;
+        }
+        if (preg_match('/^(CLÁUSULA[^:\n]*):\s*(.*)$/su', $paragrafo, $m)) {
+            $html .= '<div class="clausula"><p class="clausula-titulo">' . e($m[1]) . '</p><p>' . e($m[2]) . '</p>';
+            // Cláusula de avarias: lista o valor de reposição de cada bem da locação
+            if ($reposicao && str_contains($m[1], 'AVARIAS')) {
+                $html .= '<p class="reposicao-titulo">Valores de reposição dos bens locados:</p><ul class="reposicao">';
+                foreach ($reposicao as $linha) {
+                    $html .= '<li>' . e($linha) . '</li>';
+                }
+                $html .= '</ul>';
+            }
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="clausula"><p>' . e($paragrafo) . '</p></div>';
+        }
+    }
+    return $html;
+}
+
 function locacoes_contrato(): void
 {
     $loc = locacao_da_url();
     $emp = empresa();
     $dias = dias_cobranca($loc['data_saida'], $loc['data_prev_devolucao']);
-    $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.codigo, p.descricao, p.unidade, p.valor_reposicao,
+    $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.valor_reposicao,
                          (SELECT string_agg(u.patrimonio, ', ' ORDER BY u.patrimonio) FROM locacao_unidades lu
                             JOIN unidades u ON u.id = lu.unidade_id WHERE lu.locacao_item_id = li.id) AS patrimonios
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id ORDER BY p.descricao", ['id' => $loc['id']]);
     $subtotal = 0.0;
+    // Valor de reposição por unidade: vai na cláusula de avarias, não na tabela de bens
+    $reposicao = [];
+    foreach ($itens as $it) {
+        $reposicao[] = $it['descricao'] . ': ' . money($it['valor_reposicao']) . ' por unidade';
+    }
+    $cliente = one('SELECT tipo, cpf_cnpj FROM clientes WHERE id = :id', ['id' => $loc['cliente_id']]);
     // Assinatura do cliente feita na tela, na vistoria de retirada
     $assinatura = one("SELECT id, assinante_nome, assinado_em FROM vistorias
                         WHERE locacao_id = :id AND tipo = 'retirada' AND assinatura_arquivo <> ''", ['id' => $loc['id']]);
@@ -845,6 +881,9 @@ function locacoes_contrato(): void
     cabecalho_impressao('Contrato de locação', 'Nº ' . $loc['numero']);
     locatario_impressao($loc);
     ?>
+    <p class="preambulo">Pelo presente instrumento, de um lado <strong><?= e($emp['razao_social']) ?></strong>, doravante
+       LOCADORA, e de outro <strong><?= e($loc['cliente_nome']) ?></strong>, doravante LOCATÁRIO, ajustam a locação
+       dos bens abaixo, nas condições a seguir.</p>
     <h2>Período e local</h2>
     <table>
         <tr><th style="width:22%">Saída</th><td><?= e(dt($loc['data_saida'])) ?></td>
@@ -853,35 +892,32 @@ function locacoes_contrato(): void
     </table>
     <h2>Bens locados</h2>
     <table>
-        <thead><tr><th class="num">Qtd.</th><th>Un.</th><th>Código</th><th>Descrição</th><th>Período</th><th class="num">Preço (un.)</th>
-            <th class="num">Valor de reposição (un.)</th><th class="num">Subtotal previsto</th></tr></thead>
+        <thead><tr><th>Descrição</th><th style="width:30mm">Período</th><th class="num" style="width:16mm">Qtd.</th>
+            <th class="num" style="width:30mm">Preço (un.)</th><th class="num" style="width:34mm">Subtotal previsto</th></tr></thead>
         <tbody>
         <?php foreach ($itens as $it): $sub = $it['quantidade'] * preco_item($it, $dias); $subtotal += $sub; ?>
-            <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
-                <td><?= e($it['descricao']) ?><?= $it['patrimonios'] ? '<br><small>Patrimônio: ' . e($it['patrimonios']) . '</small>' : '' ?></td>
-                <td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td>
-                <td class="num"><?= money($it['valor_reposicao']) ?></td><td class="num"><?= money($sub) ?></td></tr>
+            <tr><td><?= e($it['descricao']) ?><?= $it['patrimonios'] ? '<br><small>Patrimônio: ' . e($it['patrimonios']) . '</small>' : '' ?></td>
+                <td><?= e(periodo_nome($it)) ?></td><td class="num"><?= num($it['quantidade']) ?></td>
+                <td class="num"><?= money(preco_unitario($it)) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <tr><td colspan="7" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
-            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="7" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="7" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="7" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="7" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
-            <tr><td colspan="6" class="num">Valor previsto</td><td class="num"><?= money($loc['valor_previsto']) ?></td></tr>
+            <tr><td colspan="4" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
+            <?= ajustes_linha($loc, 5) ?>
+            <tr><td colspan="4" class="num">Valor Total</td><td class="num"><?= money($loc['valor_previsto']) ?></td></tr>
         </tfoot>
     </table>
-    <h2>Cláusulas</h2>
-    <div class="clausulas"><?= e($emp['termos_contrato']) ?></div>
-    <p style="margin-top:6mm"><?= e(($emp['cidade'] ?: '') . ($emp['cidade'] ? ', ' : '') . data_extenso($loc['data_saida'])) ?>.</p>
+    <h2>Condições gerais</h2>
+    <div class="clausulas"><?= clausulas_html($emp['termos_contrato'], $reposicao) ?></div>
+    <p class="data-contrato"><?= e(($emp['cidade'] ?: '') . ($emp['cidade'] ? ', ' : '') . data_extenso($loc['data_saida'])) ?>.</p>
     <div class="assinaturas">
-        <div>LOCADORA<br><?= e($emp['razao_social']) ?></div>
+        <div>LOCADORA<br><?= e($emp['razao_social']) ?><?= $emp['cnpj'] !== '' ? '<br><small>CNPJ ' . e(doc_formatar($emp['cnpj'])) . '</small>' : '' ?></div>
         <div class="<?= $assinatura ? 'assinado' : '' ?>">
             <?php if ($assinatura): ?>
                 <img src="<?= e(url('arquivos', ['a' => 'assinatura', 'id' => $assinatura['id']])) ?>" alt="Assinatura do locatário">
             <?php endif; ?>
             LOCATÁRIO<br><?= e($loc['cliente_nome']) ?>
+            <?php if ($cliente['cpf_cnpj'] !== ''): ?><br><small><?= $cliente['tipo'] === 'PJ' ? 'CNPJ ' : 'CPF ' ?><?= e(doc_formatar($cliente['cpf_cnpj'])) ?></small><?php endif; ?>
             <?php if ($assinatura): ?>
                 <small>Assinado eletronicamente por <?= e($assinatura['assinante_nome']) ?> em <?= e(dt($assinatura['assinado_em'], true)) ?>,
                     na vistoria de retirada.</small>
@@ -913,6 +949,11 @@ function locacoes_fatura(): void
     $extras = one('SELECT COALESCE(SUM(multa), 0) AS multa, COALESCE(SUM(avaria), 0) AS avaria FROM devolucoes WHERE locacao_id = :id',
                   ['id' => $loc['id']]);
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
+    // Subtotal = o que as linhas somam (devolvidas e pendentes até hoje). O total soma também os ajustes, a multa e a avaria
+    $subtotal = array_sum(array_column($linhas, 'valor'));
+    foreach ($pendentes as $l) {
+        $subtotal += $l['quantidade'] * preco_item($l, $diasHoje);
+    }
 
     $whats = whatsapp_locacao($loc)['links'];
     $pix = locacao_pix($loc);
@@ -926,28 +967,28 @@ function locacoes_fatura(): void
        · situação: <strong><?= e($aberta ? 'em aberto (valores até ' . dt(today()) . ')' : $loc['status']) ?></strong></p>
     <h2>Discriminação</h2>
     <table>
-        <thead><tr><th>Devolução</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Dias</th><th>Período</th><th class="num">Preço (un.)</th><th class="num">Valor</th></tr></thead>
+        <thead><tr><th>Devolução</th><th>Descrição</th><th>Período</th><th class="num">Qtd.</th><th class="num">Dias</th><th class="num">Preço (un.)</th><th class="num">Valor</th></tr></thead>
         <tbody>
         <?php foreach ($linhas as $l): ?>
-            <tr><td><?= e(dt($l['data'])) ?></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($l['dias']) ?></td><td><?= periodo_html($l) ?></td><td class="num"><?= precos_html($l) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
+            <tr><td><?= e(dt($l['data'])) ?></td><td><?= e($l['descricao']) ?></td><td><?= e(periodo_nome($l)) ?></td>
+                <td class="num"><?= num($l['quantidade']) ?></td><td class="num"><?= num($l['dias']) ?></td>
+                <td class="num"><?= money(preco_unitario($l)) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
         <?php endforeach; ?>
         <?php foreach ($pendentes as $l): ?>
-            <tr><td><em>pendente</em></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($diasHoje) ?></td><td><?= periodo_html($l) ?></td><td class="num"><?= precos_html($l) ?></td>
+            <tr><td><em>pendente</em></td><td><?= e($l['descricao']) ?></td><td><?= e(periodo_nome($l)) ?></td>
+                <td class="num"><?= num($l['quantidade']) ?></td><td class="num"><?= num($diasHoje) ?></td>
+                <td class="num"><?= money(preco_unitario($l)) ?></td>
                 <td class="num"><?= money($l['quantidade'] * preco_item($l, $diasHoje)) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>
+            <tr><td colspan="6" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
+            <?= ajustes_linha($loc, 7) ?>
             <?php if ((float) $extras['multa'] > 0): ?><tr><td colspan="6" class="num">Multa</td><td class="num"><?= money($extras['multa']) ?></td></tr><?php endif; ?>
             <?php if ((float) $extras['avaria'] > 0): ?><tr><td colspan="6" class="num">Avaria</td><td class="num"><?= money($extras['avaria']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="6" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="6" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="6" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="5" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
-            <tr><td colspan="5" class="num">Total da locação</td><td class="num"><?= money($loc['valor_atual']) ?></td></tr>
-            <tr><td colspan="5" class="num">Valor pago</td><td class="num"><?= money($loc['valor_pago']) ?></td></tr>
-            <tr><td colspan="5" class="num">Saldo a pagar</td><td class="num"><?= money(max(0, $saldo)) ?></td></tr>
+            <tr><td colspan="6" class="num">Total da locação</td><td class="num"><?= money($loc['valor_atual']) ?></td></tr>
+            <tr><td colspan="6" class="num">Valor pago</td><td class="num"><?= money($loc['valor_pago']) ?></td></tr>
+            <tr><td colspan="6" class="num">Saldo a pagar</td><td class="num"><?= money(max(0, $saldo)) ?></td></tr>
         </tfoot>
     </table>
     <?php if ($pix !== null): ?><?= pix_bloco($pix) ?><?php endif; ?>

@@ -67,7 +67,21 @@ function periodo_html(array $it): string
     $rotulo = ['diaria' => 'Diária', 'semanal' => 'Semanal', 'quinzenal' => 'Quinzenal', 'mensal' => 'Mensal'][$per];
     $unidade = ['diaria' => 'dia', 'semanal' => 'semana', 'quinzenal' => 'quinzena', 'mensal' => 'mês'][$per];
     $preco = $per === 'diaria' ? $it['valor_diaria'] : ($it['valor_' . $per] ?? 0);
-    return e($rotulo) . '<br><small>' . money($preco) . '/' . $unidade . '</small>';
+    return e($rotulo) . '<br><small class="nowrap">' . money($preco) . '/' . $unidade . '</small>';
+}
+
+/** Contrato: só o nome do período escolhido (ex.: "Mensal"). Itens antigos: "Automático". */
+function periodo_nome(array $it): string
+{
+    $per = $it['periodo'] ?? 'automatico';
+    return $per === 'automatico' ? 'Automático' : ['diaria' => 'Diária', 'semanal' => 'Semanal', 'quinzenal' => 'Quinzenal', 'mensal' => 'Mensal'][$per];
+}
+
+/** Contrato: preço por unidade do período escolhido, sem a tabela dos outros preços. */
+function preco_unitario(array $it): float
+{
+    $per = $it['periodo'] ?? 'automatico';
+    return $per === 'diaria' || $per === 'automatico' ? (float) $it['valor_diaria'] : (float) ($it['valor_' . $per] ?? 0);
 }
 
 /** Tabela de preços para célula de tabela: "R$ 45,00/dia<br>R$ 225,00/semana<br>R$ 700,00/mês". */
@@ -1914,7 +1928,7 @@ function whatsapp_locacao(array $loc): array
         . '• Itens: ' . whatsapp_itens($loc['id']) . "\n"
         . '• Saída: ' . dt($loc['data_saida']) . "\n"
         . '• Devolução prevista: ' . dt($loc['data_prev_devolucao']) . "\n"
-        . '• Valor previsto: ' . money($loc['valor_previsto'])
+        . '• Valor Total: ' . money($loc['valor_previsto'])
         . ($loc['valor_pago'] > 0 ? "\n• Pago: " . money($loc['valor_pago']) : '')
         . "\n\nQualquer dúvida, estamos à disposição.");
 

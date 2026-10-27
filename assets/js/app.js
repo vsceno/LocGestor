@@ -209,6 +209,13 @@ var LG = {
                     var opt = sel.options[sel.selectedIndex];
                     var v = opt ? parseFloat(valorPeriodo(opt)) : 0;
                     if (v > 0) { diaria.value = LG.decimal(v); diaria.dataset.auto = '1'; }
+                    // Semanal, quinzenal ou mensal: a locação do item já vem com 7, 15 ou 30 dias, contando o dia da saída
+                    var bloco = { semanal: 7, quinzenal: 15, mensal: 30 }[perSel.value];
+                    if (bloco && diasEl && pvEl && saida.value) {
+                        diasEl.value = bloco;
+                        pvEl.value = LG.somarDias(saida.value, bloco - 1);
+                        atualizarPrev();
+                    }
                     recalcular(); agendarConsulta();
                 });
             }
