@@ -248,11 +248,12 @@ function locacoes_nova(): void
                     <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required>
                 </label>
                 <label class="obrig">Devolução prevista
-                    <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required>
+                    <span style="display:flex; gap:8px; align-items:center">
+                        <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="flex:1; min-width:0">
+                        <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="dias" title="Dias a partir da saída (conta o dia da saída)"
+                               aria-label="Quantidade de dias a partir da saída" style="width:78px; flex:0 0 78px">
+                    </span>
                     <span class="ajuda" id="info-dias"></span>
-                </label>
-                <label>Dias <span class="ajuda">(conta o dia da saída)</span>
-                    <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="0" aria-label="Quantidade de dias a partir da saída">
                 </label>
                 <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
