@@ -150,13 +150,16 @@ var LG = {
         }
 
         corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
-        form.querySelector('#add-item').addEventListener('click', function () {
-            var tr = modelo.content.firstElementChild.cloneNode(true);
-            corpo.appendChild(tr);
-            prepararLinha(tr);
-            tr.querySelector('.sel-produto').focus();
-            recalcular();
-        });
+        var addItem = form.querySelector('#add-item');
+        if (addItem) {
+            addItem.addEventListener('click', function () {
+                var tr = modelo.content.firstElementChild.cloneNode(true);
+                corpo.appendChild(tr);
+                prepararLinha(tr);
+                tr.querySelector('.sel-produto').focus();
+                recalcular();
+            });
+        }
         // Kit: cada produto do kit soma na linha que já tem o produto, ou ocupa uma linha vazia/nova
         var kitSel = form.querySelector('#kit-sel');
         if (kitSel) {
