@@ -261,19 +261,21 @@ function locacoes_nova(): void
         <div class="card">
             <div class="card-titulo" style="align-items:flex-end">
                 <h2>Itens</h2>
-                <label class="obrig">Devolução prevista
+            </div>
+            <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
+            <div class="tabela-wrap">
+                <table class="tabela" id="tabela-itens">
+                    <thead><tr class="linha-devolucao"><th colspan="6" style="text-align:left; font-weight:normal">
+                        <div style="max-width:260px"><label class="obrig">Devolução prevista
                     <span style="display:flex; gap:8px; align-items:center">
                         <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="width:170px; flex:0 0 170px">
                         <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="dias" title="Dias a partir da saída (conta o dia da saída)"
                                aria-label="Quantidade de dias a partir da saída" style="width:78px; flex:0 0 78px">
                     </span>
                     <span class="ajuda" id="info-dias"></span>
-                </label>
-            </div>
-            <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
-            <div class="tabela-wrap">
-                <table class="tabela" id="tabela-itens">
-                    <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Diária (R$)</th>
+                </label></div>
+                    </th></tr>
+                    <tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
                         <th class="num">Disponível</th><th class="num">Subtotal</th><th></th></tr></thead>
                     <tbody>
                     <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln); } ?>
