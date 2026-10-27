@@ -235,7 +235,8 @@ function locacoes_nova(): void
         <?php endif; ?>
         <div class="card">
             <h2>Cliente e período</h2>
-            <label class="obrig">Cliente
+            <div class="linha" style="grid-template-columns: minmax(200px, 2fr) minmax(150px, 1fr) minmax(180px, 1.4fr)">
+                <label class="obrig">Cliente
                 <input type="text" name="cliente" value="<?= e($clienteTxt) ?>" list="lista-clientes" required autocomplete="off"
                        placeholder="Digite o nome e escolha na lista">
                 <datalist id="lista-clientes">
@@ -243,17 +244,8 @@ function locacoes_nova(): void
                 </datalist>
                 <span class="ajuda">Clientes bloqueados não aparecem. <a href="<?= e(url('clientes', ['a' => 'novo'])) ?>">Cadastrar cliente</a></span>
             </label>
-            <div class="linha">
                 <label class="obrig">Data de saída
                     <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required>
-                </label>
-                <label class="obrig">Devolução prevista
-                    <span style="display:flex; gap:8px; align-items:center">
-                        <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="flex:1; min-width:0">
-                        <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="dias" title="Dias a partir da saída (conta o dia da saída)"
-                               aria-label="Quantidade de dias a partir da saída" style="width:78px; flex:0 0 78px">
-                    </span>
-                    <span class="ajuda" id="info-dias"></span>
                 </label>
                 <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
@@ -267,6 +259,16 @@ function locacoes_nova(): void
                 <h2>Itens</h2>
                 <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
                     <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
+            </div>
+            <div style="max-width:420px">
+                <label class="obrig">Devolução prevista
+                    <span style="display:flex; gap:8px; align-items:center">
+                        <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="flex:1; min-width:0">
+                        <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="dias" title="Dias a partir da saída (conta o dia da saída)"
+                               aria-label="Quantidade de dias a partir da saída" style="width:78px; flex:0 0 78px">
+                    </span>
+                    <span class="ajuda" id="info-dias"></span>
+                </label>
             </div>
             <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
             <div class="tabela-wrap">
