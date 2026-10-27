@@ -102,7 +102,7 @@ function selo_status_locacao(array $l): string
  * Linha da tabela dinâmica de itens (nova locação e reserva). Na reserva ($comDiaria = false)
  * a diária e o subtotal ficam ocultos: a reserva não guarda preço.
  */
-function linha_item_html(array $produtos, array $ln, bool $comDiaria = true): void
+function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, bool $comPrev = false): void
 {
     ?>
     <tr class="linha-item">
@@ -121,6 +121,9 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true): vo
             <td hidden><input type="hidden" class="diaria" value=""></td>
         <?php endif; ?>
         <td class="num disp">—</td>
+        <?php if ($comPrev): ?>
+            <td class="num"><input type="date" name="prev[]" class="prev-item" value="<?= e($ln['prev'] ?? '') ?>" style="width:160px" aria-label="Devolução prevista do item"></td>
+        <?php endif; ?>
         <td class="num subtotal"<?= $comDiaria ? '' : ' hidden' ?>>—</td>
         <td><button type="button" class="btn btn-sec btn-peq remover" title="Remover item">✕</button></td>
     </tr>

@@ -1331,6 +1331,38 @@ secao('Nova locação: campo Dias para a devolução');
 ok(str_contains($alfa->get('index.php?p=locacoes&a=nova')['corpo'], 'id="dias-prev"'), 'nova locação tem o campo Dias ao lado da devolução prevista');
 
 // =====================================================================
+secao('Devolução prevista por item (cada produto com a sua data)');
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'local_uso' => 'TESTE por item',
+               'produto_id' => [$CAR, $AND], 'quantidade' => ['1', '2'], 'diaria' => ['', ''], 'prev' => [dia(2), dia(5)]]);
+$LI = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE por item'");
+ok($LI && dbv('SELECT data_prev_devolucao FROM locacoes WHERE id = :l', ['l' => $LI]) === dia(5),
+   'a locação fica com a devolução mais tarde entre os itens');
+ok($LI && dbv('SELECT data_prev_devolucao FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id WHERE li.locacao_id = :l AND p.codigo = :c',
+              ['l' => $LI, 'c' => 'CAR-MAO']) === dia(2)
+   && dbv('SELECT data_prev_devolucao FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id WHERE li.locacao_id = :l AND p.codigo = :c',
+          ['l' => $LI, 'c' => 'AND-001']) === dia(5),
+   'cada item grava a sua devolução');
+ok($LI && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LI])
+              - (float) dbv('SELECT SUM(li.quantidade * preco_periodo(li.data_prev_devolucao - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal))
+                              FROM locacao_itens li JOIN locacoes l ON l.id = li.locacao_id WHERE li.locacao_id = :l', ['l' => $LI])) < 0.01,
+   'o valor previsto cobra cada item pelos dias da devolução dele');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'local_uso' => 'TESTE item antes',
+               'produto_id' => [$CAR], 'quantidade' => ['1'], 'diaria' => [''], 'prev' => [dia(-1)]]);
+ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=nova'), 'não pode ser antes da saída')
+   && dbv("SELECT count(*) FROM locacoes WHERE local_uso = 'TESTE item antes'") == 0,
+   'devolução de um item antes da saída é recusada');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'data_prev_devolucao' => dia(2), 'local_uso' => 'TESTE produto repetido',
+               'produto_id' => [$CAR, $CAR], 'quantidade' => ['1', '1'], 'diaria' => ['', ''], 'prev' => [dia(2), dia(3)]]);
+ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=nova'), 'datas de devolução diferentes')
+   && dbv("SELECT count(*) FROM locacoes WHERE local_uso = 'TESTE produto repetido'") == 0,
+   'o mesmo produto com datas diferentes é recusado (use uma linha por produto)');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",

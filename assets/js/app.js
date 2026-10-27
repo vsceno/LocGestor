@@ -52,12 +52,19 @@ var LG = {
 
         function diarias() { return Math.max(1, LG.dias(saida.value, prev.value)); }
 
+        // Trocar a devolução geral atualiza a devolução de todos os itens
+        function propagar() {
+            corpo.querySelectorAll('.prev-item').forEach(function (i) { i.value = prev.value; });
+        }
+
         function recalcular() {
             var d = diarias(), soma = 0;
             corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
                 var qtd = parseInt(tr.querySelector('.qtd').value, 10) || 0;
                 var opt = tr.querySelector('.sel-produto').selectedOptions[0] || { dataset: {} };
-                var sub = qtd * LG.precoPeriodo(d, LG.numero(tr.querySelector('.diaria').value),
+                var pi = tr.querySelector('.prev-item');
+                var dl = pi && pi.value ? Math.max(1, LG.dias(saida.value, pi.value)) : d;
+                var sub = qtd * LG.precoPeriodo(dl, LG.numero(tr.querySelector('.diaria').value),
                                                 parseFloat(opt.dataset.semanal), parseFloat(opt.dataset.mensal));
                 soma += sub;
                 tr.querySelector('.subtotal').textContent = tr.querySelector('.sel-produto').value ? LG.moeda(sub) : '—';
@@ -141,6 +148,8 @@ var LG = {
             });
             diaria.addEventListener('input', function () { diaria.dataset.auto = ''; recalcular(); });
             tr.querySelector('.qtd').addEventListener('input', recalcular);
+            var pi = tr.querySelector('.prev-item');
+            if (pi) { pi.addEventListener('change', recalcular); }
             tr.querySelector('.remover').addEventListener('click', function () {
                 if (corpo.querySelectorAll('tr.linha-item').length > 1) { tr.remove(); } else {
                     sel.value = ''; diaria.value = ''; tr.querySelector('.qtd').value = 1;
@@ -150,12 +159,15 @@ var LG = {
         }
 
         corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
+        corpo.querySelectorAll('.prev-item').forEach(function (i) { if (!i.value) { i.value = prev.value; } });
         var addItem = form.querySelector('#add-item');
         if (addItem) {
             addItem.addEventListener('click', function () {
                 var tr = modelo.content.firstElementChild.cloneNode(true);
                 corpo.appendChild(tr);
                 prepararLinha(tr);
+                var piNovo = tr.querySelector('.prev-item');
+                if (piNovo) { piNovo.value = prev.value; }
                 tr.querySelector('.sel-produto').focus();
                 recalcular();
             });
@@ -187,13 +199,14 @@ var LG = {
                 recalcular(); agendarConsulta();
             });
         }
+        prev.addEventListener('change', propagar);
         [saida, prev].forEach(function (el) { el.addEventListener('change', function () { recalcular(); agendarConsulta(); }); });
         ['#acrescimo', '#desconto', '#frete-entrega', '#frete-recolhimento'].forEach(function (s) { campo(s).addEventListener('input', recalcular); });
         // Digitar N dias põe a devolução em saída + N
         if (diasPrev) {
             diasPrev.addEventListener('input', function () {
                 var n = parseInt(diasPrev.value, 10);
-                if (saida.value && n >= 1) { prev.value = LG.somarDias(saida.value, n - 1); recalcular(); }
+                if (saida.value && n >= 1) { prev.value = LG.somarDias(saida.value, n - 1); propagar(); recalcular(); }
             });
         }
         recalcular();

@@ -211,7 +211,8 @@ function locacoes_nova(): void
         $prev = old('data_prev_devolucao', $prev);
         $linhas = [];
         foreach ((array) old('produto_id', []) as $i => $pid) {
-            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => old('diaria', [])[$i] ?? ''];
+            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => old('diaria', [])[$i] ?? '',
+                         'prev' => old('prev', [])[$i] ?? ''];
         }
         if (old('reserva_id') !== '' && is_uuid(old('reserva_id'))) {
             $reserva = one("SELECT id, numero FROM reservas WHERE id = :id", ['id' => old('reserva_id')]);
@@ -276,13 +277,13 @@ function locacoes_nova(): void
                 </label></div>
                     </th></tr>
                     <tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
-                        <th class="num">Disponível</th><th class="num">Subtotal</th><th></th></tr></thead>
+                        <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th></th></tr></thead>
                     <tbody>
-                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln); } ?>
+                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true); } ?>
                     </tbody>
                 </table>
             </div>
-            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '']); ?></template>
+            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'prev' => ''], true, true); ?></template>
         </div>
 
         <div class="card">

@@ -344,6 +344,7 @@ CREATE TABLE locacao_itens (
     valor_diaria    NUMERIC(12,2) NOT NULL CHECK (valor_diaria >= 0),
     valor_semanal   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),
     valor_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),
+    data_prev_devolucao DATE NOT NULL,
     CONSTRAINT locacao_itens_tenant_id_uk UNIQUE (tenant_id, id),
     CONSTRAINT locacao_itens_devolvida_ck CHECK (qtd_devolvida BETWEEN 0 AND quantidade),
     CONSTRAINT locacao_itens_locacao_fk   FOREIGN KEY (tenant_id, locacao_id) REFERENCES locacoes (tenant_id, id) ON DELETE CASCADE,
@@ -807,7 +808,7 @@ SELECT l.tenant_id,
        COALESCE(cx.pago, 0)::NUMERIC(12,2) AS valor_pago
   FROM locacoes l
   LEFT JOIN LATERAL (
-        SELECT SUM(li.quantidade * preco_periodo(l.data_prev_devolucao - l.data_saida,
+        SELECT SUM(li.quantidade * preco_periodo(li.data_prev_devolucao - l.data_saida,
                                                  li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS previsto_itens,
                SUM((li.quantidade - li.qtd_devolvida) * preco_periodo(CURRENT_DATE - l.data_saida,
                                                  li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS pendente_hoje

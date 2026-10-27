@@ -319,6 +319,13 @@ estoque. A perda fica registrada na tabela de perdas e aparece na observação d
 se tivesse voltado, então o pendente diminui. Não se cobra diária da unidade perdida: só a reposição.
 Produto com patrimônio (unidades) ainda não aceita perda nessa tela: a baixa da unidade é feita em *Produtos*.
 
+### Devolução prevista por item
+
+Na nova locação, a tabela de itens tem a coluna **Devolução**: cada produto pode voltar numa data diferente. Trocar a
+devolução geral (no topo da tabela) põe a mesma data em todos os itens. Cada item é cobrado pelos dias da data dele;
+a locação fica com a devolução mais tarde. O mesmo produto não pode aparecer em duas linhas com datas diferentes (use
+uma linha por produto). Migração 023. O atraso e a devolução por item ainda usam a data geral da locação.
+
 ### Busca geral
 
 O campo **Buscar** no topo de todas as telas acha clientes (nome, CPF/CNPJ ou trecho do telefone), locações e
@@ -599,6 +606,7 @@ psql -U postgres -d locgestor -f database\migrations\019_codigos_barras.sql
 psql -U postgres -d locgestor -f database\migrations\020_recibos.sql
 psql -U postgres -d locgestor -f database\migrations\021_desconto_autorizacao.sql
 psql -U postgres -d locgestor -f database\migrations\022_devolucao_perdas.sql
+psql -U postgres -d locgestor -f database\migrations\023_devolucao_por_item.sql
 php tests\isolamento.php
 ```
 
@@ -626,6 +634,7 @@ php tests\isolamento.php
 | `020_recibos.sql` | tabela `recibos` (recibos numerados, sem alteração nem exclusão; CPF/CNPJ mascarado na auditoria) |
 | `021_desconto_autorizacao.sql` | coluna `desconto_autorizado_por` em `locacoes` e `orcamentos` (quem autorizou o desconto ou acréscimo) |
 | `022_devolucao_perdas.sql` | tabela `devolucao_perdas` (equipamentos perdidos ou extraviados na devolução, com o valor de reposição) |
+| `023_devolucao_por_item.sql` | coluna `data_prev_devolucao` em `locacao_itens` (devolução de cada item; o valor previsto usa a data do item) |
 
 ### 10.2 Proteções do login (já ativas)
 

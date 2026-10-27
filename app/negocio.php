@@ -735,12 +735,22 @@ function itens_do_form(array $d, string $onde): array
             throw new UserError('Quantidade inválida na linha ' . ($i + 1) . '.');
         }
         $diariaTxt = trim((string) ($d['diaria'][$i] ?? ''));
+        $prevTxt = trim((string) ($d['prev'][$i] ?? ''));
+        if ($prevTxt !== '' && !valid_date($prevTxt)) {
+            throw new UserError('Data de devolução inválida na linha ' . ($i + 1) . '.');
+        }
         if (!isset($itens[$pid])) {
-            $itens[$pid] = ['qtd' => 0, 'diaria' => null];
+            $itens[$pid] = ['qtd' => 0, 'diaria' => null, 'prev' => null];
         }
         $itens[$pid]['qtd'] += $qtd;
         if ($itens[$pid]['diaria'] === null && $diariaTxt !== '') {
             $itens[$pid]['diaria'] = parse_money($diariaTxt);
+        }
+        if ($prevTxt !== '') {
+            if ($itens[$pid]['prev'] !== null && $itens[$pid]['prev'] !== $prevTxt) {
+                throw new UserError('O mesmo produto aparece com datas de devolução diferentes. Use uma linha por produto.');
+            }
+            $itens[$pid]['prev'] = $prevTxt;
         }
     }
     if (!$itens) {
@@ -945,6 +955,13 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
     }
 
     $itens = itens_do_form($d, 'locação');
+    foreach ($itens as $pidP => $itP) {
+        $itens[$pidP]['prev'] ??= $prev;
+        if ($itens[$pidP]['prev'] < $saida) {
+            throw new UserError('A devolução prevista de um item não pode ser antes da saída.');
+        }
+    }
+    $prev = max(array_column($itens, 'prev'));
 
     return tx(function () use ($cliente, $saida, $prev, $acrescimo, $desconto, $adiantamento, $forma, $local, $obs, $reservaId, $itens,
                                $freteEntrega, $freteRecolhimento, $endereco, $autorizadoPor) {
@@ -987,10 +1004,10 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
              'fe' => $freteEntrega, 'fr' => $freteRecolhimento, 'end' => $endereco, 'aut' => $autorizadoPor]);
         foreach ($itens as $pid => $it) {
             // Semanal e mensal vêm do cadastro (o formulário só permite ajustar a diária)
-            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal)
-               VALUES (:l, :p, :q, :d, :s, :m)',
+            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal, data_prev_devolucao)
+               VALUES (:l, :p, :q, :d, :s, :m, :dp)',
               ['l' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria'],
-               's' => $cadastro[$pid]['valor_semanal'], 'm' => $cadastro[$pid]['valor_mensal']]);
+               's' => $cadastro[$pid]['valor_semanal'], 'm' => $cadastro[$pid]['valor_mensal'], 'dp' => $it['prev']]);
         }
         if ($reservaId !== null) {
             q("UPDATE reservas SET status = 'convertida' WHERE id = :id", ['id' => $reservaId]);
