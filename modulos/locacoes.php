@@ -234,8 +234,15 @@ function locacoes_nova(): void
             <div class="flash flash-aviso">Retirada da reserva nº <?= e($reserva['numero']) ?>: ao salvar, a reserva será marcada como convertida.</div>
         <?php endif; ?>
         <div class="card">
-            <h2>Cliente e período</h2>
-            <div class="linha" style="grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr)">
+            <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px 40px">
+                <h2 style="margin:6px 0 0">Cliente e período</h2>
+                <div style="width:330px">
+                    <label class="obrig">Data de saída
+                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:100%">
+                </label>
+                </div>
+            </div>
+            <div class="linha" style="grid-template-columns: 1fr 1fr">
                 <label class="obrig">Cliente
                 <input type="text" name="cliente" value="<?= e($clienteTxt) ?>" list="lista-clientes" required autocomplete="off"
                        placeholder="Digite o nome e escolha na lista">
@@ -244,15 +251,10 @@ function locacoes_nova(): void
                 </datalist>
                 <span class="ajuda">Clientes bloqueados não aparecem. <a href="<?= e(url('clientes', ['a' => 'novo'])) ?>">Cadastrar cliente</a></span>
             </label>
-                <div>
-                    <label class="obrig">Data de saída
-                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:100%">
-                </label>
-                    <label>Local de uso (obra/evento)
+                <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200" style="width:100%">
                     <span class="ajuda">É também o endereço da entrega.</span>
                 </label>
-                </div>
             </div>
         </div>
 
