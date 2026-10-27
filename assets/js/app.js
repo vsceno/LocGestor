@@ -29,6 +29,12 @@ var LG = {
         return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
     },
 
+    // Data aaaa-mm-dd somada de N dias (sem fuso horário)
+    somarDias: function (de, n) {
+        var a = de.split('-'), d = new Date(Date.UTC(a[0], a[1] - 1, parseInt(a[2], 10) + n));
+        return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+    },
+
     // -----------------------------------------------------------------
     // Nova locação / reserva (form[data-itens]): itens dinâmicos, disponibilidade
     // em tempo real e total previsto. Acréscimo, desconto e total são opcionais.
@@ -42,6 +48,7 @@ var LG = {
         var api = form.getAttribute('data-api');
         var reserva = form.querySelector('#reserva_id').value;
         var cache = {}, espera = null;
+        var diasPrev = form.querySelector('#dias-prev');
 
         function diarias() { return Math.max(1, LG.dias(saida.value, prev.value)); }
 
@@ -62,6 +69,11 @@ var LG = {
             var info = form.querySelector('#info-dias');
             info.textContent = LG.dias(saida.value, prev.value) < 0 ? 'A devolução não pode ser antes da saída.' : d + ' dia(s)';
             info.className = 'ajuda' + (LG.dias(saida.value, prev.value) < 0 ? ' alerta' : '');
+            // Campo "Dias" acompanha a data, exceto enquanto o usuário está digitando nele
+            if (diasPrev && document.activeElement !== diasPrev) {
+                var entre = LG.dias(saida.value, prev.value);
+                diasPrev.value = entre < 0 ? 0 : entre + 1;   // conta o dia da saída
+            }
             avisarEstoque();
         }
 
@@ -174,6 +186,13 @@ var LG = {
         }
         [saida, prev].forEach(function (el) { el.addEventListener('change', function () { recalcular(); agendarConsulta(); }); });
         ['#acrescimo', '#desconto', '#frete-entrega', '#frete-recolhimento'].forEach(function (s) { campo(s).addEventListener('input', recalcular); });
+        // Digitar N dias põe a devolução em saída + N
+        if (diasPrev) {
+            diasPrev.addEventListener('input', function () {
+                var n = parseInt(diasPrev.value, 10);
+                if (saida.value && n >= 1) { prev.value = LG.somarDias(saida.value, n - 1); recalcular(); }
+            });
+        }
         recalcular();
         consultar();
     },

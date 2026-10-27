@@ -1327,6 +1327,10 @@ ok(str_contains((string) dbv('SELECT obs FROM devolucoes WHERE locacao_id = :l',
 ok(str_contains($alfa->get("index.php?p=locacoes&a=ver&id=$LP")['corpo'], 'R$ 350,00'), 'o saldo da locação já inclui a reposição');
 
 // =====================================================================
+secao('Nova locação: campo Dias para a devolução');
+ok(str_contains($alfa->get('index.php?p=locacoes&a=nova')['corpo'], 'id="dias-prev"'), 'nova locação tem o campo Dias ao lado da devolução prevista');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",

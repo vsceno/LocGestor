@@ -251,6 +251,9 @@ function locacoes_nova(): void
                     <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required>
                     <span class="ajuda" id="info-dias"></span>
                 </label>
+                <label>Dias <span class="ajuda">(conta o dia da saída)</span>
+                    <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="0" aria-label="Quantidade de dias a partir da saída">
+                </label>
                 <label>Local de uso (obra/evento)
                     <input type="text" name="local_uso" value="<?= e(has_old() ? old('local_uso') : $copia['local_uso']) ?>" maxlength="200">
                     <span class="ajuda">É também o endereço da entrega.</span>
