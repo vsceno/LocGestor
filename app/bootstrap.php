@@ -265,6 +265,12 @@ function days_between(string $de, string $ate): int
     return (int) (new DateTime($de))->diff(new DateTime($ate))->format('%r%a');
 }
 
+/** Dias cobrados entre a saída e a devolução: conta o dia da saída (27/10 a 05/11 = 10 dias). */
+function dias_cobranca(string $de, string $ate): int
+{
+    return max(1, days_between($de, $ate) + 1);
+}
+
 // ---------------------------------------------------------------------
 // Entrada
 // ---------------------------------------------------------------------

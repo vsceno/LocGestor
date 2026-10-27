@@ -276,7 +276,7 @@ function orcamentos_imprimir(): void
     $o = orcamento_da_url();
     $itens = orcamento_itens($o['id']);
     $previsto = orcamento_previsto($o, $itens);
-    $dias = max(1, days_between($o['data_saida'], $o['data_prev_devolucao']));
+    $dias = dias_cobranca($o['data_saida'], $o['data_prev_devolucao']);
     $emp = empresa();
     print_start('Orçamento nº ' . $o['numero'], url('orcamentos', ['a' => 'ver', 'id' => $o['id']]));
     cabecalho_impressao('Orçamento', 'Nº ' . $o['numero']);

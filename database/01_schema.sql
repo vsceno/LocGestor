@@ -828,12 +828,12 @@ SELECT l.tenant_id,
   FROM locacoes l
   LEFT JOIN LATERAL (
         SELECT SUM(li.quantidade * CASE WHEN li.periodo = 'automatico'
-                                        THEN preco_periodo(li.data_prev_devolucao - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal)
-                                        ELSE preco_plano(li.data_prev_devolucao - l.data_saida, li.periodo, li.valor_diaria,
+                                        THEN preco_periodo(li.data_prev_devolucao - l.data_saida + 1, li.valor_diaria, li.valor_semanal, li.valor_mensal)
+                                        ELSE preco_plano(li.data_prev_devolucao - l.data_saida + 1, li.periodo, li.valor_diaria,
                                                          li.valor_semanal, li.valor_quinzenal, li.valor_mensal) END) AS previsto_itens,
                SUM((li.quantidade - li.qtd_devolvida) * CASE WHEN li.periodo = 'automatico'
-                                        THEN preco_periodo(CURRENT_DATE - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal)
-                                        ELSE preco_plano(CURRENT_DATE - l.data_saida, li.periodo, li.valor_diaria,
+                                        THEN preco_periodo(CURRENT_DATE - l.data_saida + 1, li.valor_diaria, li.valor_semanal, li.valor_mensal)
+                                        ELSE preco_plano(CURRENT_DATE - l.data_saida + 1, li.periodo, li.valor_diaria,
                                                          li.valor_semanal, li.valor_quinzenal, li.valor_mensal) END) AS pendente_hoje
           FROM locacao_itens li
          WHERE li.tenant_id = l.tenant_id AND li.locacao_id = l.id

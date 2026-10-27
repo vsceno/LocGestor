@@ -293,11 +293,11 @@ deve_falhar($pdo, 'INSERT em locacoes com cliente_id da Alfa',
             "INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao)
              VALUES (99999, :c, CURRENT_DATE, CURRENT_DATE)", ['c' => $alfaCliente], '23503');
 deve_falhar($pdo, 'INSERT em locacao_itens com produto_id da Alfa',
-            "INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria) VALUES (:l, :p, 1, 1)",
+            "INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao) VALUES (:l, :p, 1, 1, CURRENT_DATE)",
             ['l' => $betaLocacao, 'p' => $alfaProduto], '23503');
 deve_falhar($pdo, 'INSERT em locacao_itens pendurado em locação da Alfa',
-            "INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-             VALUES (:l, (SELECT id FROM produtos LIMIT 1), 1, 1)", ['l' => $alfaLocacao], '23503');
+            "INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+             VALUES (:l, (SELECT id FROM produtos LIMIT 1), 1, 1, CURRENT_DATE)", ['l' => $alfaLocacao], '23503');
 deve_falhar($pdo, 'INSERT em caixa com locacao_id da Alfa',
             "INSERT INTO caixa (data, tipo, descricao, valor, locacao_id) VALUES (CURRENT_DATE, 'E', 'x', 1, :l)",
             ['l' => $alfaLocacao], '23503');

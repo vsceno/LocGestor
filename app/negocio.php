@@ -1110,7 +1110,7 @@ function devolucao_registrar(string $locacaoId, array $d): array
         $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.id AS produto_id, p.valor_reposicao
                         FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                        WHERE li.locacao_id = :id ORDER BY p.descricao FOR UPDATE OF li', ['id' => $locacaoId]);
-        $dias = max(1, days_between($loc['data_saida'], $data));
+        $dias = dias_cobranca($loc['data_saida'], $data);
         $devolver = [];
         $perdas = [];
         foreach ($itens as $it) {
@@ -1610,7 +1610,7 @@ function previsao_caixa(int $dias): array
                     JOIN reserva_itens ri ON ri.reserva_id = r.id JOIN produtos p ON p.id = ri.produto_id
                    WHERE r.status = 'ativa' AND r.data_fim BETWEEN CURRENT_DATE AND CAST(:l AS date)", ['l' => $limite]) as $r) {
         $chave = "R{$r['numero']}";
-        $valor = $r['quantidade'] * preco_item($r, max(1, days_between($r['data_inicio'], $r['data_fim'])));
+        $valor = $r['quantidade'] * preco_item($r, dias_cobranca($r['data_inicio'], $r['data_fim']));
         if (isset($itens[$chave])) {
             $itens[$chave]['valor'] += $valor;
         } else {

@@ -271,7 +271,7 @@ function locacoes_nova(): void
             <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
-                    <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
+                    <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th>Dias</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
                         <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th style="width:90px"></th></tr></thead>
                     <tbody>
                     <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true); } ?>
@@ -335,7 +335,7 @@ function locacoes_ver(): void
 {
     $loc = locacao_da_url();
     $aberta = $loc['status'] === 'aberta';
-    $diasHoje = max(1, days_between($loc['data_saida'], today()));
+    $diasHoje = dias_cobranca($loc['data_saida'], today());
     $atraso = $aberta ? days_between($loc['data_prev_devolucao'], today()) : 0;
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
@@ -367,7 +367,7 @@ function locacoes_ver(): void
     ?>
     <div class="kpis">
         <div class="kpi azul"><span>Valor previsto</span><strong><?= money($loc['valor_previsto']) ?></strong>
-            <small><?= num(max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']))) ?> dia(s) combinados</small></div>
+            <small><?= num(dias_cobranca($loc['data_saida'], $loc['data_prev_devolucao'])) ?> dia(s) combinados</small></div>
         <div class="kpi"><span><?= $aberta ? 'Até hoje' : ($loc['status'] === 'devolvida' ? 'Valor final' : 'Valor (cancelada)') ?></span>
             <strong><?= money($loc['valor_atual']) ?></strong>
             <?php if ($aberta): ?><small><?= num($diasHoje) ?> dia(s) até hoje</small><?php endif; ?></div>
@@ -643,7 +643,7 @@ function locacoes_devolucao(): void
                                  + COALESCE((SELECT SUM(multa + avaria) FROM devolucoes WHERE locacao_id = :b), 0)',
                            ['a' => $loc['id'], 'b' => $loc['id']]);
     $data = old('data', today());
-    $dias = max(1, days_between($loc['data_saida'], $data));
+    $dias = dias_cobranca($loc['data_saida'], $data);
     // Sugestão inicial (sem JavaScript): tudo devolvido hoje
     $desta = 0.0;
     foreach ($itens as $it) {
@@ -828,7 +828,7 @@ function locacoes_contrato(): void
 {
     $loc = locacao_da_url();
     $emp = empresa();
-    $dias = max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']));
+    $dias = dias_cobranca($loc['data_saida'], $loc['data_prev_devolucao']);
     $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.codigo, p.descricao, p.unidade, p.valor_reposicao,
                          (SELECT string_agg(u.patrimonio, ', ' ORDER BY u.patrimonio) FROM locacao_unidades lu
                             JOIN unidades u ON u.id = lu.unidade_id WHERE lu.locacao_item_id = li.id) AS patrimonios
@@ -895,7 +895,7 @@ function locacoes_fatura(): void
     $loc = locacao_da_url();
     $emp = empresa();
     $aberta = $loc['status'] === 'aberta';
-    $diasHoje = max(1, days_between($loc['data_saida'], today()));
+    $diasHoje = dias_cobranca($loc['data_saida'], today());
     // Itens já devolvidos (com os dias efetivos) + pendentes cobrados até hoje
     $linhas = all('SELECT d.data, di.quantidade, di.dias, di.valor, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.unidade
                      FROM devolucao_itens di

@@ -11,7 +11,7 @@ const ORCAMENTO_VALIDADE_MAX_DIAS = 90;
 /** Valor previsto de um orçamento: itens pelo período + acréscimos e fretes − desconto. */
 function orcamento_previsto(array $orc, array $itens): float
 {
-    $dias = max(1, days_between($orc['data_saida'], $orc['data_prev_devolucao']));
+    $dias = dias_cobranca($orc['data_saida'], $orc['data_prev_devolucao']);
     $total = 0.0;
     foreach ($itens as $it) {
         $total += (int) $it['quantidade'] * preco_item($it, $dias);

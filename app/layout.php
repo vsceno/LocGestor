@@ -118,6 +118,7 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, boo
             <td><select name="periodo[]" class="periodo-item" aria-label="Período">
                 <?= options(['diaria' => 'Diária', 'semanal' => 'Semanal (7 dias)', 'quinzenal' => 'Quinzenal (15 dias)', 'mensal' => 'Mensal (30 dias)'], $ln['periodo'] ?? 'diaria') ?>
             </select></td>
+            <td><input type="number" class="dias-item" min="1" step="1" style="width:70px" aria-label="Dias de locação"></td>
         <?php endif; ?>
         <td class="num"><input type="number" name="quantidade[]" class="qtd" value="<?= e($ln['quantidade']) ?>" min="1" step="1" style="width:80px" aria-label="Quantidade"></td>
         <?php if ($comDiaria): ?>

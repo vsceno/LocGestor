@@ -331,7 +331,9 @@ uma linha por produto). Migração 023. O atraso e a devolução por item ainda 
 Cada item da locação tem um **Período**. A diária é a unidade base: se o cliente não escolhe plano, cobra-se dia a dia.
 Os planos são ofertas. Semanal = 7 dias, quinzenal = 15, mensal = 30: cada bloco completo cobra o preço do plano, e
 os dias que sobram voltam a ser diárias. Ex.: 20 dias no semanal = 2 semanas + 6 diárias. O valor digitado na coluna
-Valor é o do período escolhido. Produto sem preço no período escolhido não pode ser alugado nele (escolha outro).
+Valor é o do período escolhido. A coluna **Dias** diz quantos dias o item fica; a devolução é calculada a partir dela
+(saída + dias − 1, porque o dia da saída conta). Trocar a data da devolução atualiza os dias, e vice-versa. Os dias
+cobrados também contam o dia da saída: 27/10 a 05/11 são 10 dias, cobrados como 10 diárias. Produto sem preço no período escolhido não pode ser alugado nele (escolha outro).
 O cadastro do produto tem o **Valor da quinzena**. Itens antigos (sem período) ficam como "automático" (melhor preço).
 
 ### Busca geral
@@ -616,6 +618,7 @@ psql -U postgres -d locgestor -f database\migrations\021_desconto_autorizacao.sq
 psql -U postgres -d locgestor -f database\migrations\022_devolucao_perdas.sql
 psql -U postgres -d locgestor -f database\migrations\023_devolucao_por_item.sql
 psql -U postgres -d locgestor -f database\migrations\024_periodo_do_item.sql
+psql -U postgres -d locgestor -f database\migrations\025_dias_cobranca.sql
 php tests\isolamento.php
 ```
 
@@ -645,6 +648,7 @@ php tests\isolamento.php
 | `022_devolucao_perdas.sql` | tabela `devolucao_perdas` (equipamentos perdidos ou extraviados na devolução, com o valor de reposição) |
 | `023_devolucao_por_item.sql` | coluna `data_prev_devolucao` em `locacao_itens` (devolução de cada item; o valor previsto usa a data do item) |
 | `024_periodo_do_item.sql` | período por item (`periodo`, `valor_quinzenal`) e função `preco_plano()`; itens antigos ficam como "automatico" |
+| `025_dias_cobranca.sql` | a view de valores conta o dia da saída (27/10 a 05/11 = 10 dias) |
 
 ### 10.2 Proteções do login (já ativas)
 

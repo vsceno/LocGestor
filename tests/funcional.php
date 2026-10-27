@@ -328,9 +328,9 @@ ok(str_contains($m, 'não pode ser menor que a quantidade alugada') && dbv('SELE
    'betoneira com estoque 0 e 1 na rua é recusada', $m);
 
 // =====================================================================
-secao('Locação: roteiro de cobrança (R$ 845 previsto, R$ 520 final)');
+secao('Locação: roteiro de cobrança (R$ 845 previsto, R$ 635 final)');
 $r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
-    'cliente' => $MARIA, 'data_saida' => dia(-4), 'data_prev_devolucao' => dia(3),
+    'cliente' => $MARIA, 'data_saida' => dia(-4), 'data_prev_devolucao' => dia(2),
     'produto_id' => [$BET, $CAR], 'quantidade' => ['2', '5'], 'diaria' => ['45,00', ''],
     'acrescimo' => '50,00', 'desconto' => '10,00', 'adiantamento' => '100,00', 'forma' => 'PIX',
 ]);
@@ -365,13 +365,13 @@ ok(str_contains($alfa->mensagem($dev), 'só há 1 pendente'), 'devolver mais que
 $alfa->enviar($dev, 'index.php?p=locacoes&a=devolver',
               ['id' => $LOC, 'data' => dia(0), "qtd[$IB]" => '1', "qtd[$IC]" => '5', 'avaria' => '20,00', 'receber' => '300,00', 'forma' => 'PIX']);
 $v = $valores($N, $alfaId);
-ok($v['status'] === 'devolvida' && $v['valor_atual'] === '520.00' && $v['valor_pago'] === '400.00',
-   'restante com avaria R$ 20 e R$ 300 recebidos: devolvida, final R$ 520,00, pago R$ 400,00', json_encode($v));
-ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo']), 'Saldo R$ 120,00'), 'tela mostra saldo de R$ 120,00');
+ok($v['status'] === 'devolvida' && $v['valor_atual'] === '635.00' && $v['valor_pago'] === '400.00',
+   'restante com avaria R$ 20 e R$ 300 recebidos: devolvida, final R$ 635,00 (5 dias contando a saída), pago R$ 400,00', json_encode($v));
+ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo']), 'Saldo R$ 235,00'), 'tela mostra saldo de R$ 235,00');
 $ct = $alfa->get("index.php?p=locacoes&a=contrato&n=$N")['corpo'];
 ok(str_contains(texto($ct), 'Valor previsto R$ 845,00') && str_contains($ct, 'CLÁUSULA 5ª') && str_contains($ct, "index.php?p=locacoes&amp;a=ver&amp;n=$N\">Voltar"),
    'contrato: valor previsto, cláusulas e botão Voltar para a locação');
-ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']), 'Total da locação R$ 520,00'), 'fatura com total de R$ 520,00');
+ok(str_contains(texto($alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo']), 'Total da locação R$ 635,00'), 'fatura com total de R$ 635,00');
 
 // =====================================================================
 secao('Preço semanal/mensal e kits');
@@ -427,7 +427,7 @@ $pg = texto($alfa->get('index.php?p=produtos&q=TESTE-SEM')['corpo']);
 ok(str_contains($pg, 'R$ 10,00/dia R$ 50,00/semana R$ 150,00/mês'), 'lista de produtos mostra a tabela de preços');
 
 $r = $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar', [
-    'cliente' => $MARIA, 'data_saida' => dia(-10), 'data_prev_devolucao' => dia(25),
+    'cliente' => $MARIA, 'data_saida' => dia(-9), 'data_prev_devolucao' => dia(25),
     'produto_id' => [$SEM], 'quantidade' => ['2'], 'diaria' => [''],
 ]);
 $NS = num_locacao($r);
@@ -637,8 +637,8 @@ $pg = $alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo'];
 $l = $links($pg)['5585997015566'] ?? [];
 ok(count($l) === 2 && str_contains($pg, 'Enviar resumo') && str_contains($pg, 'Cobrar saldo') && !str_contains($pg, 'Lembrete de devolução'),
    "locação nº $N (devolvida, com saldo): resumo e cobrança para o celular 55 85 99701-5566, sem lembrete");
-ok(isset($l[1]) && str_contains($l[1], 'Olá, Maria!') && str_contains($l[1], "*locação nº $N*") && str_contains($l[1], 'R$ 120,00'),
-   'mensagem de cobrança: saudação pelo primeiro nome, número da locação e saldo de R$ 120,00');
+ok(isset($l[1]) && str_contains($l[1], 'Olá, Maria!') && str_contains($l[1], "*locação nº $N*") && str_contains($l[1], 'R$ 235,00'),
+   'mensagem de cobrança: saudação pelo primeiro nome, número da locação e saldo de R$ 235,00');
 $atr = $links($alfa->get('index.php?p=locacoes&a=ver&n=141')['corpo'])['5585981002000'] ?? [];
 ok((bool) array_filter($atr, fn($t) => str_contains($t, 'Olá, Construtora Jaguaribe Ltda!') && str_contains($t, 'está *atrasada* desde')),
    'lembrete da locação atrasada (cliente PJ): razão social e aviso de atraso');
@@ -770,8 +770,8 @@ ok(pix_payload('123e4567-e12b-12d1-a456-426655440000', 'Fulano de Tal', 'BRASILI
 $crcValido = fn(string $p) => strlen($p) > 8 && pix_crc16(substr($p, 0, -4)) === substr($p, -4);
 preg_match('/data-pix="([^"]+)"/', $alfa->get("index.php?p=locacoes&a=fatura&n=$N")['corpo'], $m);
 $payload = html_entity_decode($m[1] ?? '', ENT_QUOTES, 'UTF-8');
-ok(str_contains($payload, '0114114447770001615') && str_contains($payload, '5406120.00') && str_contains($payload, '0506LOC' . $N) && $crcValido($payload),
-   "fatura nº $N: PIX com a chave da Alfa, valor do saldo (120.00), identificação LOC$N e CRC válido");
+ok(str_contains($payload, '0114114447770001615') && str_contains($payload, '5406235.00') && str_contains($payload, '0506LOC' . $N) && $crcValido($payload),
+   "fatura nº $N: PIX com a chave da Alfa, valor do saldo (235.00), identificação LOC$N e CRC válido");
 $linksSaldo = $links($alfa->get("index.php?p=locacoes&a=ver&n=$N")['corpo'])['5585997015566'] ?? [];
 ok((bool) array_filter($linksSaldo, fn($t) => str_contains($t, 'PIX Copia e Cola') && str_contains($t, $payload)),
    'cobrança pelo WhatsApp leva o código PIX copia e cola');
@@ -1093,7 +1093,7 @@ $novoOrc = function (string $saida, string $validade, array $extra = [], string 
 };
 ok(str_contains($alfa->get('index.php?p=orcamentos&a=novo')['corpo'], 'Salvar orçamento') && str_contains($alfa->get('index.php?p=orcamentos&a=novo')['corpo'], 'id="tabela-itens"'),
    'tela de novo orçamento com itens e valores');
-$O1 = $novoOrc(dia(-2), dia(7));
+$O1 = $novoOrc(dia(-2), dia(7), [], dia(-1));
 $v1 = texto($alfa->get("index.php?p=orcamentos&a=ver&id=$O1")['corpo']);
 ok($O1 !== '' && str_contains($v1, 'Valor previsto R$ 30,00') && str_contains($v1, 'em aberto'),
    'orçamento salvo: 2 carrinhos × 2 dias × R$ 5 + frete de R$ 10 = R$ 30,00 (sem reservar estoque)', mb_substr($v1, 0, 300));
@@ -1344,7 +1344,7 @@ ok($LI && dbv('SELECT data_prev_devolucao FROM locacao_itens li JOIN produtos p 
           ['l' => $LI, 'c' => 'AND-001']) === dia(5),
    'cada item grava a sua devolução');
 ok($LI && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LI])
-              - (float) dbv('SELECT SUM(li.quantidade * preco_periodo(li.data_prev_devolucao - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal))
+              - (float) dbv('SELECT SUM(li.quantidade * preco_periodo(li.data_prev_devolucao - l.data_saida + 1, li.valor_diaria, li.valor_semanal, li.valor_mensal))
                               FROM locacao_itens li JOIN locacoes l ON l.id = li.locacao_id WHERE li.locacao_id = :l', ['l' => $LI])) < 0.01,
    'o valor previsto cobra cada item pelos dias da devolução dele');
 
@@ -1373,7 +1373,7 @@ ok($PL && dbv('SELECT valor_quinzenal FROM produtos WHERE id = :p', ['p' => $PL]
 
 $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
               ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano semanal', 'produto_id' => [$PL], 'quantidade' => ['1'],
-               'periodo' => ['semanal'], 'diaria' => ['60,00'], 'prev' => [dia(10)]]);
+               'periodo' => ['semanal'], 'diaria' => ['60,00'], 'prev' => [dia(9)]]);
 $LS = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano semanal'");
 ok($LS && dbv('SELECT periodo FROM locacao_itens WHERE locacao_id = :l', ['l' => $LS]) === 'semanal',
    'o item guarda o período escolhido');
@@ -1382,14 +1382,14 @@ ok($LS && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE l
 
 $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
               ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano quinzenal', 'produto_id' => [$PL], 'quantidade' => ['1'],
-               'periodo' => ['quinzenal'], 'diaria' => ['110,00'], 'prev' => [dia(20)]]);
+               'periodo' => ['quinzenal'], 'diaria' => ['110,00'], 'prev' => [dia(19)]]);
 $LQ = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano quinzenal'");
 ok($LQ && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LQ]) - 160.0) < 0.01,
    '20 dias no quinzenal = 1 quinzena (110,00) + 5 diárias (50,00) = 160,00');
 
 $alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
               ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano diaria', 'produto_id' => [$PL], 'quantidade' => ['1'],
-               'periodo' => ['diaria'], 'diaria' => ['10,00'], 'prev' => [dia(10)]]);
+               'periodo' => ['diaria'], 'diaria' => ['10,00'], 'prev' => [dia(9)]]);
 $LD = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano diaria'");
 ok($LD && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LD]) - 100.0) < 0.01,
    '10 dias na diária = 10 diárias (100,00), sem plano');

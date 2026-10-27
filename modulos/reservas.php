@@ -197,7 +197,7 @@ function reservas_ver(): void
                     FROM reserva_itens ri JOIN produtos p ON p.id = ri.produto_id
                    WHERE ri.reserva_id = :id ORDER BY p.descricao', ['id' => $r['id']]);
     $locacao = val('SELECT numero FROM locacoes WHERE reserva_id = :id LIMIT 1', ['id' => $r['id']]);
-    $dias = max(1, days_between($r['data_inicio'], $r['data_fim']));
+    $dias = dias_cobranca($r['data_inicio'], $r['data_fim']);
     $estimado = array_sum(array_map(fn($i) => $i['quantidade'] * preco_item($i, $dias), $itens));
 
     layout_start('Reserva nº ' . $r['numero'], 'reservas');

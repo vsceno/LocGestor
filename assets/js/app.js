@@ -36,6 +36,11 @@ var LG = {
         return LG.precoPlano(dias, periodo, precos);
     },
 
+    // Dias cobrados: conta o dia da saída (27/10 a 05/11 = 10 dias)
+    diasCobranca: function (de, ate) {
+        return Math.max(1, LG.dias(de, ate) + 1);
+    },
+
     // Diferença em dias entre duas datas aaaa-mm-dd (sem fuso horário)
     dias: function (de, ate) {
         if (!de || !ate) { return 0; }
@@ -64,11 +69,21 @@ var LG = {
         var cache = {}, espera = null;
         var diasPrev = form.querySelector('#dias-prev');
 
-        function diarias() { return Math.max(1, LG.dias(saida.value, prev.value)); }
+        function diarias() { return LG.diasCobranca(saida.value, prev.value); }
 
         // Trocar a devolução geral atualiza a devolução de todos os itens
         function propagar() {
             corpo.querySelectorAll('.prev-item').forEach(function (i) { i.value = prev.value; });
+        }
+
+        // Dias de uma linha: pela data da devolução dela (conta o dia da saída)
+        function atualizarDiasLinha(tr) {
+            var d = tr.querySelector('.dias-item'), p = tr.querySelector('.prev-item');
+            if (d && p && p.value && saida.value) { d.value = LG.diasCobranca(saida.value, p.value); }
+        }
+
+        function atualizarDiasLinhas() {
+            corpo.querySelectorAll('tr.linha-item').forEach(atualizarDiasLinha);
         }
 
         // A data geral (usada na disponibilidade) é a mais tarde entre as devoluções dos itens
@@ -84,7 +99,7 @@ var LG = {
                 var qtd = parseInt(tr.querySelector('.qtd').value, 10) || 0;
                 var opt = tr.querySelector('.sel-produto').selectedOptions[0] || { dataset: {} };
                 var pi = tr.querySelector('.prev-item');
-                var dl = pi && pi.value ? Math.max(1, LG.dias(saida.value, pi.value)) : d;
+                var dl = pi && pi.value ? LG.diasCobranca(saida.value, pi.value) : d;
                 var perEl = tr.querySelector('.periodo-item'), per = perEl ? perEl.value : 'automatico';
                 var inp = LG.numero(tr.querySelector('.diaria').value);
                 var precos = { diaria: parseFloat(opt.dataset.diaria) || 0, semanal: parseFloat(opt.dataset.semanal) || 0,
@@ -169,6 +184,13 @@ var LG = {
             diaria.dataset.auto = diaria.value === '' ? '1' : '';
             // Preço do período escolhido na linha (sem período, a diária)
             var perSel = tr.querySelector('.periodo-item');
+            var diasEl = tr.querySelector('.dias-item'), pvEl = tr.querySelector('.prev-item');
+            if (diasEl) {
+                diasEl.addEventListener('change', function () {
+                    var n = parseInt(diasEl.value, 10);
+                    if (pvEl && saida.value && n >= 1) { pvEl.value = LG.somarDias(saida.value, n - 1); atualizarPrev(); recalcular(); agendarConsulta(); }
+                });
+            }
             function valorPeriodo(opt) {
                 var per = perSel ? perSel.value : 'diaria';
                 return per === 'diaria' ? opt.dataset.diaria : opt.dataset[per];
@@ -193,7 +215,7 @@ var LG = {
             diaria.addEventListener('input', function () { diaria.dataset.auto = ''; recalcular(); });
             tr.querySelector('.qtd').addEventListener('input', recalcular);
             var pi = tr.querySelector('.prev-item');
-            if (pi) { pi.addEventListener('change', function () { atualizarPrev(); recalcular(); agendarConsulta(); }); }
+            if (pi) { pi.addEventListener('change', function () { atualizarDiasLinha(tr); atualizarPrev(); recalcular(); agendarConsulta(); }); }
             tr.querySelector('.remover').addEventListener('click', function () {
                 if (corpo.querySelectorAll('tr.linha-item').length > 1) { tr.remove(); } else {
                     sel.value = ''; diaria.value = ''; tr.querySelector('.qtd').value = 1;
@@ -205,6 +227,8 @@ var LG = {
         corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
         corpo.querySelectorAll('.prev-item').forEach(function (i) { if (!i.value) { i.value = prev.value; } });
         atualizarPrev();
+        atualizarDiasLinhas();
+        saida.addEventListener('change', atualizarDiasLinhas);
         corpo.addEventListener('click', function (ev) {
             var botao = ev.target.closest ? ev.target.closest('.adicionar') : null;
             if (!botao) { return; }
@@ -214,6 +238,7 @@ var LG = {
             prepararLinha(tr);
             var piNovo = tr.querySelector('.prev-item');
             if (piNovo) { piNovo.value = prev.value; }
+            atualizarDiasLinha(tr);
             tr.querySelector('.sel-produto').focus();
             recalcular();
         });
@@ -270,7 +295,7 @@ var LG = {
         var receberEditado = false;
 
         function recalcular() {
-            var dias = Math.max(1, LG.dias(form.dataset.saida, data.value));
+            var dias = LG.diasCobranca(form.dataset.saida, data.value);
             var atraso = LG.dias(form.dataset.prev, data.value);
             form.querySelector('#dev-dias').textContent = dias;
             form.querySelector('#dev-atraso').textContent = atraso > 0 ? '(' + atraso + ' dia(s) de atraso)' : '';
