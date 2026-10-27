@@ -93,18 +93,14 @@ var LG = {
 
         // Compara a soma pedida de cada produto (linhas repetidas somam) com o disponível
         function avisarEstoque() {
-            var pedido = {};
-            corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
-                var p = tr.querySelector('.sel-produto').value;
-                if (p) { pedido[p] = (pedido[p] || 0) + (parseInt(tr.querySelector('.qtd').value, 10) || 0); }
-            });
             corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
                 var p = tr.querySelector('.sel-produto').value, cel = tr.querySelector('.disp');
-                var chave = p + '|' + saida.value + '|' + prev.value;
+                var chave = p + '|' + saida.value + '|' + devolucaoDaLinha(tr);
+                var pedido = parseInt(tr.querySelector('.qtd').value, 10) || 0;
                 if (!p) { cel.textContent = '—'; cel.className = 'num disp'; return; }
                 if (cache[chave] === undefined) { cel.textContent = '...'; return; }
                 var disp = cache[chave];
-                var falta = pedido[p] > disp;
+                var falta = pedido > disp;
                 cel.innerHTML = '';
                 var s = document.createElement('span');
                 s.className = 'selo ' + (falta ? 'vermelho' : 'verde');
@@ -114,22 +110,31 @@ var LG = {
                     var aviso = document.createElement('div');
                     aviso.className = 'alerta';
                     aviso.style.fontSize = '.78rem';
-                    aviso.textContent = 'pedido ' + pedido[p] + ', disponível ' + disp;
+                    aviso.textContent = 'pedido ' + pedido + ', disponível ' + disp;
                     cel.appendChild(aviso);
                 }
             });
         }
 
+        // Devolução da linha (sem data própria, vale a geral)
+        function devolucaoDaLinha(tr) {
+            var pi = tr.querySelector('.prev-item');
+            return (pi && pi.value) || prev.value;
+        }
+
         function consultar() {
             if (!saida.value || !prev.value || LG.dias(saida.value, prev.value) < 0) { return; }
             var pendentes = [];
-            corpo.querySelectorAll('.sel-produto').forEach(function (sel) {
-                var chave = sel.value + '|' + saida.value + '|' + prev.value;
-                if (sel.value && cache[chave] === undefined && pendentes.indexOf(sel.value) < 0) { pendentes.push(sel.value); }
+            corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
+                var p = tr.querySelector('.sel-produto').value, fim = devolucaoDaLinha(tr);
+                var chave = p + '|' + saida.value + '|' + fim;
+                if (p && cache[chave] === undefined && pendentes.every(function (x) { return x.chave !== chave; })) {
+                    pendentes.push({ p: p, fim: fim, chave: chave });
+                }
             });
-            pendentes.forEach(function (p) {
-                var chave = p + '|' + saida.value + '|' + prev.value;
-                var u = api + '&produto=' + encodeURIComponent(p) + '&inicio=' + saida.value + '&fim=' + prev.value
+            pendentes.forEach(function (x) {
+                var p = x.p, chave = x.chave;
+                var u = api + '&produto=' + encodeURIComponent(p) + '&inicio=' + saida.value + '&fim=' + x.fim
                         + (reserva ? '&reserva=' + encodeURIComponent(reserva) : '');
                 fetch(u, { credentials: 'same-origin' })
                     .then(function (r) { return r.json(); })
