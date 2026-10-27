@@ -22,6 +22,20 @@ var LG = {
         return Math.round(Math.min(d * D, m * M + (M > 0 ? Math.min(s, M) : s)) * 100) / 100;
     },
 
+    // Plano: blocos completos (7, 15 ou 30 dias) pelo preço do plano; os dias que sobram em diária
+    precoPlano: function (dias, periodo, precos) {
+        var d = Math.max(1, dias), D = precos.diaria || 0;
+        var bloco = { semanal: 7, quinzenal: 15, mensal: 30 }[periodo] || 0, preco = precos[periodo] || 0;
+        if (!bloco || preco <= 0) { return Math.round(d * D * 100) / 100; }
+        return Math.round((Math.floor(d / bloco) * preco + (d % bloco) * D) * 100) / 100;
+    },
+
+    // Itens antigos ("automatico") usam o melhor preço; os novos usam o período escolhido
+    precoItem: function (dias, periodo, precos) {
+        if (!periodo || periodo === 'automatico') { return LG.precoPeriodo(dias, precos.diaria, precos.semanal, precos.mensal); }
+        return LG.precoPlano(dias, periodo, precos);
+    },
+
     // Diferença em dias entre duas datas aaaa-mm-dd (sem fuso horário)
     dias: function (de, ate) {
         if (!de || !ate) { return 0; }
@@ -71,8 +85,12 @@ var LG = {
                 var opt = tr.querySelector('.sel-produto').selectedOptions[0] || { dataset: {} };
                 var pi = tr.querySelector('.prev-item');
                 var dl = pi && pi.value ? Math.max(1, LG.dias(saida.value, pi.value)) : d;
-                var sub = qtd * LG.precoPeriodo(dl, LG.numero(tr.querySelector('.diaria').value),
-                                                parseFloat(opt.dataset.semanal), parseFloat(opt.dataset.mensal));
+                var perEl = tr.querySelector('.periodo-item'), per = perEl ? perEl.value : 'automatico';
+                var inp = LG.numero(tr.querySelector('.diaria').value);
+                var precos = { diaria: parseFloat(opt.dataset.diaria) || 0, semanal: parseFloat(opt.dataset.semanal) || 0,
+                               quinzenal: parseFloat(opt.dataset.quinzenal) || 0, mensal: parseFloat(opt.dataset.mensal) || 0 };
+                if (per === 'diaria') { precos.diaria = inp; } else if (per !== 'automatico') { precos[per] = inp; }
+                var sub = qtd * LG.precoItem(dl, per, precos);
                 soma += sub;
                 tr.querySelector('.subtotal').textContent = tr.querySelector('.sel-produto').value ? LG.moeda(sub) : '—';
             });
@@ -149,15 +167,29 @@ var LG = {
         function prepararLinha(tr) {
             var sel = tr.querySelector('.sel-produto'), diaria = tr.querySelector('.diaria');
             diaria.dataset.auto = diaria.value === '' ? '1' : '';
+            // Preço do período escolhido na linha (sem período, a diária)
+            var perSel = tr.querySelector('.periodo-item');
+            function valorPeriodo(opt) {
+                var per = perSel ? perSel.value : 'diaria';
+                return per === 'diaria' ? opt.dataset.diaria : opt.dataset[per];
+            }
             sel.addEventListener('change', function () {
                 var opt = sel.options[sel.selectedIndex];
-                // Preenche a diária do cadastro, a menos que o usuário tenha digitado outra
-                if (opt && opt.dataset.diaria && (diaria.value === '' || diaria.dataset.auto === '1')) {
-                    diaria.value = LG.decimal(parseFloat(opt.dataset.diaria));
+                // Preenche o preço do período, a menos que o usuário tenha digitado outro
+                if (opt && valorPeriodo(opt) && (diaria.value === '' || diaria.dataset.auto === '1')) {
+                    diaria.value = LG.decimal(parseFloat(valorPeriodo(opt)));
                     diaria.dataset.auto = '1';
                 }
                 recalcular(); agendarConsulta();
             });
+            if (perSel) {
+                perSel.addEventListener('change', function () {
+                    var opt = sel.options[sel.selectedIndex];
+                    var v = opt ? parseFloat(valorPeriodo(opt)) : 0;
+                    if (v > 0) { diaria.value = LG.decimal(v); diaria.dataset.auto = '1'; }
+                    recalcular(); agendarConsulta();
+                });
+            }
             diaria.addEventListener('input', function () { diaria.dataset.auto = ''; recalcular(); });
             tr.querySelector('.qtd').addEventListener('input', recalcular);
             var pi = tr.querySelector('.prev-item');
@@ -246,7 +278,8 @@ var LG = {
             form.querySelectorAll('tr.linha-dev').forEach(function (tr) {
                 var inp = tr.querySelector('.qtd-dev');
                 var q = Math.min(parseInt(inp.value, 10) || 0, parseInt(inp.max, 10));
-                var v = q * LG.precoPeriodo(dias, parseFloat(tr.dataset.diaria), parseFloat(tr.dataset.semanal), parseFloat(tr.dataset.mensal));
+                var v = q * LG.precoItem(dias, tr.dataset.periodo, { diaria: parseFloat(tr.dataset.diaria), semanal: parseFloat(tr.dataset.semanal),
+                                                                    quinzenal: parseFloat(tr.dataset.quinzenal), mensal: parseFloat(tr.dataset.mensal) });
                 itens += v;
                 ficam += parseInt(inp.max, 10) - q;
                 tr.querySelector('.valor-dev').textContent = LG.moeda(v);

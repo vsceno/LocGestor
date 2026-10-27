@@ -259,6 +259,7 @@ CREATE TABLE produtos (
     valor_semanal   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),   -- 0 = não oferece
     valor_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),    -- 0 = não oferece
     valor_reposicao NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_reposicao >= 0),
+    valor_quinzenal NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_quinzenal >= 0),
     ncm             VARCHAR(8)    NOT NULL DEFAULT '',   -- preparado para futura NF-e de remessa/retorno (NFePHP)
     obs             TEXT          NOT NULL DEFAULT '',
     ativo           BOOLEAN       NOT NULL DEFAULT TRUE,
@@ -345,6 +346,10 @@ CREATE TABLE locacao_itens (
     valor_semanal   NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),
     valor_mensal    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),
     data_prev_devolucao DATE NOT NULL,
+    periodo         VARCHAR(10)   NOT NULL DEFAULT 'automatico',
+    valor_quinzenal NUMERIC(12,2) NOT NULL DEFAULT 0,
+    CONSTRAINT locacao_itens_periodo_ck CHECK (periodo IN ('automatico', 'diaria', 'semanal', 'quinzenal', 'mensal')),
+    CONSTRAINT locacao_itens_valor_quinzenal_ck CHECK (valor_quinzenal >= 0),
     CONSTRAINT locacao_itens_tenant_id_uk UNIQUE (tenant_id, id),
     CONSTRAINT locacao_itens_devolvida_ck CHECK (qtd_devolvida BETWEEN 0 AND quantidade),
     CONSTRAINT locacao_itens_locacao_fk   FOREIGN KEY (tenant_id, locacao_id) REFERENCES locacoes (tenant_id, id) ON DELETE CASCADE,
@@ -793,6 +798,20 @@ SELECT tenant_id, produto_id, SUM(quantidade)::INTEGER AS qtd_manutencao
 --                   + se aberta, itens pendentes cobrados até hoje (mínimo 1 diária)
 --                   + acréscimo - desconto.  Locação cancelada vale 0.
 --   valor_pago:     entradas no caixa da locação menos saídas (estornos)
+CREATE FUNCTION preco_plano(p_dias INTEGER, p_periodo TEXT, p_diaria NUMERIC,
+                                       p_semanal NUMERIC, p_quinzenal NUMERIC, p_mensal NUMERIC)
+RETURNS NUMERIC LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
+$$
+    SELECT CASE
+             WHEN p_periodo = 'semanal'   AND p_semanal > 0   THEN (d / 7)  * p_semanal   + (d % 7)  * p_diaria
+             WHEN p_periodo = 'quinzenal' AND p_quinzenal > 0 THEN (d / 15) * p_quinzenal + (d % 15) * p_diaria
+             WHEN p_periodo = 'mensal'    AND p_mensal > 0    THEN (d / 30) * p_mensal    + (d % 30) * p_diaria
+             ELSE d * p_diaria
+           END
+      FROM (SELECT GREATEST(1, p_dias) AS d) a
+$$;
+
+
 CREATE VIEW vw_locacao_valores WITH (security_invoker = true) AS
 SELECT l.tenant_id,
        l.id AS locacao_id,
@@ -808,10 +827,14 @@ SELECT l.tenant_id,
        COALESCE(cx.pago, 0)::NUMERIC(12,2) AS valor_pago
   FROM locacoes l
   LEFT JOIN LATERAL (
-        SELECT SUM(li.quantidade * preco_periodo(li.data_prev_devolucao - l.data_saida,
-                                                 li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS previsto_itens,
-               SUM((li.quantidade - li.qtd_devolvida) * preco_periodo(CURRENT_DATE - l.data_saida,
-                                                 li.valor_diaria, li.valor_semanal, li.valor_mensal)) AS pendente_hoje
+        SELECT SUM(li.quantidade * CASE WHEN li.periodo = 'automatico'
+                                        THEN preco_periodo(li.data_prev_devolucao - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal)
+                                        ELSE preco_plano(li.data_prev_devolucao - l.data_saida, li.periodo, li.valor_diaria,
+                                                         li.valor_semanal, li.valor_quinzenal, li.valor_mensal) END) AS previsto_itens,
+               SUM((li.quantidade - li.qtd_devolvida) * CASE WHEN li.periodo = 'automatico'
+                                        THEN preco_periodo(CURRENT_DATE - l.data_saida, li.valor_diaria, li.valor_semanal, li.valor_mensal)
+                                        ELSE preco_plano(CURRENT_DATE - l.data_saida, li.periodo, li.valor_diaria,
+                                                         li.valor_semanal, li.valor_quinzenal, li.valor_mensal) END) AS pendente_hoje
           FROM locacao_itens li
          WHERE li.tenant_id = l.tenant_id AND li.locacao_id = l.id
        ) it ON TRUE

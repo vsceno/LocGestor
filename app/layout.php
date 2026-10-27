@@ -110,10 +110,15 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, boo
             <option value="">— escolha —</option>
             <?php foreach ($produtos as $p): ?>
                 <option value="<?= e($p['id']) ?>" data-diaria="<?= e($p['valor_diaria']) ?>"
-                    data-semanal="<?= e($p['valor_semanal'] ?? 0) ?>" data-mensal="<?= e($p['valor_mensal'] ?? 0) ?>"
+                    data-semanal="<?= e($p['valor_semanal'] ?? 0) ?>" data-quinzenal="<?= e($p['valor_quinzenal'] ?? 0) ?>" data-mensal="<?= e($p['valor_mensal'] ?? 0) ?>"
                     <?= $p['id'] === $ln['produto_id'] ? 'selected' : '' ?>><?= e($p['codigo'] . ' — ' . $p['descricao']) ?></option>
             <?php endforeach; ?>
         </select></td>
+        <?php if ($comPrev): ?>
+            <td><select name="periodo[]" class="periodo-item" aria-label="Período">
+                <?= options(['diaria' => 'Diária', 'semanal' => 'Semanal (7 dias)', 'quinzenal' => 'Quinzenal (15 dias)', 'mensal' => 'Mensal (30 dias)'], $ln['periodo'] ?? 'diaria') ?>
+            </select></td>
+        <?php endif; ?>
         <td class="num"><input type="number" name="quantidade[]" class="qtd" value="<?= e($ln['quantidade']) ?>" min="1" step="1" style="width:80px" aria-label="Quantidade"></td>
         <?php if ($comDiaria): ?>
             <td class="num"><input type="text" name="diaria[]" class="diaria" value="<?= e($ln['diaria']) ?>" inputmode="decimal" style="width:100px" aria-label="Diária"></td>

@@ -45,7 +45,7 @@ function produtos_index(): void
 
     $pg = paginate("SELECT count(*) FROM produtos p WHERE $sqlWhere", $params);
     $produtos = all("
-        SELECT p.id, p.codigo, p.descricao, p.unidade, p.qtd_total, p.valor_diaria, p.valor_semanal, p.valor_mensal, p.ativo, c.nome AS categoria,
+        SELECT p.id, p.codigo, p.descricao, p.unidade, p.qtd_total, p.valor_diaria, p.valor_semanal, p.valor_quinzenal, p.valor_mensal, p.ativo, c.nome AS categoria,
                COALESCE(a.qtd_alugada, 0) AS alugado, COALESCE(mn.qtd_manutencao, 0) AS manutencao,
                COALESCE((SELECT SUM(ri.quantidade)
                            FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id
@@ -187,6 +187,10 @@ function produto_form(array $p, string $titulo): void
                 <label>Valor da semana (R$)
                     <input type="text" name="valor_semanal" value="<?= e($opcional('valor_semanal')) ?>" inputmode="decimal" placeholder="não oferece">
                     <span class="ajuda">Preço de 7 dias. Vazio: só diárias.</span>
+                </label>
+                <label>Valor da quinzena (R$)
+                    <input type="text" name="valor_quinzenal" value="<?= e($opcional('valor_quinzenal')) ?>" inputmode="decimal" placeholder="não oferece">
+                    <span class="ajuda">Preço de 15 dias. Vazio: não oferece.</span>
                 </label>
                 <label>Valor do mês (R$)
                     <input type="text" name="valor_mensal" value="<?= e($opcional('valor_mensal')) ?>" inputmode="decimal" placeholder="não oferece">

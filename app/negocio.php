@@ -29,9 +29,32 @@ function preco_periodo(int $dias, float $diaria, float $semanal = 0, float $mens
 }
 
 /** Preço de um item (linha com valor_diaria/semanal/mensal) por $dias. */
+/** Períodos que o item pode ter. "automatico" é o melhor preço (itens antigos e orçamentos). */
+const PERIODOS_ITEM = ['automatico', 'diaria', 'semanal', 'quinzenal', 'mensal'];
+
+/**
+ * Cobrança por plano: cada bloco completo (7, 15 ou 30 dias) pelo preço do plano e os dias que sobram
+ * em diária. Sem plano, ou sem preço no plano, cobra-se dia a dia. Mesma regra de preco_plano() no banco.
+ */
+function preco_plano(int $dias, string $periodo, float $diaria, float $semanal, float $quinzenal, float $mensal): float
+{
+    $d = max(1, $dias);
+    $bloco = ['semanal' => 7, 'quinzenal' => 15, 'mensal' => 30][$periodo] ?? 0;
+    $preco = ['semanal' => $semanal, 'quinzenal' => $quinzenal, 'mensal' => $mensal][$periodo] ?? 0;
+    if ($bloco === 0 || $preco <= 0) {
+        return round($d * $diaria, 2);
+    }
+    return round(intdiv($d, $bloco) * $preco + ($d % $bloco) * $diaria, 2);
+}
+
 function preco_item(array $it, int $dias): float
 {
-    return preco_periodo($dias, (float) $it['valor_diaria'], (float) ($it['valor_semanal'] ?? 0), (float) ($it['valor_mensal'] ?? 0));
+    $periodo = $it['periodo'] ?? 'automatico';
+    if ($periodo === 'automatico') {
+        return preco_periodo($dias, (float) $it['valor_diaria'], (float) ($it['valor_semanal'] ?? 0), (float) ($it['valor_mensal'] ?? 0));
+    }
+    return preco_plano($dias, $periodo, (float) $it['valor_diaria'], (float) ($it['valor_semanal'] ?? 0),
+                       (float) ($it['valor_quinzenal'] ?? 0), (float) ($it['valor_mensal'] ?? 0));
 }
 
 /** Tabela de preços para célula de tabela: "R$ 45,00/dia<br>R$ 225,00/semana<br>R$ 700,00/mês". */
@@ -285,6 +308,7 @@ function produto_salvar(array $d, ?string $id = null): string
         'qtd_total'       => filter_var($d['qtd_total'] ?? '', FILTER_VALIDATE_INT),
         'valor_diaria'    => parse_money($d['valor_diaria'] ?? ''),
         'valor_semanal'   => parse_money($d['valor_semanal'] ?? ''),
+        'valor_quinzenal' => parse_money($d['valor_quinzenal'] ?? ''),
         'valor_mensal'    => parse_money($d['valor_mensal'] ?? ''),
         'valor_reposicao' => parse_money($d['valor_reposicao'] ?? ''),
         'ncm'             => so_digitos($d['ncm'] ?? ''),
@@ -309,7 +333,7 @@ function produto_salvar(array $d, ?string $id = null): string
     if ($p['qtd_total'] === false || $p['qtd_total'] < 0 || $p['qtd_total'] > 1000000) {
         $erros[] = 'Quantidade em estoque inválida.';
     }
-    foreach (['valor_diaria', 'valor_semanal', 'valor_mensal', 'valor_reposicao'] as $k) {
+    foreach (['valor_diaria', 'valor_semanal', 'valor_quinzenal', 'valor_mensal', 'valor_reposicao'] as $k) {
         if ($p[$k] < 0 || $p[$k] > 9999999999) {
             $erros[] = 'Valores não podem ser negativos.';
             break;
@@ -739,9 +763,18 @@ function itens_do_form(array $d, string $onde): array
         if ($prevTxt !== '' && !valid_date($prevTxt)) {
             throw new UserError('Data de devolução inválida na linha ' . ($i + 1) . '.');
         }
-        if (!isset($itens[$pid])) {
-            $itens[$pid] = ['qtd' => 0, 'diaria' => null, 'prev' => null];
+        $periodoTxt = trim((string) ($d['periodo'][$i] ?? ''));
+        if ($periodoTxt !== '' && !in_array($periodoTxt, PERIODOS_ITEM, true)) {
+            throw new UserError('Período inválido na linha ' . ($i + 1) . '.');
         }
+        $periodoTxt = $periodoTxt === '' ? 'automatico' : $periodoTxt;
+        if (!isset($itens[$pid])) {
+            $itens[$pid] = ['qtd' => 0, 'diaria' => null, 'prev' => null, 'periodo' => null];
+        }
+        if ($itens[$pid]['periodo'] !== null && $itens[$pid]['periodo'] !== $periodoTxt) {
+            throw new UserError('O mesmo produto aparece com períodos diferentes. Use uma linha por produto.');
+        }
+        $itens[$pid]['periodo'] = $periodoTxt;
         $itens[$pid]['qtd'] += $qtd;
         if ($itens[$pid]['diaria'] === null && $diariaTxt !== '') {
             $itens[$pid]['diaria'] = parse_money($diariaTxt);
@@ -978,7 +1011,7 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
         // Trava os produtos e confere o estoque com os dados já travados
         produtos_travar(array_keys($itens));
         $cadastro = [];
-        foreach (all('SELECT id, descricao, valor_diaria, valor_semanal, valor_mensal, ativo FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
+        foreach (all('SELECT id, descricao, valor_diaria, valor_semanal, valor_quinzenal, valor_mensal, ativo FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
                      ['ids' => '{' . implode(',', array_keys($itens)) . '}']) as $p) {
             $cadastro[$p['id']] = $p;
         }
@@ -988,6 +1021,16 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
             }
             if (!$cadastro[$pid]['ativo']) {
                 throw new UserError("O produto {$cadastro[$pid]['descricao']} está inativo.");
+            }
+            $pr = $it['periodo'] ?? 'automatico';
+            if (in_array($pr, ['semanal', 'quinzenal', 'mensal'], true)) {
+                // O valor digitado é o do período escolhido; os dias que sobram são cobrados na diária do cadastro
+                $precoPlano = (float) ($it['diaria'] ?? $cadastro[$pid]['valor_' . $pr]);
+                if ($precoPlano <= 0) {
+                    throw new UserError("Informe o valor {$pr} de {$cadastro[$pid]['descricao']} ou escolha outro período.");
+                }
+                $it['valores'] = ['valor_' . $pr => $precoPlano];
+                $it['diaria'] = (float) $cadastro[$pid]['valor_diaria'];
             }
             $it['diaria'] ??= (float) $cadastro[$pid]['valor_diaria'];
             if ($it['diaria'] < 0) {
@@ -1007,10 +1050,15 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
              'fe' => $freteEntrega, 'fr' => $freteRecolhimento, 'end' => $endereco, 'aut' => $autorizadoPor]);
         foreach ($itens as $pid => $it) {
             // Semanal e mensal vêm do cadastro (o formulário só permite ajustar a diária)
-            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal, data_prev_devolucao)
-               VALUES (:l, :p, :q, :d, :s, :m, :dp)',
+            $v = $it['valores'] ?? [];
+            q('INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_quinzenal, valor_mensal,
+                                          data_prev_devolucao, periodo)
+               VALUES (:l, :p, :q, :d, :s, :qz, :m, :dp, :per)',
               ['l' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria'],
-               's' => $cadastro[$pid]['valor_semanal'], 'm' => $cadastro[$pid]['valor_mensal'], 'dp' => $it['prev']]);
+               's' => $v['valor_semanal'] ?? $cadastro[$pid]['valor_semanal'],
+               'qz' => $v['valor_quinzenal'] ?? $cadastro[$pid]['valor_quinzenal'],
+               'm' => $v['valor_mensal'] ?? $cadastro[$pid]['valor_mensal'],
+               'dp' => $it['prev'], 'per' => $it['periodo'] ?? 'automatico']);
         }
         if ($reservaId !== null) {
             q("UPDATE reservas SET status = 'convertida' WHERE id = :id", ['id' => $reservaId]);
@@ -1059,7 +1107,7 @@ function devolucao_registrar(string $locacaoId, array $d): array
             throw new UserError('A data da devolução deve estar entre a saída (' . dt($loc['data_saida']) . ') e hoje.');
         }
 
-        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.id AS produto_id, p.valor_reposicao
+        $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.id AS produto_id, p.valor_reposicao
                         FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                        WHERE li.locacao_id = :id ORDER BY p.descricao FOR UPDATE OF li', ['id' => $locacaoId]);
         $dias = max(1, days_between($loc['data_saida'], $data));

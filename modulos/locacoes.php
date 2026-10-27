@@ -198,9 +198,13 @@ function locacoes_nova(): void
         $prev = date('Y-m-d', strtotime("+$prazo days"));
         $copia = ['local_uso' => $orig['local_uso'], 'frete_entrega' => num($orig['frete_entrega'] + $orig['frete_recolhimento'], 2)];
         $linhas = [];
-        foreach (all('SELECT li.produto_id, li.quantidade, li.valor_diaria FROM locacao_itens li WHERE li.locacao_id = :id ORDER BY li.id',
+        foreach (all('SELECT li.produto_id, li.quantidade, li.periodo, li.valor_diaria, li.valor_semanal, li.valor_quinzenal, li.valor_mensal
+                        FROM locacao_itens li WHERE li.locacao_id = :id ORDER BY li.id',
                      ['id' => $copiar]) as $li) {
-            $linhas[] = ['produto_id' => $li['produto_id'], 'quantidade' => $li['quantidade'], 'diaria' => num($li['valor_diaria'], 2)];
+            // Repetir mantém o período e o preço dele (itens antigos, no automático, voltam como diária)
+            $per = $li['periodo'] === 'automatico' ? 'diaria' : $li['periodo'];
+            $valorPer = $per === 'diaria' ? $li['valor_diaria'] : $li['valor_' . $per];
+            $linhas[] = ['produto_id' => $li['produto_id'], 'quantidade' => $li['quantidade'], 'diaria' => num($valorPer, 2), 'periodo' => $per];
         }
     }
 
@@ -212,7 +216,7 @@ function locacoes_nova(): void
         $linhas = [];
         foreach ((array) old('produto_id', []) as $i => $pid) {
             $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => old('diaria', [])[$i] ?? '',
-                         'prev' => old('prev', [])[$i] ?? ''];
+                         'prev' => old('prev', [])[$i] ?? '', 'periodo' => old('periodo', [])[$i] ?? 'diaria'];
         }
         if (old('reserva_id') !== '' && is_uuid(old('reserva_id'))) {
             $reserva = one("SELECT id, numero FROM reservas WHERE id = :id", ['id' => old('reserva_id')]);
@@ -223,7 +227,7 @@ function locacoes_nova(): void
     }
 
     $clientes = all("SELECT nome, cpf_cnpj FROM clientes WHERE ativo AND NOT bloqueado ORDER BY lower(nome)");
-    $produtos = all('SELECT id, codigo, descricao, unidade, valor_diaria, valor_semanal, valor_mensal FROM produtos WHERE ativo ORDER BY descricao');
+    $produtos = all('SELECT id, codigo, descricao, unidade, valor_diaria, valor_semanal, valor_quinzenal, valor_mensal FROM produtos WHERE ativo ORDER BY descricao');
 
     layout_start('Nova locação', 'locacoes');
     ?>
@@ -267,14 +271,14 @@ function locacoes_nova(): void
             <p class="ajuda">Preço semanal e mensal do cadastro do produto entram sozinhos no período; a diária pode ser ajustada aqui.</p>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
-                    <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
+                    <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
                         <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th style="width:90px"></th></tr></thead>
                     <tbody>
                     <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true); } ?>
                     </tbody>
                 </table>
             </div>
-            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'prev' => ''], true, true); ?></template>
+            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'prev' => '', 'periodo' => 'diaria'], true, true); ?></template>
         </div>
 
         <div class="card">
@@ -335,7 +339,7 @@ function locacoes_ver(): void
     $atraso = $aberta ? days_between($loc['data_prev_devolucao'], today()) : 0;
     $saldo = $loc['valor_atual'] - $loc['valor_pago'];
 
-    $itens = all("SELECT li.id, li.produto_id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal,
+    $itens = all("SELECT li.id, li.produto_id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo,
                          p.codigo, p.descricao, p.unidade,
                          COALESCE((SELECT SUM(di.valor) FROM devolucao_itens di WHERE di.locacao_item_id = li.id), 0) AS valor_devolvido
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
@@ -630,7 +634,7 @@ function locacoes_devolucao(): void
         flash('Esta locação não está em aberto.', 'aviso');
         redirect(url_locacao($loc));
     }
-    $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.unidade
+    $itens = all('SELECT li.id, li.quantidade, li.qtd_devolvida, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.unidade
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                    WHERE li.locacao_id = :id AND li.quantidade > li.qtd_devolvida ORDER BY p.descricao', ['id' => $loc['id']]);
     // O que já foi apurado em devoluções anteriores (itens + multas + avarias)
@@ -685,7 +689,7 @@ function locacoes_devolucao(): void
                     <tbody>
                     <?php foreach ($itens as $it): $pend = $it['quantidade'] - $it['qtd_devolvida']; ?>
                         <tr class="linha-dev" data-diaria="<?= e($it['valor_diaria']) ?>" data-semanal="<?= e($it['valor_semanal']) ?>"
-                            data-mensal="<?= e($it['valor_mensal']) ?>">
+                            data-quinzenal="<?= e($it['valor_quinzenal']) ?>" data-mensal="<?= e($it['valor_mensal']) ?>" data-periodo="<?= e($it['periodo']) ?>">
                             <td><?= e($it['descricao']) ?>
                                 <?php if (!empty($naRua[$it['id']])): ?>
                                     <div class="unidades-dev"><span class="muted">Voltaram:</span>
@@ -825,7 +829,7 @@ function locacoes_contrato(): void
     $loc = locacao_da_url();
     $emp = empresa();
     $dias = max(1, days_between($loc['data_saida'], $loc['data_prev_devolucao']));
-    $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.codigo, p.descricao, p.unidade, p.valor_reposicao,
+    $itens = all("SELECT li.quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.codigo, p.descricao, p.unidade, p.valor_reposicao,
                          (SELECT string_agg(u.patrimonio, ', ' ORDER BY u.patrimonio) FROM locacao_unidades lu
                             JOIN unidades u ON u.id = lu.unidade_id WHERE lu.locacao_item_id = li.id) AS patrimonios
                     FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
@@ -893,13 +897,13 @@ function locacoes_fatura(): void
     $aberta = $loc['status'] === 'aberta';
     $diasHoje = max(1, days_between($loc['data_saida'], today()));
     // Itens já devolvidos (com os dias efetivos) + pendentes cobrados até hoje
-    $linhas = all('SELECT d.data, di.quantidade, di.dias, di.valor, li.valor_diaria, li.valor_semanal, li.valor_mensal, p.descricao, p.unidade
+    $linhas = all('SELECT d.data, di.quantidade, di.dias, di.valor, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo, p.descricao, p.unidade
                      FROM devolucao_itens di
                      JOIN devolucoes d ON d.id = di.devolucao_id
                      JOIN locacao_itens li ON li.id = di.locacao_item_id
                      JOIN produtos p ON p.id = li.produto_id
                     WHERE d.locacao_id = :id ORDER BY d.data, p.descricao', ['id' => $loc['id']]);
-    $pendentes = $aberta ? all('SELECT li.quantidade - li.qtd_devolvida AS quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal,
+    $pendentes = $aberta ? all('SELECT li.quantidade - li.qtd_devolvida AS quantidade, li.valor_diaria, li.valor_semanal, li.valor_mensal, li.valor_quinzenal, li.periodo,
                                        p.descricao, p.unidade
                                   FROM locacao_itens li JOIN produtos p ON p.id = li.produto_id
                                  WHERE li.locacao_id = :id AND li.quantidade > li.qtd_devolvida ORDER BY p.descricao',

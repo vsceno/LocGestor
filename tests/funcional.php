@@ -1363,6 +1363,45 @@ ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=nova'), 'datas de devolu
    'o mesmo produto com datas diferentes é recusado (use uma linha por produto)');
 
 // =====================================================================
+secao('Período por item: diária, semanal, quinzenal ou mensal (sobra em diárias)');
+$alfa->enviar('index.php?p=produtos&a=novo', 'index.php?p=produtos&a=salvar',
+              ['codigo' => 'TESTE-PLANO', 'descricao' => 'TESTE equipamento com planos', 'unidade' => 'UN', 'qtd_total' => '5',
+               'valor_diaria' => '10,00', 'valor_semanal' => '60,00', 'valor_quinzenal' => '110,00', 'valor_mensal' => '200,00',
+               'ativo' => '1', 'categoria_id' => $catSem]);
+$PL = $produto($alfaId, 'TESTE-PLANO');
+ok($PL && dbv('SELECT valor_quinzenal FROM produtos WHERE id = :p', ['p' => $PL]) == 110, 'cadastro guarda o valor quinzenal');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano semanal', 'produto_id' => [$PL], 'quantidade' => ['1'],
+               'periodo' => ['semanal'], 'diaria' => ['60,00'], 'prev' => [dia(10)]]);
+$LS = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano semanal'");
+ok($LS && dbv('SELECT periodo FROM locacao_itens WHERE locacao_id = :l', ['l' => $LS]) === 'semanal',
+   'o item guarda o período escolhido');
+ok($LS && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LS]) - 90.0) < 0.01,
+   '10 dias no semanal = 1 semana (60,00) + 3 diárias (30,00) = 90,00');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano quinzenal', 'produto_id' => [$PL], 'quantidade' => ['1'],
+               'periodo' => ['quinzenal'], 'diaria' => ['110,00'], 'prev' => [dia(20)]]);
+$LQ = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano quinzenal'");
+ok($LQ && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LQ]) - 160.0) < 0.01,
+   '20 dias no quinzenal = 1 quinzena (110,00) + 5 diárias (50,00) = 160,00');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano diaria', 'produto_id' => [$PL], 'quantidade' => ['1'],
+               'periodo' => ['diaria'], 'diaria' => ['10,00'], 'prev' => [dia(10)]]);
+$LD = dbv("SELECT id FROM locacoes WHERE local_uso = 'TESTE plano diaria'");
+ok($LD && abs((float) dbv('SELECT valor_previsto FROM vw_locacao_valores WHERE locacao_id = :l', ['l' => $LD]) - 100.0) < 0.01,
+   '10 dias na diária = 10 diárias (100,00), sem plano');
+
+$alfa->enviar('index.php?p=locacoes&a=nova', 'index.php?p=locacoes&a=criar',
+              ['cliente' => $MARIA, 'data_saida' => dia(0), 'local_uso' => 'TESTE plano sem preco', 'produto_id' => [$CAR], 'quantidade' => ['1'],
+               'periodo' => ['semanal'], 'diaria' => [''], 'prev' => [dia(10)]]);
+ok(str_contains($alfa->mensagem('index.php?p=locacoes&a=nova'), 'escolha outro período')
+   && dbv("SELECT count(*) FROM locacoes WHERE local_uso = 'TESTE plano sem preco'") == 0,
+   'período sem preço cadastrado é recusado (escolha outro período)');
+
+// =====================================================================
 secao('Painel, relatórios e CSV');
 $k = db("SELECT (SELECT count(*) FROM locacoes WHERE tenant_id = :t1 AND status = 'aberta') AS abertas,
                 (SELECT COALESCE(sum(greatest(valor_atual - valor_pago, 0)), 0) FROM vw_locacao_valores WHERE tenant_id = :t2 AND status <> 'cancelada') AS receber",
