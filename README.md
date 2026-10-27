@@ -333,7 +333,9 @@ Os planos são ofertas. Semanal = 7 dias, quinzenal = 15, mensal = 30: cada bloc
 os dias que sobram voltam a ser diárias. Ex.: 20 dias no semanal = 2 semanas + 6 diárias. O valor digitado na coluna
 Valor é o do período escolhido. A coluna **Dias** diz quantos dias o item fica; a devolução é calculada a partir dela
 (saída + dias − 1, porque o dia da saída conta). Trocar a data da devolução atualiza os dias, e vice-versa. Os dias
-cobrados também contam o dia da saída: 27/10 a 05/11 são 10 dias, cobrados como 10 diárias. Produto sem preço no período escolhido não pode ser alugado nele (escolha outro).
+cobrados também contam o dia da saída: 27/10 a 05/11 são 10 dias, cobrados como 10 diárias.
+O período também vale para o **orçamento** e a **reserva** (ao virar locação, cada item leva o período). O detalhe, o
+contrato e a fatura mostram o período de cada item. Produto sem preço no período escolhido não pode ser alugado nele (escolha outro).
 O cadastro do produto tem o **Valor da quinzena**. Itens antigos (sem período) ficam como "automático" (melhor preço).
 
 ### Busca geral
@@ -619,6 +621,7 @@ psql -U postgres -d locgestor -f database\migrations\022_devolucao_perdas.sql
 psql -U postgres -d locgestor -f database\migrations\023_devolucao_por_item.sql
 psql -U postgres -d locgestor -f database\migrations\024_periodo_do_item.sql
 psql -U postgres -d locgestor -f database\migrations\025_dias_cobranca.sql
+psql -U postgres -d locgestor -f database\migrations\026_periodo_orcamento_reserva.sql
 php tests\isolamento.php
 ```
 
@@ -649,6 +652,7 @@ php tests\isolamento.php
 | `023_devolucao_por_item.sql` | coluna `data_prev_devolucao` em `locacao_itens` (devolução de cada item; o valor previsto usa a data do item) |
 | `024_periodo_do_item.sql` | período por item (`periodo`, `valor_quinzenal`) e função `preco_plano()`; itens antigos ficam como "automatico" |
 | `025_dias_cobranca.sql` | a view de valores conta o dia da saída (27/10 a 05/11 = 10 dias) |
+| `026_periodo_orcamento_reserva.sql` | período por item no orçamento (`periodo`, `valor_quinzenal`) e na reserva (`periodo`) |
 
 ### 10.2 Proteções do login (já ativas)
 

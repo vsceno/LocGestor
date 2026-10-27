@@ -57,6 +57,19 @@ function preco_item(array $it, int $dias): float
                        (float) ($it['valor_quinzenal'] ?? 0), (float) ($it['valor_mensal'] ?? 0));
 }
 
+/** Período escolhido no item e o preço dele, para a coluna "Período" (itens antigos: automático). */
+function periodo_html(array $it): string
+{
+    $per = $it['periodo'] ?? 'automatico';
+    if ($per === 'automatico') {
+        return 'Automático';
+    }
+    $rotulo = ['diaria' => 'Diária', 'semanal' => 'Semanal', 'quinzenal' => 'Quinzenal', 'mensal' => 'Mensal'][$per];
+    $unidade = ['diaria' => 'dia', 'semanal' => 'semana', 'quinzenal' => 'quinzena', 'mensal' => 'mês'][$per];
+    $preco = $per === 'diaria' ? $it['valor_diaria'] : ($it['valor_' . $per] ?? 0);
+    return e($rotulo) . '<br><small>' . money($preco) . '/' . $unidade . '</small>';
+}
+
 /** Tabela de preços para célula de tabela: "R$ 45,00/dia<br>R$ 225,00/semana<br>R$ 700,00/mês". */
 function precos_html(array $it): string
 {
@@ -1309,9 +1322,10 @@ function reserva_salvar(array $d, ?string $id = null): array
         throw new UserError('A devolução não pode ser antes da retirada.');
     }
     $obs = trim((string) ($d['obs'] ?? ''));
-    $itens = array_map(fn($it) => $it['qtd'], itens_do_form($d, 'reserva'));
+    $brutos = itens_do_form($d, 'reserva');
+    $itens = array_map(fn($it) => $it['qtd'], $brutos);
 
-    return tx(function () use ($id, $cliente, $ini, $fim, $obs, $itens) {
+    return tx(function () use ($id, $cliente, $ini, $fim, $obs, $itens, $brutos) {
         if ($id !== null) {
             $st = val('SELECT status FROM reservas WHERE id = :id FOR UPDATE', ['id' => $id]);
             if ($st === null) {
@@ -1341,8 +1355,8 @@ function reserva_salvar(array $d, ?string $id = null): array
             q('DELETE FROM reserva_itens WHERE reserva_id = :id', ['id' => $id]);
         }
         foreach ($itens as $pid => $qtd) {
-            q('INSERT INTO reserva_itens (reserva_id, produto_id, quantidade) VALUES (:r, :p, :q)',
-              ['r' => $id, 'p' => $pid, 'q' => $qtd]);
+            q('INSERT INTO reserva_itens (reserva_id, produto_id, quantidade, periodo) VALUES (:r, :p, :q, :per)',
+              ['r' => $id, 'p' => $pid, 'q' => $qtd, 'per' => $brutos[$pid]['periodo'] ?? 'automatico']);
         }
         return ['id' => $id, 'numero' => $numero];
     });
@@ -1605,7 +1619,7 @@ function previsao_caixa(int $dias): array
                     'descricao' => "Locação nº {$l['numero']} - {$l['nome']}", 'provavel' => false];
     }
     // Reservas ativas que terminam no horizonte: valor estimado pelos preços atuais
-    foreach (all("SELECT r.numero, c.nome, r.data_inicio, r.data_fim, ri.quantidade, p.valor_diaria, p.valor_semanal, p.valor_mensal
+    foreach (all("SELECT r.numero, c.nome, r.data_inicio, r.data_fim, ri.quantidade, ri.periodo, p.valor_diaria, p.valor_semanal, p.valor_quinzenal, p.valor_mensal
                     FROM reservas r JOIN clientes c ON c.id = r.cliente_id
                     JOIN reserva_itens ri ON ri.reserva_id = r.id JOIN produtos p ON p.id = ri.produto_id
                    WHERE r.status = 'ativa' AND r.data_fim BETWEEN CURRENT_DATE AND CAST(:l AS date)", ['l' => $limite]) as $r) {

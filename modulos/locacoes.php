@@ -177,9 +177,11 @@ function locacoes_nova(): void
         }
         $clienteTxt = cliente_rotulo($reserva);
         $prev = max($reserva['data_fim'], today());
-        foreach (all('SELECT ri.produto_id, ri.quantidade, p.valor_diaria FROM reserva_itens ri
-                        JOIN produtos p ON p.id = ri.produto_id WHERE ri.reserva_id = :id', ['id' => $rid]) as $ri) {
-            $linhas[] = ['produto_id' => $ri['produto_id'], 'quantidade' => $ri['quantidade'], 'diaria' => num($ri['valor_diaria'], 2)];
+        foreach (all('SELECT ri.produto_id, ri.quantidade, ri.periodo, p.valor_diaria, p.valor_semanal, p.valor_quinzenal, p.valor_mensal
+                        FROM reserva_itens ri JOIN produtos p ON p.id = ri.produto_id WHERE ri.reserva_id = :id', ['id' => $rid]) as $ri) {
+            $per = $ri['periodo'] === 'automatico' ? 'diaria' : $ri['periodo'];
+            $valorPer = $per === 'diaria' ? $ri['valor_diaria'] : $ri['valor_' . $per];
+            $linhas[] = ['produto_id' => $ri['produto_id'], 'quantidade' => $ri['quantidade'], 'diaria' => num($valorPer, 2), 'periodo' => $per];
         }
     }
 
@@ -274,11 +276,11 @@ function locacoes_nova(): void
                     <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th>Dias</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
                         <th class="num">Disponível</th><th class="num">Devolução</th><th class="num">Subtotal</th><th style="width:90px"></th></tr></thead>
                     <tbody>
-                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true); } ?>
+                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, true, true); } ?>
                     </tbody>
                 </table>
             </div>
-            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'prev' => '', 'periodo' => 'diaria'], true, true); ?></template>
+            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'prev' => '', 'periodo' => 'diaria'], true, true, true); ?></template>
         </div>
 
         <div class="card">
@@ -485,7 +487,7 @@ function locacoes_ver(): void
         <div class="tabela-wrap">
             <table class="tabela">
                 <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Devolvida</th><th class="num">Pendente</th>
-                    <th class="num">Preço</th><th class="num"><?= $aberta ? 'Valor até hoje' : 'Valor' ?></th></tr></thead>
+                    <th>Período</th><th class="num">Preço</th><th class="num"><?= $aberta ? 'Valor até hoje' : 'Valor' ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($itens as $it):
                     $pend = $it['quantidade'] - $it['qtd_devolvida'];
@@ -496,7 +498,7 @@ function locacoes_ver(): void
                         <td class="num"><?= num($it['quantidade']) ?> <span class="muted"><?= e($it['unidade']) ?></span></td>
                         <td class="num"><?= num($it['qtd_devolvida']) ?></td>
                         <td class="num"><?= $pend > 0 ? '<span class="selo ' . ($atraso > 0 ? 'vermelho' : 'amarelo') . '">' . num($pend) . '</span>' : '0' ?></td>
-                        <td class="num"><?= precos_html($it) ?></td>
+                        <td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td>
                         <td class="num"><?= $loc['status'] === 'cancelada' ? '—' : money($valor) ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -851,22 +853,22 @@ function locacoes_contrato(): void
     </table>
     <h2>Bens locados</h2>
     <table>
-        <thead><tr><th class="num">Qtd.</th><th>Un.</th><th>Código</th><th>Descrição</th><th class="num">Preço (un.)</th>
+        <thead><tr><th class="num">Qtd.</th><th>Un.</th><th>Código</th><th>Descrição</th><th>Período</th><th class="num">Preço (un.)</th>
             <th class="num">Valor de reposição (un.)</th><th class="num">Subtotal previsto</th></tr></thead>
         <tbody>
         <?php foreach ($itens as $it): $sub = $it['quantidade'] * preco_item($it, $dias); $subtotal += $sub; ?>
             <tr><td class="num"><?= num($it['quantidade']) ?></td><td><?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
                 <td><?= e($it['descricao']) ?><?= $it['patrimonios'] ? '<br><small>Patrimônio: ' . e($it['patrimonios']) . '</small>' : '' ?></td>
-                <td class="num"><?= precos_html($it) ?></td>
+                <td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td>
                 <td class="num"><?= money($it['valor_reposicao']) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <tr><td colspan="6" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
-            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="6" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="6" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="6" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="6" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
+            <tr><td colspan="7" class="num">Subtotal</td><td class="num"><?= money($subtotal) ?></td></tr>
+            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="7" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="7" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="7" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="7" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
             <tr><td colspan="6" class="num">Valor previsto</td><td class="num"><?= money($loc['valor_previsto']) ?></td></tr>
         </tfoot>
     </table>
@@ -924,24 +926,24 @@ function locacoes_fatura(): void
        · situação: <strong><?= e($aberta ? 'em aberto (valores até ' . dt(today()) . ')' : $loc['status']) ?></strong></p>
     <h2>Discriminação</h2>
     <table>
-        <thead><tr><th>Devolução</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Dias</th><th class="num">Preço (un.)</th><th class="num">Valor</th></tr></thead>
+        <thead><tr><th>Devolução</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Dias</th><th>Período</th><th class="num">Preço (un.)</th><th class="num">Valor</th></tr></thead>
         <tbody>
         <?php foreach ($linhas as $l): ?>
             <tr><td><?= e(dt($l['data'])) ?></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($l['dias']) ?></td><td class="num"><?= precos_html($l) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
+                <td class="num"><?= num($l['dias']) ?></td><td><?= periodo_html($l) ?></td><td class="num"><?= precos_html($l) ?></td><td class="num"><?= money($l['valor']) ?></td></tr>
         <?php endforeach; ?>
         <?php foreach ($pendentes as $l): ?>
             <tr><td><em>pendente</em></td><td><?= e($l['descricao']) ?></td><td class="num"><?= num($l['quantidade']) ?> <?= e($l['unidade']) ?></td>
-                <td class="num"><?= num($diasHoje) ?></td><td class="num"><?= precos_html($l) ?></td>
+                <td class="num"><?= num($diasHoje) ?></td><td><?= periodo_html($l) ?></td><td class="num"><?= precos_html($l) ?></td>
                 <td class="num"><?= money($l['quantidade'] * preco_item($l, $diasHoje)) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <?php if ((float) $extras['multa'] > 0): ?><tr><td colspan="5" class="num">Multa</td><td class="num"><?= money($extras['multa']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $extras['avaria'] > 0): ?><tr><td colspan="5" class="num">Avaria</td><td class="num"><?= money($extras['avaria']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="5" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="5" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
-            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="5" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $extras['multa'] > 0): ?><tr><td colspan="6" class="num">Multa</td><td class="num"><?= money($extras['multa']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $extras['avaria'] > 0): ?><tr><td colspan="6" class="num">Avaria</td><td class="num"><?= money($extras['avaria']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['acrescimo'] > 0): ?><tr><td colspan="6" class="num">Acréscimo</td><td class="num"><?= money($loc['acrescimo']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_entrega'] > 0): ?><tr><td colspan="6" class="num">Frete de entrega</td><td class="num"><?= money($loc['frete_entrega']) ?></td></tr><?php endif; ?>
+            <?php if ((float) $loc['frete_recolhimento'] > 0): ?><tr><td colspan="6" class="num">Frete de recolhimento</td><td class="num"><?= money($loc['frete_recolhimento']) ?></td></tr><?php endif; ?>
             <?php if ((float) $loc['desconto'] > 0): ?><tr><td colspan="5" class="num">Desconto</td><td class="num">− <?= money($loc['desconto']) ?></td></tr><?php endif; ?>
             <tr><td colspan="5" class="num">Total da locação</td><td class="num"><?= money($loc['valor_atual']) ?></td></tr>
             <tr><td colspan="5" class="num">Valor pago</td><td class="num"><?= money($loc['valor_pago']) ?></td></tr>

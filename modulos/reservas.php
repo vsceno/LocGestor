@@ -120,7 +120,8 @@ function reserva_form(?array $r): void
         $fim = old('data_fim', $fim);
         $linhas = [];
         foreach ((array) old('produto_id', []) as $i => $pid) {
-            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => ''];
+            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => '',
+                         'periodo' => old('periodo', [])[$i] ?? 'diaria'];
         }
     }
     if (!$linhas) {
@@ -163,11 +164,11 @@ function reserva_form(?array $r): void
             </div>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
-                    <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Disponível no período</th><th></th></tr></thead>
-                    <tbody><?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, false); } ?></tbody>
+                    <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th class="num">Qtd.</th><th class="num">Disponível no período</th><th></th></tr></thead>
+                    <tbody><?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, false, false, true); } ?></tbody>
                 </table>
             </div>
-            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => ''], false); ?></template>
+            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'periodo' => 'diaria'], false, false, true); ?></template>
             <label>Observações<textarea name="obs" maxlength="2000"><?= e(old('obs', $r['obs'] ?? '')) ?></textarea></label>
         </div>
         <div class="acoes">
@@ -193,7 +194,7 @@ function reservas_salvar(): void
 function reservas_ver(): void
 {
     $r = reserva_da_url();
-    $itens = all('SELECT ri.quantidade, p.codigo, p.descricao, p.unidade, p.valor_diaria, p.valor_semanal, p.valor_mensal
+    $itens = all('SELECT ri.quantidade, ri.periodo, p.codigo, p.descricao, p.unidade, p.valor_diaria, p.valor_semanal, p.valor_quinzenal, p.valor_mensal
                     FROM reserva_itens ri JOIN produtos p ON p.id = ri.produto_id
                    WHERE ri.reserva_id = :id ORDER BY p.descricao', ['id' => $r['id']]);
     $locacao = val('SELECT numero FROM locacoes WHERE reserva_id = :id LIMIT 1', ['id' => $r['id']]);
@@ -238,11 +239,11 @@ function reservas_ver(): void
         <h2>Itens reservados</h2>
         <div class="tabela-wrap">
             <table class="tabela">
-                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço atual</th></tr></thead>
+                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th>Período</th><th class="num">Preço atual</th></tr></thead>
                 <tbody>
                 <?php foreach ($itens as $i): ?>
                     <tr><td><code><?= e($i['codigo']) ?></code></td><td><?= e($i['descricao']) ?></td>
-                        <td class="num"><?= num($i['quantidade']) ?> <?= e($i['unidade']) ?></td><td class="num"><?= precos_html($i) ?></td></tr>
+                        <td class="num"><?= num($i['quantidade']) ?> <?= e($i['unidade']) ?></td><td><?= periodo_html($i) ?></td><td class="num"><?= precos_html($i) ?></td></tr>
                 <?php endforeach; ?>
                 </tbody>
             </table>

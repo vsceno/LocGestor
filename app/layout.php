@@ -102,7 +102,7 @@ function selo_status_locacao(array $l): string
  * Linha da tabela dinâmica de itens (nova locação e reserva). Na reserva ($comDiaria = false)
  * a diária e o subtotal ficam ocultos: a reserva não guarda preço.
  */
-function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, bool $comPrev = false): void
+function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, bool $comPrev = false, bool $comPeriodo = false): void
 {
     ?>
     <tr class="linha-item">
@@ -114,10 +114,12 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, boo
                     <?= $p['id'] === $ln['produto_id'] ? 'selected' : '' ?>><?= e($p['codigo'] . ' — ' . $p['descricao']) ?></option>
             <?php endforeach; ?>
         </select></td>
-        <?php if ($comPrev): ?>
+        <?php if ($comPeriodo): ?>
             <td><select name="periodo[]" class="periodo-item" aria-label="Período">
                 <?= options(['diaria' => 'Diária', 'semanal' => 'Semanal (7 dias)', 'quinzenal' => 'Quinzenal (15 dias)', 'mensal' => 'Mensal (30 dias)'], $ln['periodo'] ?? 'diaria') ?>
             </select></td>
+        <?php endif; ?>
+        <?php if ($comPrev): ?>
             <td><input type="number" class="dias-item" min="1" step="1" style="width:70px" aria-label="Dias de locação"></td>
         <?php endif; ?>
         <td class="num"><input type="number" name="quantidade[]" class="qtd" value="<?= e($ln['quantidade']) ?>" min="1" step="1" style="width:80px" aria-label="Quantidade"></td>

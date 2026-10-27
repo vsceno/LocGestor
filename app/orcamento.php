@@ -56,13 +56,23 @@ function orcamento_salvar(array $d, ?string $id = null): array
     }
     $itens = itens_do_form($d, 'orçamento');
     $cadastro = [];
-    foreach (all('SELECT id, valor_diaria, valor_semanal, valor_mensal FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
+    foreach (all('SELECT id, valor_diaria, valor_semanal, valor_quinzenal, valor_mensal FROM produtos WHERE id = ANY (CAST(:ids AS uuid[]))',
                  ['ids' => '{' . implode(',', array_keys($itens)) . '}']) as $p) {
         $cadastro[$p['id']] = $p;
     }
     foreach ($itens as $pid => $it) {
         if (!isset($cadastro[$pid])) {
             throw new UserError('Produto não encontrado.');
+        }
+        // Período escolhido: o valor digitado é o do período; os dias que sobram são cobrados na diária do cadastro
+        $pr = $itens[$pid]['periodo'] ?? 'automatico';
+        if (in_array($pr, ['semanal', 'quinzenal', 'mensal'], true)) {
+            $precoPlano = (float) ($itens[$pid]['diaria'] ?? $cadastro[$pid]['valor_' . $pr]);
+            if ($precoPlano <= 0) {
+                throw new UserError("Informe o valor {$pr} de {$cadastro[$pid]['descricao']} ou escolha outro período.");
+            }
+            $itens[$pid]['valores'] = ['valor_' . $pr => $precoPlano];
+            $itens[$pid]['diaria'] = (float) $cadastro[$pid]['valor_diaria'];
         }
         $itens[$pid]['diaria'] ??= (float) $cadastro[$pid]['valor_diaria'];
         if ($itens[$pid]['diaria'] < 0) {
@@ -99,10 +109,13 @@ function orcamento_salvar(array $d, ?string $id = null): array
             q('DELETE FROM orcamento_itens WHERE orcamento_id = :id', ['id' => $id]);
         }
         foreach ($itens as $pid => $it) {
-            q('INSERT INTO orcamento_itens (orcamento_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_mensal)
-               VALUES (:o, :p, :q, :d, :s, :m)',
+            $v = $it['valores'] ?? [];
+            q('INSERT INTO orcamento_itens (orcamento_id, produto_id, quantidade, valor_diaria, valor_semanal, valor_quinzenal, valor_mensal, periodo)
+               VALUES (:o, :p, :q, :d, :s, :qz, :m, :per)',
               ['o' => $id, 'p' => $pid, 'q' => $it['qtd'], 'd' => $it['diaria'],
-               's' => $cadastro[$pid]['valor_semanal'], 'm' => $cadastro[$pid]['valor_mensal']]);
+               's' => $v['valor_semanal'] ?? $cadastro[$pid]['valor_semanal'],
+               'qz' => $v['valor_quinzenal'] ?? $cadastro[$pid]['valor_quinzenal'],
+               'm' => $v['valor_mensal'] ?? $cadastro[$pid]['valor_mensal'], 'per' => $it['periodo'] ?? 'automatico']);
         }
         return ['id' => $id, 'numero' => $numero];
     });
@@ -129,13 +142,16 @@ function orcamento_converter(string $id, string $tipo): array
         if ($orc['validade'] < today()) {
             throw new UserError('Orçamento vencido em ' . dt($orc['validade']) . '. Faça um novo orçamento.');
         }
-        $itens = all('SELECT oi.produto_id, oi.quantidade, oi.valor_diaria FROM orcamento_itens oi WHERE oi.orcamento_id = :id', ['id' => $id]);
+        $itens = all('SELECT oi.produto_id, oi.quantidade, oi.periodo, oi.valor_diaria, oi.valor_semanal, oi.valor_quinzenal, oi.valor_mensal
+                        FROM orcamento_itens oi WHERE oi.orcamento_id = :id', ['id' => $id]);
         // Cliente pelo mesmo texto da tela ("Nome · documento")
         $clienteTxt = $orc['nome'] . ($orc['cpf_cnpj'] !== '' ? ' · ' . $orc['cpf_cnpj'] : '');
         $linhasProd = [
             'produto_id' => array_column($itens, 'produto_id'),
             'quantidade' => array_map(fn($i) => (string) $i['quantidade'], $itens),
-            'diaria'     => array_map(fn($i) => number_format((float) $i['valor_diaria'], 2, '.', ''), $itens),
+            'diaria'     => array_map(fn($i) => number_format((float) (in_array($i['periodo'], ['semanal', 'quinzenal', 'mensal'], true)
+                                                                 ? $i['valor_' . $i['periodo']] : $i['valor_diaria']), 2, '.', ''), $itens),
+            'periodo'    => array_column($itens, 'periodo'),
         ];
         if ($tipo === 'locacao') {
             if ($orc['data_saida'] > today()) {
@@ -149,14 +165,14 @@ function orcamento_converter(string $id, string $tipo): array
                                 'frete_recolhimento' => number_format((float) $orc['frete_recolhimento'], 2, '.', ''),
                                 'obs' => trim('Do orçamento nº ' . $orc['numero'] . '. ' . $orc['obs']),
                                 'produto_id' => $linhasProd['produto_id'], 'quantidade' => $linhasProd['quantidade'],
-                                'diaria' => $linhasProd['diaria']], $orc['desconto_autorizado_por'] ?: null);
+                                'diaria' => $linhasProd['diaria'], 'periodo' => $linhasProd['periodo']], $orc['desconto_autorizado_por'] ?: null);
             q("UPDATE orcamentos SET status = 'convertido', locacao_id = :l WHERE id = :id", ['l' => $r['id'], 'id' => $id]);
             return ['tipo' => 'locacao', 'numero' => $r['numero'], 'id' => $r['id']];
         }
         // Reserva: não guarda preço (o valor é calculado na retirada)
         $r = reserva_salvar(['cliente' => $clienteTxt, 'data_inicio' => $orc['data_saida'], 'data_fim' => $orc['data_prev_devolucao'],
                              'obs' => trim('Do orçamento nº ' . $orc['numero'] . '. ' . $orc['obs']),
-                             'produto_id' => $linhasProd['produto_id'], 'quantidade' => $linhasProd['quantidade']]);
+                             'produto_id' => $linhasProd['produto_id'], 'quantidade' => $linhasProd['quantidade'], 'periodo' => $linhasProd['periodo']]);
         q("UPDATE orcamentos SET status = 'convertido', reserva_id = :r WHERE id = :id", ['r' => $r['id'], 'id' => $id]);
         return ['tipo' => 'reserva', 'numero' => $r['numero'], 'id' => $r['id']];
     });

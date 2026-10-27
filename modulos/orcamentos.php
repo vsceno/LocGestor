@@ -19,7 +19,7 @@ function orcamentos_index(): void
     $valores = [];
     foreach ($lista as $o) {
         $valores[$o['id']] = orcamento_previsto(one('SELECT * FROM orcamentos WHERE id = :id', ['id' => $o['id']]),
-                                                all('SELECT oi.quantidade, oi.valor_diaria, oi.valor_semanal, oi.valor_mensal
+                                                all('SELECT oi.quantidade, oi.periodo, oi.valor_diaria, oi.valor_semanal, oi.valor_quinzenal, oi.valor_mensal
                                                        FROM orcamento_itens oi WHERE oi.orcamento_id = :id', ['id' => $o['id']]));
     }
     layout_start('Orçamentos', 'orcamentos');
@@ -80,7 +80,7 @@ function orcamento_da_url(): array
 
 function orcamento_itens(string $id): array
 {
-    return all('SELECT oi.quantidade, oi.valor_diaria, oi.valor_semanal, oi.valor_mensal, p.codigo, p.descricao, p.unidade
+    return all('SELECT oi.quantidade, oi.periodo, oi.valor_diaria, oi.valor_semanal, oi.valor_quinzenal, oi.valor_mensal, p.codigo, p.descricao, p.unidade
                   FROM orcamento_itens oi JOIN produtos p ON p.id = oi.produto_id
                  WHERE oi.orcamento_id = :id ORDER BY p.descricao', ['id' => $id]);
 }
@@ -98,7 +98,8 @@ function orcamentos_novo(): void
         $prev = old('data_prev_devolucao', $prev);
         $validade = old('validade', $validade);
         foreach ((array) old('produto_id', []) as $i => $pid) {
-            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => old('diaria', [])[$i] ?? ''];
+            $linhas[] = ['produto_id' => $pid, 'quantidade' => old('quantidade', [])[$i] ?? '', 'diaria' => old('diaria', [])[$i] ?? '',
+                         'periodo' => old('periodo', [])[$i] ?? 'diaria'];
         }
     }
     if (!$linhas) {
@@ -147,14 +148,14 @@ function orcamentos_novo(): void
             <p class="ajuda">O preço do cadastro (diária, semana e mês) entra sozinho; você pode negociar a diária aqui.</p>
             <div class="tabela-wrap">
                 <table class="tabela" id="tabela-itens">
-                    <thead><tr><th style="min-width:240px">Produto</th><th class="num">Qtd.</th><th class="num">Diária (R$)</th>
+                    <thead><tr><th style="min-width:240px">Produto</th><th>Período</th><th class="num">Qtd.</th><th class="num">Valor (R$)</th>
                         <th class="num">Disponível</th><th class="num">Subtotal</th><th></th></tr></thead>
                     <tbody>
-                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln); } ?>
+                    <?php foreach ($linhas as $ln) { linha_item_html($produtos, $ln, true, false, true); } ?>
                     </tbody>
                 </table>
             </div>
-            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '']); ?></template>
+            <template id="modelo-linha"><?php linha_item_html($produtos, ['produto_id' => '', 'quantidade' => '1', 'diaria' => '', 'periodo' => 'diaria'], true, false, true); ?></template>
         </div>
         <div class="card">
             <h2>Valores</h2>
@@ -256,11 +257,11 @@ function orcamentos_ver(): void
         <h2>Itens</h2>
         <div class="tabela-wrap">
             <table class="tabela">
-                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço</th></tr></thead>
+                <thead><tr><th>Código</th><th>Produto</th><th class="num">Qtd.</th><th>Período</th><th class="num">Preço</th></tr></thead>
                 <tbody>
                 <?php foreach ($itens as $it): ?>
                     <tr><td><code><?= e($it['codigo']) ?></code></td><td><?= e($it['descricao']) ?></td>
-                        <td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td><td class="num"><?= precos_html($it) ?></td></tr>
+                        <td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td><td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td></tr>
                 <?php endforeach; ?>
                 </tbody>
             </table>
@@ -288,11 +289,11 @@ function orcamentos_imprimir(): void
        <?= $o['local_uso'] !== '' ? ' · local: ' . e($o['local_uso']) : '' ?></p>
     <h2>Itens</h2>
     <table>
-        <thead><tr><th class="num">Qtd.</th><th>Código</th><th>Descrição</th><th class="num">Preço</th><th class="num">Subtotal</th></tr></thead>
+        <thead><tr><th class="num">Qtd.</th><th>Código</th><th>Descrição</th><th>Período</th><th class="num">Preço</th><th class="num">Subtotal</th></tr></thead>
         <tbody>
         <?php foreach ($itens as $it): $sub = (int) $it['quantidade'] * preco_item($it, $dias); ?>
             <tr><td class="num"><?= num($it['quantidade']) ?> <?= e($it['unidade']) ?></td><td class="nowrap"><?= e($it['codigo']) ?></td>
-                <td><?= e($it['descricao']) ?></td><td class="num"><?= precos_html($it) ?></td><td class="num"><?= money($sub) ?></td></tr>
+                <td><?= e($it['descricao']) ?></td><td><?= periodo_html($it) ?></td><td class="num"><?= precos_html($it) ?></td><td class="num"><?= money($sub) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot>

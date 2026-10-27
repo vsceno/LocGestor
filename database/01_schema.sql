@@ -297,6 +297,8 @@ CREATE TABLE reserva_itens (
     reserva_id  uuid    NOT NULL,
     produto_id  uuid    NOT NULL,
     quantidade  INTEGER NOT NULL CHECK (quantidade > 0),
+    periodo     VARCHAR(10) NOT NULL DEFAULT 'automatico',
+    CONSTRAINT reserva_itens_periodo_ck CHECK (periodo IN ('automatico', 'diaria', 'semanal', 'quinzenal', 'mensal')),
     CONSTRAINT reserva_itens_tenant_id_uk UNIQUE (tenant_id, id),
     CONSTRAINT reserva_itens_reserva_fk   FOREIGN KEY (tenant_id, reserva_id) REFERENCES reservas (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT reserva_itens_produto_fk   FOREIGN KEY (tenant_id, produto_id) REFERENCES produtos (tenant_id, id)
@@ -1070,6 +1072,10 @@ CREATE TABLE orcamento_itens (
     valor_diaria  NUMERIC(12,2) NOT NULL CHECK (valor_diaria >= 0),
     valor_semanal NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_semanal >= 0),
     valor_mensal  NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (valor_mensal >= 0),
+    periodo       VARCHAR(10)   NOT NULL DEFAULT 'automatico',
+    valor_quinzenal NUMERIC(12,2) NOT NULL DEFAULT 0,
+    CONSTRAINT orcamento_itens_periodo_ck CHECK (periodo IN ('automatico', 'diaria', 'semanal', 'quinzenal', 'mensal')),
+    CONSTRAINT orcamento_itens_valor_quinzenal_ck CHECK (valor_quinzenal >= 0),
     CONSTRAINT orcamento_itens_tenant_id_uk UNIQUE (tenant_id, id),
     CONSTRAINT orcamento_itens_orc_fk  FOREIGN KEY (tenant_id, orcamento_id) REFERENCES orcamentos (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT orcamento_itens_prod_fk FOREIGN KEY (tenant_id, produto_id) REFERENCES produtos (tenant_id, id)
