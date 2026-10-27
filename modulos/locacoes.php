@@ -236,9 +236,9 @@ function locacoes_nova(): void
         <div class="card">
             <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px 40px">
                 <h2 style="margin:6px 0 0">Cliente e período</h2>
-                <div style="width:330px">
+                <div style="width:170px">
                     <label class="obrig">Data de saída
-                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:100%">
+                    <input type="date" name="data_saida" id="data_saida" value="<?= e($saida) ?>" max="<?= e(today()) ?>" required style="width:170px">
                 </label>
                 </div>
             </div>
@@ -264,10 +264,10 @@ function locacoes_nova(): void
                 <div class="acoes"><?= kit_seletor_html(kits_para_form()) ?>
                     <button type="button" class="btn btn-sec btn-peq" id="add-item">+ Adicionar item</button></div>
             </div>
-            <div style="max-width:420px">
+            <div style="max-width:260px">
                 <label class="obrig">Devolução prevista
                     <span style="display:flex; gap:8px; align-items:center">
-                        <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="flex:1; min-width:0">
+                        <input type="date" name="data_prev_devolucao" id="data_prev" value="<?= e($prev) ?>" required style="width:170px; flex:0 0 170px">
                         <input type="number" id="dias-prev" min="0" step="1" inputmode="numeric" placeholder="dias" title="Dias a partir da saída (conta o dia da saída)"
                                aria-label="Quantidade de dias a partir da saída" style="width:78px; flex:0 0 78px">
                     </span>
