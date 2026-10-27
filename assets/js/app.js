@@ -57,6 +57,13 @@ var LG = {
             corpo.querySelectorAll('.prev-item').forEach(function (i) { i.value = prev.value; });
         }
 
+        // A data geral (usada na disponibilidade) é a mais tarde entre as devoluções dos itens
+        function atualizarPrev() {
+            var maior = '';
+            corpo.querySelectorAll('.prev-item').forEach(function (i) { if (i.value && i.value > maior) { maior = i.value; } });
+            if (maior) { prev.value = maior; }
+        }
+
         function recalcular() {
             var d = diarias(), soma = 0;
             corpo.querySelectorAll('tr.linha-item').forEach(function (tr) {
@@ -149,7 +156,7 @@ var LG = {
             diaria.addEventListener('input', function () { diaria.dataset.auto = ''; recalcular(); });
             tr.querySelector('.qtd').addEventListener('input', recalcular);
             var pi = tr.querySelector('.prev-item');
-            if (pi) { pi.addEventListener('change', recalcular); }
+            if (pi) { pi.addEventListener('change', function () { atualizarPrev(); recalcular(); agendarConsulta(); }); }
             tr.querySelector('.remover').addEventListener('click', function () {
                 if (corpo.querySelectorAll('tr.linha-item').length > 1) { tr.remove(); } else {
                     sel.value = ''; diaria.value = ''; tr.querySelector('.qtd').value = 1;
@@ -160,6 +167,7 @@ var LG = {
 
         corpo.querySelectorAll('tr.linha-item').forEach(prepararLinha);
         corpo.querySelectorAll('.prev-item').forEach(function (i) { if (!i.value) { i.value = prev.value; } });
+        atualizarPrev();
         var addItem = form.querySelector('#add-item');
         if (addItem) {
             addItem.addEventListener('click', function () {

@@ -922,6 +922,9 @@ function locacao_criar(array $d, ?string $autorizadoPor = null): array
 
     $saida = (string) ($d['data_saida'] ?? '');
     $prev = (string) ($d['data_prev_devolucao'] ?? '');
+    if ($prev === '') {
+        $prev = $saida; // sem data geral: cada item traz a sua (a locação fica com a mais tarde)
+    }
     if (!valid_date($saida) || !valid_date($prev)) {
         throw new UserError('Informe datas válidas de saída e de devolução prevista.');
     }

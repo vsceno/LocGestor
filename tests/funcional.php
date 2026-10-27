@@ -467,8 +467,8 @@ ok($alfa->mensagem('index.php?p=produtos&a=kit_novo') === 'Já existe um kit com
 $alfa->enviar('index.php?p=produtos&a=kit_novo', 'index.php?p=produtos&a=kit_salvar', ['codigo' => 'TESTE-VAZIO', 'produto_id' => ['']] + $kit);
 ok(str_contains($alfa->mensagem('index.php?p=produtos&a=kit_novo'), 'pelo menos um item'), 'kit sem itens é recusado');
 $nova = $alfa->get('index.php?p=locacoes&a=nova')['corpo'];
-ok(!str_contains($nova, 'id="kit-sel"') && !str_contains($nova, 'id="add-item"'),
-   'nova locação sem seletor de kit nem botão de adicionar item (pedido de layout)');
+ok(!str_contains($nova, 'id="kit-sel"') && str_contains($nova, 'id="add-item"'),
+   'nova locação sem seletor de kit, com o botão de adicionar item ao lado do remover');
 ok(str_contains($alfa->get('index.php?p=reservas&a=nova')['corpo'], 'TESTE-KIT'), 'nova reserva também oferece o kit');
 $r = $alfa->enviar("index.php?p=produtos&a=kit_editar&id=$KIT", 'index.php?p=produtos&a=kit_salvar',
                    ['id' => $KIT, 'produto_id' => [$AND], 'quantidade' => ['4'], 'ativo' => ''] + $kit);
@@ -1328,7 +1328,7 @@ ok(str_contains($alfa->get("index.php?p=locacoes&a=ver&id=$LP")['corpo'], 'R$ 35
 
 // =====================================================================
 secao('Nova locação: campo Dias para a devolução');
-ok(str_contains($alfa->get('index.php?p=locacoes&a=nova')['corpo'], 'id="dias-prev"'), 'nova locação tem o campo Dias ao lado da devolução prevista');
+ok(!str_contains($alfa->get('index.php?p=locacoes&a=nova')['corpo'], 'id="dias-prev"'), 'nova locação não mostra mais o campo Dias (cada item tem a sua devolução)');
 
 // =====================================================================
 secao('Devolução prevista por item (cada produto com a sua data)');
