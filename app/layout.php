@@ -116,7 +116,7 @@ function linha_item_html(array $produtos, array $ln, bool $comDiaria = true, boo
         </select></td>
         <?php if ($comPeriodo): ?>
             <td><select name="periodo[]" class="periodo-item" aria-label="Período">
-                <?= options(['diaria' => 'Diária', 'semanal' => 'Semanal (7 dias)', 'quinzenal' => 'Quinzenal (15 dias)', 'mensal' => 'Mensal (30 dias)'], $ln['periodo'] ?? 'diaria') ?>
+                <?= options(['diaria' => 'Diária', 'semanal' => 'Semanal', 'quinzenal' => 'Quinzenal', 'mensal' => 'Mensal'], $ln['periodo'] ?? 'diaria') ?>
             </select></td>
         <?php endif; ?>
         <?php if ($comPrev): ?>
@@ -257,6 +257,9 @@ function nome_locadora(): string
 function layout_start(string $titulo, string $menuAtivo = ''): void
 {
     $u = user();
+    // No menu, a logomarca da locadora (quando houver) no lugar do selo "LG"
+    $logoMenu = AREA === 'locadora' && $u !== null && (empresa()['logo_arquivo'] ?? '') !== '';
+    $iniciais = mb_strtoupper(implode('', array_map(fn($p) => mb_substr($p, 0, 1), array_slice(preg_split('/\s+/', trim($u['nome'] ?? '')) ?: [], 0, 2))));
     ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -270,8 +273,12 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
 <body>
 <input type="checkbox" id="menu-toggle" class="menu-toggle" aria-label="Abrir menu">
 <aside class="sidebar">
-    <div class="marca">
-        <span class="logo">LG</span>
+    <div class="marca<?= $logoMenu ? ' marca-com-logo' : '' ?>">
+        <?php if ($logoMenu): ?>
+            <span class="marca-logo"><img src="<?= e(url_logo()) ?>" alt="<?= e(nome_locadora()) ?>"></span>
+        <?php else: ?>
+            <span class="logo">LG</span>
+        <?php endif; ?>
         <div class="marca-txt">
             <strong title="<?= e(nome_locadora()) ?>"><?= e(nome_locadora()) ?></strong>
             <small><?= e(config('app_name', 'LocGestor')) ?></small>
@@ -285,6 +292,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
         <?php endforeach; ?>
     </nav>
     <div class="usuario">
+        <span class="avatar" aria-hidden="true"><?= e($iniciais) ?></span>
         <div class="usuario-info">
             <strong><?= e($u['nome'] ?? '') ?></strong>
             <small><?= e(($u['login'] ?? '') . ' · ' . (($u['perfil'] ?? '') === 'admin' ? 'administrador' : ($u['perfil'] ?? ''))) ?></small>
