@@ -5,7 +5,7 @@
             'painel'      => ['Painel', 'painel', route('painel')],
             'locacoes'    => ['Locações', 'locacoes', route('locacoes.index')],
             'reservas'    => ['Reservas', 'reservas', route('reservas.index')],
-            'orcamentos'  => ['Orçamentos', 'orcamentos', legado('orcamentos')],
+            'orcamentos'  => ['Orçamentos', 'orcamentos', route('orcamentos.index')],
             'roteiro'     => ['Roteiro', 'roteiro', legado('roteiro')],
         ],
         'Cadastros' => [
@@ -27,7 +27,7 @@
         ['Nova locação', route('locacoes.create'), 'locacoes'],
         ['Novo cliente', route('clientes.create'), 'clientes'],
         ['Novo produto', route('produtos.create'), 'produtos'],
-        ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],
+        ['Novo orçamento', route('orcamentos.create'), 'orcamentos'],
         ['Nova reserva', route('reservas.create'), 'reservas'],
         ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],

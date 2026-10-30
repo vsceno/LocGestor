@@ -6,7 +6,7 @@
     $atalhos = [
         ['Nova locação', 'Saída de equipamentos', 'locacoes', route('locacoes.create')],
         ['Novo cliente', 'Cadastro rápido', 'clientes', route('clientes.create')],
-        ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', legado('orcamentos', ['a' => 'novo'])],
+        ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', route('orcamentos.create')],
         ['Registrar devolução', 'Entrada de equipamentos', 'devolucao', route('locacoes.index')],
     ];
     $kpis = [

@@ -130,7 +130,8 @@ class ReservasController extends Controller
         return redirect()->route('reservas.show', $numero)->with('flash', [['tipo' => 'ok', 'msg' => $r ? "Reserva nº $numero alterada." : "Reserva nº $numero registrada."]]);
     }
 
-    private function salvar(Request $request, ?string $id): int
+    /** Cria ou altera uma reserva e devolve o número (usado também na conversão de orçamento). */
+    public function salvar(Request $request, ?string $id): int
     {
         $cliente = Formulario::cliente((string) $request->input('cliente', ''));
         if ($cliente->bloqueado) {
@@ -151,7 +152,7 @@ class ReservasController extends Controller
         if (mb_strlen($obs) > 2000) {
             throw new Recusa('Observações muito longas (máximo de 2.000 caracteres).');
         }
-        $brutos = Formulario::itens($request, 'reserva');
+        $brutos = Formulario::itens($request, 'na reserva');
         $itens = array_map(fn ($it) => $it['qtd'], $brutos);
 
         return DB::transaction(function () use ($id, $cliente, $ini, $fim, $obs, $itens, $brutos) {

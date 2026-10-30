@@ -112,8 +112,11 @@ class NovaLocacaoController extends Controller
         return redirect()->route('locacoes.show', $r['numero'])->with('flash', [['tipo' => 'ok', 'msg' => "Locação nº {$r['numero']} registrada."]]);
     }
 
-    /** @return array{id: string, numero: int} */
-    private function criar(Request $request): array
+    /**
+     * Cria a locação. $autorizadoPor vem pronto na conversão de orçamento (o desconto já foi autorizado nele).
+     * @return array{id: string, numero: int}
+     */
+    public function criar(Request $request, ?string $autorizadoPor = null): array
     {
         $hoje = now()->toDateString();
         $cliente = Formulario::cliente((string) $request->input('cliente', ''));
@@ -142,7 +145,7 @@ class NovaLocacaoController extends Controller
         if ($acrescimo < 0 || $desconto < 0 || $adiantamento < 0) {
             throw new Recusa('Acréscimo, desconto e adiantamento não podem ser negativos.');
         }
-        $autorizadoPor = $this->autorizador($acrescimo, $desconto, (string) $request->input('senha_admin', ''));
+        $autorizadoPor ??= Formulario::autorizador($acrescimo, $desconto, (string) $request->input('senha_admin', ''));
         $forma = '';
         if ($adiantamento > 0) {
             $forma = (string) $request->input('forma', '');
@@ -175,7 +178,7 @@ class NovaLocacaoController extends Controller
             throw new Recusa('Reserva inválida.');
         }
 
-        $itens = Formulario::itens($request, 'locação');
+        $itens = Formulario::itens($request, 'na locação');
         foreach ($itens as $pid => $it) {
             $itens[$pid]['prev'] ??= $prev;
             if ($itens[$pid]['prev'] < $saida) {
@@ -251,25 +254,6 @@ class NovaLocacaoController extends Controller
             }
             return ['id' => $id, 'numero' => $numero];
         });
-    }
-
-    /** Desconto ou acréscimo só com administrador logado ou a senha de um administrador ativo. Devolve quem autorizou. */
-    private function autorizador(float $acrescimo, float $desconto, string $senha): ?string
-    {
-        if ($acrescimo <= 0 && $desconto <= 0) {
-            return null;
-        }
-        if (session('usuario.perfil') === 'admin') {
-            return session('usuario.id');
-        }
-        if ($senha !== '') {
-            foreach (DB::select("SELECT id, senha_hash FROM usuarios WHERE perfil = 'admin' AND ativo") as $adm) {
-                if (password_verify($senha, $adm->senha_hash)) {
-                    return $adm->id;
-                }
-            }
-        }
-        throw new Recusa('Desconto ou acréscimo precisa da senha de um administrador.');
     }
 
     /** Linha do formulário a partir de um item de reserva ou de locação (o automático vira diária). */

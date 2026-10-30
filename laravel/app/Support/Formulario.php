@@ -85,7 +85,7 @@ class Formulario
             }
         }
         if (!$itens) {
-            throw new Recusa("Inclua pelo menos um item na $onde.");
+            throw new Recusa("Inclua pelo menos um item $onde.");   // $onde já traz o artigo: "na locação", "no orçamento"
         }
         return $itens;
     }
@@ -98,6 +98,25 @@ class Formulario
             throw new Recusa('Valor inválido: ' . trim(str_replace(['R$', ' '], '', (string) $v)));
         }
         return $n;
+    }
+
+    /** Desconto ou acréscimo só com administrador logado ou a senha de um administrador ativo. Devolve quem autorizou. */
+    public static function autorizador(float $acrescimo, float $desconto, string $senha): ?string
+    {
+        if ($acrescimo <= 0 && $desconto <= 0) {
+            return null;
+        }
+        if (session('usuario.perfil') === 'admin') {
+            return session('usuario.id');
+        }
+        if ($senha !== '') {
+            foreach (DB::select("SELECT id, senha_hash FROM usuarios WHERE perfil = 'admin' AND ativo") as $adm) {
+                if (password_verify($senha, $adm->senha_hash)) {
+                    return $adm->id;
+                }
+            }
+        }
+        throw new Recusa('Desconto ou acréscimo precisa da senha de um administrador.');
     }
 
     public static function dataValida(string $d): bool
