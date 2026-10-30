@@ -10,7 +10,7 @@
         ],
         'Cadastros' => [
             'clientes'    => ['Clientes', 'clientes', route('clientes.index')],
-            'produtos'    => ['Produtos', 'produtos', legado('produtos')],
+            'produtos'    => ['Produtos', 'produtos', route('produtos.index')],
             'manutencoes' => ['Manutenção', 'manutencao', legado('manutencoes')],
         ],
         'Financeiro' => [
@@ -26,13 +26,14 @@
     $comandos = [
         ['Nova locação', legado('locacoes', ['a' => 'nova']), 'locacoes'],
         ['Novo cliente', route('clientes.create'), 'clientes'],
+        ['Novo produto', route('produtos.create'), 'produtos'],
         ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],
         ['Nova reserva', legado('reservas', ['a' => 'nova']), 'reservas'],
         ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],
         ['Ir para locações', legado('locacoes'), 'locacoes'],
-        ['Ir para produtos', legado('produtos'), 'produtos'],
+        ['Ir para produtos', route('produtos.index'), 'produtos'],
         ['Ir para relatórios', legado('relatorios'), 'relatorios'],
         ['Configurações', legado('config'), 'config'],
     ];

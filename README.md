@@ -814,8 +814,8 @@ PostgreSQL. No Laravel, `App\Support\Locadora` é o único lugar que define `app
 `SessaoLocadora` confere em toda requisição se a locadora está ativa e em dia, se o usuário está ativo e se a senha não
 foi redefinida.
 
-Já no Laravel: login, painel, busca e clientes (lista, ficha, cadastro, edição, bloqueio e exclusão). O resto abre no
-sistema atual.
+Já no Laravel: login, painel, busca, clientes (lista, ficha, cadastro, edição, bloqueio e exclusão) e produtos (lista
+com disponibilidade, cadastro, edição e exclusão, categorias e kits). Patrimônio (unidades) e o resto abrem no sistema atual.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 
@@ -845,7 +845,7 @@ No `.env`, preencha `DB_*` com o mesmo papel do `db_app` do `config.php`, `SESSI
 precisam dos dados de demonstração (`03_demo.sql`). Cada teste roda numa transação desfeita no fim, então nada fica
 gravado. Para enxergar dados de outra locadora (e provar que a tela não mostra), os testes usam uma conexão de
 superusuário só para leitura (`DB_ADMIN_USERNAME`/`DB_ADMIN_PASSWORD`, ou `PGUSER`/`PGPASSWORD`, padrão `postgres`).
-Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de clientes, ponte de sessão e busca.
+Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de clientes e de produtos, ponte de sessão e busca.
 No GitHub, rodam junto com os testes do sistema atual (linha do PHP 8.4).
 
 **Ponte de sessão (entrar uma vez só):** os dois sistemas ficam em endereços diferentes, então quem está logado num

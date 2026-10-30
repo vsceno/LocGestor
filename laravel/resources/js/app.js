@@ -53,7 +53,7 @@ document.querySelectorAll('form[data-busca-viva]').forEach((form) => {
     if (!destino || !campo) { return; }
     let espera;
     let pedido = 0;
-    campo.addEventListener('input', () => {
+    const atualizar = (demora) => {
         clearTimeout(espera);
         espera = setTimeout(async () => {
             const meu = ++pedido;
@@ -71,8 +71,11 @@ document.querySelectorAll('form[data-busca-viva]').forEach((form) => {
             } finally {
                 if (meu === pedido) { destino.classList.remove('opacity-50'); }
             }
-        }, 250);
-    });
+        }, demora);
+    };
+    campo.addEventListener('input', () => atualizar(250));
+    // Listas de escolha do filtro (ex.: categoria) atualizam na hora
+    form.querySelectorAll('select[data-envia-ao-mudar]').forEach((s) => s.addEventListener('change', () => atualizar(0)));
     campo.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); } });
 });
 
@@ -264,4 +267,38 @@ document.querySelectorAll('[data-form-cliente]').forEach((form) => {
         if (ie) { ie.textContent = pj ? 'Inscrição estadual' : 'RG'; }
     };
     form.querySelectorAll('[data-tipo]').forEach((r) => r.addEventListener('change', atualizar));
+});
+
+/* ---------- Composição do kit: adicionar/remover linhas e somar a diária ---------- */
+document.querySelectorAll('form[data-form-kit]').forEach((form) => {
+    const caixa = form.querySelector('[data-kit-linhas]');
+    const total = form.querySelector('[data-kit-total]');
+    const adicionar = form.querySelector('[data-kit-adicionar]');
+    const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const somar = () => {
+        let soma = 0;
+        caixa.querySelectorAll('[data-kit-linha]').forEach((l) => {
+            const op = l.querySelector('select').selectedOptions[0];
+            soma += parseFloat(op?.dataset.diaria || 0) * Math.max(0, parseInt(l.querySelector('input').value, 10) || 0);
+        });
+        total.textContent = reais.format(soma);
+    };
+    adicionar.hidden = false;   // sem JavaScript, as linhas vazias do servidor bastam
+    adicionar.addEventListener('click', () => {
+        const nova = caixa.querySelector('[data-kit-linha]').cloneNode(true);
+        nova.querySelector('select').value = '';
+        nova.querySelector('input').value = '1';
+        caixa.append(nova);
+        nova.querySelector('select').focus();
+    });
+    caixa.addEventListener('click', (ev) => {
+        const botao = ev.target.closest('[data-kit-remover]');
+        if (!botao) { return; }
+        const linha = botao.closest('[data-kit-linha]');
+        if (caixa.querySelectorAll('[data-kit-linha]').length > 1) { linha.remove(); } else { linha.querySelector('select').value = ''; }
+        somar();
+    });
+    caixa.addEventListener('input', somar);
+    caixa.addEventListener('change', somar);
+    somar();
 });

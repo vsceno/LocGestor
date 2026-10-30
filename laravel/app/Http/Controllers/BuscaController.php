@@ -81,7 +81,7 @@ class BuscaController extends Controller
 
         // Código de barras confere exato (leitor USB); código e descrição só fora do modo "#número"
         $r['Produtos'] = array_map(fn ($x) => [
-            'rotulo' => $x->codigo . ' — ' . $x->descricao, 'ico' => 'produtos', 'url' => legado('produtos', ['a' => 'editar', 'id' => $x->id]),
+            'rotulo' => $x->codigo . ' — ' . $x->descricao, 'ico' => 'produtos', 'url' => route('produtos.edit', $x->id),
             'detalhe' => ($x->ativo ? '' : 'inativo · ') . numero($x->qtd_total) . ' em estoque',
         ], DB::select('SELECT p.id, p.codigo, p.descricao, p.qtd_total, p.ativo FROM produtos p
                         WHERE (NOT CAST(? AS boolean) AND (lower(p.codigo) LIKE lower(?) OR lower(p.descricao) LIKE lower(?)))

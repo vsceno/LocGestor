@@ -150,3 +150,18 @@ if (!function_exists('ufs')) {
                 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
     }
 }
+
+if (!function_exists('valor_br')) {
+    /** Valor digitado em reais ("1.234,50", "R$ 45", "45.5") como no parse_money() antigo. Vazio = 0; inválido = null. */
+    function valor_br($s): ?float
+    {
+        $s = trim(str_replace(['R$', ' '], '', (string) $s));
+        if ($s === '') {
+            return 0.0;
+        }
+        if (str_contains($s, ',')) {
+            $s = str_replace(['.', ','], ['', '.'], $s);
+        }
+        return is_numeric($s) ? round((float) $s, 2) : null;
+    }
+}
