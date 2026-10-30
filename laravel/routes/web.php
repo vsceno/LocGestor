@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\ArquivosController;
+use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\BuscaController;
 use App\Http\Controllers\CaixaController;
 use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
+use App\Http\Controllers\ConfiguracoesController;
 use App\Http\Controllers\ContasPagarController;
 use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\DevolucaoController;
@@ -20,7 +22,9 @@ use App\Http\Controllers\ProdutosController;
 use App\Http\Controllers\RecibosController;
 use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\ReservasController;
+use App\Http\Controllers\SenhaController;
 use App\Http\Controllers\UnidadesController;
+use App\Http\Controllers\UsuariosController;
 use App\Http\Controllers\VistoriasController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
@@ -117,6 +121,14 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/relatorios/contador', [RelatoriosController::class, 'contador'])->name('relatorios.contador');
     Route::get('/relatorios/contador/baixar', [RelatoriosController::class, 'contadorBaixar'])->name('relatorios.contador.baixar');
     Route::get('/relatorios/{chave}', [RelatoriosController::class, 'ver'])->where('chave', '[a-z_]+')->name('relatorios.ver');
+    Route::get('/configuracoes', [ConfiguracoesController::class, 'index'])->name('config.index');
+    Route::put('/configuracoes/empresa', [ConfiguracoesController::class, 'salvar'])->name('config.empresa.salvar');
+    Route::get('/configuracoes/usuarios', [UsuariosController::class, 'index'])->name('config.usuarios');
+    Route::post('/configuracoes/usuarios', [UsuariosController::class, 'store'])->name('config.usuarios.store');
+    Route::put('/configuracoes/usuarios/{id}', [UsuariosController::class, 'update'])->whereUuid('id')->name('config.usuarios.update');
+    Route::get('/configuracoes/auditoria', [AuditoriaController::class, 'index'])->name('config.auditoria');
+    Route::get('/configuracoes/senha', [SenhaController::class, 'index'])->name('config.senha');
+    Route::put('/configuracoes/senha', [SenhaController::class, 'salvar'])->name('config.senha.salvar');
     Route::get('/locacoes/{numero}/contrato', [DocumentosController::class, 'contrato'])->whereNumber('numero')->name('documentos.contrato');
     Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
     Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');

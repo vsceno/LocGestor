@@ -37,7 +37,7 @@
         ['Ir para locações', route('locacoes.index'), 'locacoes'],
         ['Ir para produtos', route('produtos.index'), 'produtos'],
         ['Ir para relatórios', route('relatorios.index'), 'relatorios'],
-        ['Configurações', legado('config'), 'config'],
+        ['Configurações', route('config.index'), 'config'],
     ];
     $acoesPaleta = array_map(fn ($c) => ['rotulo' => $c[0], 'url' => $c[1], 'ico' => $c[2]], $comandos);
 @endphp
@@ -105,7 +105,7 @@
         </nav>
 
         <div class="border-t border-zinc-100 p-3 dark:border-zinc-800">
-            <a href="{{ legado('config') }}" title="Configurações"
+            <a href="{{ route('config.index') }}" title="Configurações"
                class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
                 <x-icone nome="config" class="size-5 text-zinc-400" /><span class="recolhido:lg:hidden">Configurações</span>
             </a>
