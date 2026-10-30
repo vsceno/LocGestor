@@ -26,7 +26,7 @@ class NovaLocacaoTest extends TestCase
         $prev = now()->addDays(2)->toDateString();
         return $mudar + [
             'cliente' => NovaLocacaoController::rotuloCliente($this->cliente()), 'data_saida' => $hoje, 'data_prev_devolucao' => $prev,
-            'produto_id' => [$this->produto('BET-400')->id], 'quantidade' => ['1'], 'diaria' => [''], 'periodo' => ['diaria'], 'prev' => [$prev],
+            'produto_id' => [$this->produto('ESC-300')->id], 'quantidade' => ['1'], 'diaria' => [''], 'periodo' => ['diaria'], 'prev' => [$prev],
             'local_uso' => 'TESTE obra', '_enviado' => '1',
         ];
     }
@@ -39,25 +39,27 @@ class NovaLocacaoTest extends TestCase
     public function test_cria_locacao_com_plano_semanal_adiantamento_e_valores_do_banco(): void
     {
         $this->entrarComo();
-        $bet = $this->produto('BET-400');
+        // Produtos com folga de estoque (os dados de demonstração têm reservas de betoneira)
         $esc = $this->produto('ESC-300');
+        $car = $this->produto('CAR-MAO');
         $hoje = now()->toDateString();
         $r = $this->post('/locacoes', $this->dados([
-            'produto_id' => [$bet->id, $esc->id], 'quantidade' => ['2', '10'], 'diaria' => ['', '1,20'], 'periodo' => ['semanal', 'diaria'],
+            'produto_id' => [$esc->id, $car->id], 'quantidade' => ['2', '3'], 'diaria' => ['', '4,50'], 'periodo' => ['semanal', 'diaria'],
             'prev' => [now()->addDays(6)->toDateString(), now()->addDays(4)->toDateString()], 'frete_entrega' => '30,00',
             'adiantamento' => '100', 'forma' => 'PIX',
         ]));
+        $r->assertSessionHasNoErrors();
         $l = DB::selectOne("SELECT l.*, v.valor_previsto, v.valor_pago FROM locacoes l JOIN vw_locacao_valores v ON v.locacao_id = l.id
                              WHERE l.local_uso = 'TESTE obra'");
         $r->assertRedirect(route('locacoes.show', $l->numero));
         $this->assertSame([$hoje, now()->addDays(6)->toDateString(), 'TESTE obra'], [$l->data_saida, $l->data_prev_devolucao, $l->endereco_entrega]);
-        // Semanal: 2 x 375 (7 dias) + escoras: 10 x 1,20 x 5 dias + frete 30
-        $esperado = 2 * $bet->valor_semanal + 10 * 1.20 * 5 + 30;
+        // Semanal: 2 escoras pelo preço da semana (7 dias) + carrinhos: 3 x 4,50 x 5 dias + frete 30
+        $esperado = 2 * $esc->valor_semanal + 3 * 4.50 * 5 + 30;
         $this->assertEqualsWithDelta($esperado, (float) $l->valor_previsto, 0.001);
         $this->assertEquals(100, (float) $l->valor_pago);
         $itens = DB::select('SELECT produto_id, quantidade, periodo, valor_diaria, valor_semanal FROM locacao_itens WHERE locacao_id = ? ORDER BY quantidade', [$l->id]);
-        $this->assertSame(['semanal', $bet->valor_diaria, $bet->valor_semanal], [$itens[0]->periodo, $itens[0]->valor_diaria, $itens[0]->valor_semanal]);
-        $this->assertSame(['diaria', '1.20'], [$itens[1]->periodo, $itens[1]->valor_diaria]);
+        $this->assertSame(['semanal', $esc->valor_diaria, $esc->valor_semanal], [$itens[0]->periodo, $itens[0]->valor_diaria, $itens[0]->valor_semanal]);
+        $this->assertSame(['diaria', '4.50'], [$itens[1]->periodo, $itens[1]->valor_diaria]);
         $this->assertNotNull(DB::selectOne("SELECT 1 AS ok FROM caixa WHERE locacao_id = ? AND tipo = 'E' AND valor = 100 AND forma = 'PIX' AND descricao LIKE 'Adiantamento%'", [$l->id]));
     }
 
@@ -75,8 +77,8 @@ class NovaLocacaoTest extends TestCase
             'Período inválido na linha 1'        => ['periodo' => ['anual']],
             'Valor inválido: abc'                => ['diaria' => ['abc']],
             'Escolha a forma de pagamento.'      => ['adiantamento' => '10', 'forma' => ''],
-            'Estoque insuficiente: Betoneira'    => ['quantidade' => ['999']],
-            'períodos diferentes'                => ['produto_id' => [$this->produto('BET-400')->id, $this->produto('BET-400')->id], 'quantidade' => ['1', '1'],
+            'Estoque insuficiente: Escora'       => ['quantidade' => ['9999']],
+            'períodos diferentes'                => ['produto_id' => [$this->produto('ESC-300')->id, $this->produto('ESC-300')->id], 'quantidade' => ['1', '1'],
                                                      'periodo' => ['diaria', 'semanal'], 'diaria' => ['', ''], 'prev' => ['', '']],
         ];
         foreach ($casos as $msg => $mudar) {
@@ -95,8 +97,8 @@ class NovaLocacaoTest extends TestCase
         DB::update('UPDATE clientes SET bloqueado = true WHERE id = ?', [$c->id]);
         $this->post('/locacoes', $dados)->assertSessionHasErrors(['locacao' => "O cliente {$c->nome} está bloqueado e não pode fazer novas locações."]);
         DB::update('UPDATE clientes SET bloqueado = false WHERE id = ?', [$c->id]);
-        DB::update("UPDATE produtos SET ativo = false WHERE codigo = 'BET-400'");
-        $this->post('/locacoes', $dados)->assertSessionHasErrors(['locacao' => 'O produto Betoneira 400 L está inativo.']);
+        DB::update("UPDATE produtos SET ativo = false WHERE codigo = 'ESC-300'");
+        $this->post('/locacoes', $dados)->assertSessionHasErrors(['locacao' => 'O produto Escora metálica regulável 3 m está inativo.']);
     }
 
     public function test_desconto_de_operador_precisa_da_senha_de_um_administrador(): void
@@ -110,7 +112,7 @@ class NovaLocacaoTest extends TestCase
         $this->post('/locacoes', $this->dados(['desconto' => '10', 'senha_admin' => 'errada']))->assertSessionHasErrors('locacao');
         $this->assertArrayNotHasKey('senha_admin', session()->getOldInput(), 'a senha nunca volta para o formulário');
 
-        $this->post('/locacoes', $this->dados(['desconto' => '10', 'senha_admin' => 'admin123']))->assertRedirect();
+        $this->post('/locacoes', $this->dados(['desconto' => '10', 'senha_admin' => 'admin123']))->assertSessionHasNoErrors()->assertRedirect();
         $l = DB::selectOne("SELECT desconto, desconto_autorizado_por FROM locacoes WHERE local_uso = 'TESTE obra'");
         $admin = DB::selectOne("SELECT id FROM usuarios WHERE login = 'admin'")->id;
         $this->assertSame(['10.00', $admin], [$l->desconto, $l->desconto_autorizado_por]);
@@ -119,7 +121,7 @@ class NovaLocacaoTest extends TestCase
     public function test_retirada_de_reserva_converte_e_usa_o_estoque_reservado(): void
     {
         $this->entrarComo();
-        $bet = $this->produto('BET-400');
+        $bet = $this->produto('ESC-300');   // o mesmo produto de dados()
         $hoje = now()->toDateString();
         $fim = now()->addDays(2)->toDateString();
         // Reserva de todo o estoque livre hoje: sem ela, não sobraria nada para outra locação
@@ -130,7 +132,7 @@ class NovaLocacaoTest extends TestCase
 
         $this->post('/locacoes', $this->dados(['quantidade' => [(string) $livre]]))->assertSessionHasErrors('locacao');   // sem a reserva: falta estoque
         $this->get('/locacoes/nova?reserva=' . $r->id)->assertOk()->assertSee('reserva nº ' . $r->numero, false);
-        $this->post('/locacoes', $this->dados(['quantidade' => [(string) $livre], 'reserva_id' => $r->id]))->assertRedirect();
+        $this->post('/locacoes', $this->dados(['quantidade' => [(string) $livre], 'reserva_id' => $r->id]))->assertSessionHasNoErrors()->assertRedirect();
         $this->assertSame('convertida', DB::selectOne('SELECT status FROM reservas WHERE id = ?', [$r->id])->status);
         $this->post('/locacoes', $this->dados(['reserva_id' => $r->id]))->assertSessionHasErrors(['locacao' => 'A reserva não está mais ativa.']);
     }
