@@ -46,9 +46,10 @@ class SessaoLocadora
         if ($u->senha_redefinida_em !== null && strtotime($u->senha_redefinida_em) > (int) $request->session()->get('login_em', 0)) {
             return $this->encerrar($request, 'Sua senha foi redefinida pelo administrador. Entre de novo com a senha nova.', 'aviso');
         }
-        // Senha temporária: a troca ainda é feita no sistema antigo
+        // Senha temporária: a troca ainda é feita no sistema antigo. Endereço direto, sem a ponte:
+        // a rota /ir passa por este middleware e entraria em loop; lá ele entra com a senha temporária.
         if ($u->trocar_senha) {
-            return redirect()->away(legado('config', ['a' => 'senha']));
+            return redirect()->away(rtrim(config('locgestor.legado_url'), '/') . '/index.php?p=config&a=senha');
         }
 
         $request->session()->put('usuario', ['id' => $u->id, 'nome' => $u->nome, 'login' => $u->login, 'perfil' => $u->perfil]);

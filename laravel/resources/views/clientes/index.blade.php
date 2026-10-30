@@ -1,43 +1,37 @@
 @extends('layouts.app', ['titulo' => 'Clientes', 'ativo' => 'clientes'])
 
+@section('subtitulo', 'Quem aluga com você: contatos, situação e histórico de locações.')
+
+@section('acoes')
+    <a class="btn-primario" href="{{ legado('clientes', ['a' => 'novo']) }}"><x-icone nome="mais" class="size-4" /> Novo cliente</a>
+@endsection
+
 @section('conteudo')
-<div class="card">
-    <div class="card-titulo">
-        <h2>Clientes</h2>
-        <a class="btn" href="{{ legado('clientes', ['a' => 'novo']) }}">+ Novo cliente</a>
-    </div>
-    <form method="get" action="{{ route('clientes.index') }}" class="filtros">
-        <input type="search" name="q" value="{{ $q }}" placeholder="Nome, CPF/CNPJ ou telefone" aria-label="Buscar" maxlength="100">
-        <select name="situacao" aria-label="Situação">
+<section class="cartao overflow-hidden">
+    {{-- LGPD: o termo (pode ser CPF ou telefone) vai por POST e fica na sessão, nunca no endereço --}}
+    <form method="post" action="{{ route('clientes.filtrar') }}" data-busca-viva="#tabela-clientes"
+          class="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center dark:border-zinc-800">
+        @csrf
+        {{-- Antes dos botões: quem chega por último vale, então o botão clicado ganha deste campo --}}
+        <input type="hidden" name="situacao" value="{{ $situacao }}">
+        <div class="flex shrink-0 gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800" role="group" aria-label="Situação">
             @foreach ($situacoes as $valor => $rotulo)
-                <option value="{{ $valor }}" @selected($valor === $situacao)>{{ $rotulo }}</option>
+                <button type="submit" name="situacao" value="{{ $valor }}" @if ($valor === $situacao) aria-pressed="true" @endif
+                        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition
+                               {{ $valor === $situacao ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100' }}">
+                    {{ $rotulo }}
+                    <span class="rounded-md px-1.5 text-xs tabular-nums {{ $valor === $situacao ? 'bg-marca-100 text-marca-700 dark:bg-marca-500/15 dark:text-marca-400' : 'bg-zinc-200/70 dark:bg-zinc-700' }}">{{ numero($contagem->$valor) }}</span>
+                </button>
             @endforeach
-        </select>
-        <button class="btn btn-sec">Buscar</button>
-        @if ($q !== '' || $situacao !== 'ativos')
-            <a class="btn btn-sec" href="{{ route('clientes.index') }}">Limpar</a>
-        @endif
+        </div>
+        <label class="relative sm:ml-auto sm:w-80">
+            <x-icone nome="busca" class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-400" />
+            <input type="search" name="q" value="{{ $q }}" placeholder="Nome, CPF/CNPJ ou telefone" aria-label="Buscar clientes"
+                   maxlength="100" autocomplete="off" class="campo pl-9">
+        </label>
     </form>
-    <div class="tabela-wrap">
-        <table class="tabela">
-            <thead><tr><th>Nome</th><th>CPF/CNPJ</th><th>Telefone</th><th>Cidade</th><th>Situação</th><th class="num">Abertas</th><th></th></tr></thead>
-            <tbody>
-            @forelse ($clientes as $c)
-                <tr>
-                    <td><a href="{{ route('clientes.show', $c->id) }}"><strong>{{ $c->nome }}</strong></a> <span class="muted">{{ $c->tipo }}</span></td>
-                    <td class="nowrap">{{ doc_formatar($c->cpf_cnpj) }}</td>
-                    <td class="nowrap">{{ $c->celular ?: $c->telefone }}</td>
-                    <td>{{ $c->cidade }}{{ $c->uf !== '' ? '/' . $c->uf : '' }}</td>
-                    <td>@include('clientes._selos', ['c' => $c])</td>
-                    <td class="num">{{ numero($c->abertas) }}</td>
-                    <td class="nowrap"><a class="btn btn-sec btn-peq" href="{{ legado('clientes', ['a' => 'editar', 'id' => $c->id]) }}">Editar</a></td>
-                </tr>
-            @empty
-                <tr><td colspan="7" class="vazio">Nenhum cliente encontrado.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
+    <div id="tabela-clientes" class="transition-opacity">
+        @include('clientes._tabela')
     </div>
-    @include('partials.paginacao', ['p' => $clientes])
-</div>
+</section>
 @endsection

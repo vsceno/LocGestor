@@ -7,6 +7,9 @@ return [
     // Mesma pasta de arquivos do sistema antigo (fotos de vistoria, assinaturas, logomarca)
     'pasta_arquivos' => env('LOCGESTOR_PASTA_ARQUIVOS', base_path('../storage')),
 
+    // Ponte de sessão com o sistema antigo: mesmo segredo de ponte_segredo no ../config.php (vazio = desligada)
+    'ponte_segredo' => env('LOCGESTOR_PONTE_SEGREDO', ''),
+
     'por_pagina' => 20,
 
     // Limite de tentativas de login (iguais às do sistema antigo, na mesma tabela login_tentativas)

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -11,6 +13,7 @@ use Illuminate\View\View;
 /**
  * Clientes: lista e ficha. Cadastro e edição ainda são feitos no sistema antigo.
  * Nenhuma consulta filtra por tenant_id: quem filtra é o RLS do banco, com a locadora definida no middleware.
+ * LGPD: o termo da busca (pode ser CPF ou telefone) vai por POST e fica na sessão, nunca no endereço.
  */
 class ClientesController extends Controller
 {
@@ -18,43 +21,23 @@ class ClientesController extends Controller
 
     public function index(Request $request): View
     {
-        $q = trim((string) $request->query('q', ''));
-        $situacao = array_key_exists($request->query('situacao'), self::SITUACOES) ? $request->query('situacao') : 'ativos';
+        return view('clientes.index', $this->dadosLista($request));
+    }
 
-        $where = [match ($situacao) {
-            'todos'      => 'TRUE',
-            'bloqueados' => 'c.bloqueado',
-            'inativos'   => 'NOT c.ativo',
-            default      => 'c.ativo',
-        }];
-        $params = [];
-        if ($q !== '') {
-            $like = '%' . addcslashes($q, '%_\\') . '%';
-            $cond = 'lower(c.nome) LIKE lower(?)';
-            $params[] = $like;
-            $dig = so_digitos($q);
-            if (strlen($dig) >= 3) {
-                $cond .= " OR c.cpf_cnpj LIKE ? OR regexp_replace(c.telefone, '\\D', '', 'g') LIKE ? OR regexp_replace(c.celular, '\\D', '', 'g') LIKE ?";
-                array_push($params, "%$dig%", "%$dig%", "%$dig%");
-            }
-            $where[] = "($cond)";
+    /** POST do filtro. Pela busca enquanto digita (fetch), devolve só a tabela; pelo formulário, volta à lista. */
+    public function filtrar(Request $request): RedirectResponse|Response
+    {
+        $situacao = (string) $request->input('situacao', 'ativos');
+        $filtro = $request->boolean('limpar') ? null : [
+            'q'        => mb_substr(trim((string) $request->input('q', '')), 0, 100),
+            'situacao' => array_key_exists($situacao, self::SITUACOES) ? $situacao : 'ativos',
+        ];
+        $filtro === null ? $request->session()->forget('filtro_clientes') : $request->session()->put('filtro_clientes', $filtro);
+
+        if ($request->ajax()) {
+            return response()->view('clientes._tabela', $this->dadosLista($request));
         }
-        $sqlWhere = implode(' AND ', $where);
-
-        $porPagina = config('locgestor.por_pagina');
-        $pagina = max(1, (int) $request->query('page', 1));
-        $total = (int) DB::selectOne("SELECT count(*) AS n FROM clientes c WHERE $sqlWhere", $params)->n;
-        $linhas = DB::select("SELECT c.id, c.tipo, c.nome, c.cpf_cnpj, c.telefone, c.celular, c.cidade, c.uf, c.bloqueado, c.ativo,
-                                     (SELECT count(*) FROM locacoes l WHERE l.cliente_id = c.id AND l.status = 'aberta') AS abertas
-                                FROM clientes c
-                               WHERE $sqlWhere
-                               ORDER BY lower(c.nome)
-                               LIMIT ? OFFSET ?", [...$params, $porPagina, ($pagina - 1) * $porPagina]);
-
-        $clientes = new LengthAwarePaginator($linhas, $total, $porPagina, $pagina,
-            ['path' => $request->url(), 'query' => array_filter(['q' => $q, 'situacao' => $situacao !== 'ativos' ? $situacao : null])]);
-
-        return view('clientes.index', ['clientes' => $clientes, 'q' => $q, 'situacao' => $situacao, 'situacoes' => self::SITUACOES]);
+        return redirect()->route('clientes.index');
     }
 
     public function show(string $id): View
@@ -77,5 +60,54 @@ class ClientesController extends Controller
                                  ORDER BY l.data_saida DESC, l.numero DESC LIMIT 100', [$id]);
 
         return view('clientes.show', compact('c', 'r', 'locacoes'));
+    }
+
+    private function dadosLista(Request $request): array
+    {
+        $f = (array) $request->session()->get('filtro_clientes', []) + ['q' => '', 'situacao' => 'ativos'];
+        $q = (string) $f['q'];
+        $situacao = array_key_exists($f['situacao'], self::SITUACOES) ? $f['situacao'] : 'ativos';
+
+        $where = [match ($situacao) {
+            'todos'      => 'TRUE',
+            'bloqueados' => 'c.bloqueado',
+            'inativos'   => 'NOT c.ativo',
+            default      => 'c.ativo',
+        }];
+        $params = [];
+        if ($q !== '') {
+            $cond = 'lower(c.nome) LIKE lower(?)';
+            $params[] = '%' . addcslashes($q, '%_\\') . '%';
+            $dig = so_digitos($q);
+            if (strlen($dig) >= 3) {
+                $cond .= " OR c.cpf_cnpj LIKE ? OR regexp_replace(c.telefone, '\\D', '', 'g') LIKE ? OR regexp_replace(c.celular, '\\D', '', 'g') LIKE ?";
+                array_push($params, "%$dig%", "%$dig%", "%$dig%");
+            }
+            $where[] = "($cond)";
+        }
+        $sqlWhere = implode(' AND ', $where);
+
+        $porPagina = config('locgestor.por_pagina');
+        $pagina = $request->ajax() ? 1 : max(1, (int) $request->query('page', 1));
+        $total = (int) DB::selectOne("SELECT count(*) AS n FROM clientes c WHERE $sqlWhere", $params)->n;
+        $linhas = DB::select("SELECT c.id, c.tipo, c.nome, c.cpf_cnpj, c.telefone, c.celular, c.cidade, c.uf, c.bloqueado, c.ativo,
+                                     (SELECT count(*) FROM locacoes l WHERE l.cliente_id = c.id AND l.status = 'aberta') AS abertas
+                                FROM clientes c
+                               WHERE $sqlWhere
+                               ORDER BY lower(c.nome)
+                               LIMIT ? OFFSET ?", [...$params, $porPagina, ($pagina - 1) * $porPagina]);
+
+        // Contagem por situação, para os botões de filtro
+        $contagem = DB::selectOne('SELECT count(*) FILTER (WHERE ativo) AS ativos, count(*) AS todos,
+                                          count(*) FILTER (WHERE bloqueado) AS bloqueados, count(*) FILTER (WHERE NOT ativo) AS inativos
+                                     FROM clientes');
+
+        return [
+            'clientes'  => new LengthAwarePaginator($linhas, $total, $porPagina, $pagina, ['path' => route('clientes.index')]),
+            'q'         => $q,
+            'situacao'  => $situacao,
+            'situacoes' => self::SITUACOES,
+            'contagem'  => $contagem,
+        ];
     }
 }

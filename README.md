@@ -37,6 +37,7 @@ salvo localmente (funciona sem internet).
 9. [Problemas comuns](#9-problemas-comuns)
 10. [Colocando em produção: login, HTTPS, backup, PostgreSQL e Asaas](#10-colocando-em-produção-login-https-backup-postgresql-e-asaas)
 11. [O que ficou de fora e próximos passos](#11-o-que-ficou-de-fora-e-próximos-passos)
+12. [Migração para Laravel](#12-migração-para-laravel-pasta-laravel)
 
 ---
 
@@ -804,3 +805,44 @@ Sugestões de próximos passos, em ordem:
 4. Baixa automática do PIX no caixa (exige a API PIX do banco da locadora; o QR Code e o copia e cola já existem).
 5. Ligar o Asaas: ciclo completo no sandbox, depois produção com o webhook num endereço público (seção 10.6).
 6. Integração NFePHP para remessa/retorno, com certificado A1 isolado por locadora.
+
+## 12. Migração para Laravel (pasta laravel/)
+
+O sistema está sendo levado aos poucos para o **Laravel 13**, na pasta `laravel/`, sem desligar o sistema atual.
+Os dois usam o **mesmo banco** e o **mesmo papel** `locgestor_app`: o isolamento entre locadoras continua no RLS do
+PostgreSQL. No Laravel, `App\Support\Locadora` é o único lugar que define `app.tenant_id`, e o middleware
+`SessaoLocadora` confere em toda requisição se a locadora está ativa e em dia, se o usuário está ativo e se a senha não
+foi redefinida.
+
+Já no Laravel: login, painel e clientes (lista e ficha). O resto abre no sistema atual.
+
+**Subir o Laravel (desenvolvimento):**
+
+```bat
+cd laravel
+composer install
+copy .env.example .env
+php artisan key:generate
+npm install
+npm run build
+php artisan serve --port=8010
+```
+
+As telas do Laravel usam **Tailwind CSS 4** compilado pelo Vite (`npm run build` gera `public/build`). A fonte Inter vem
+do pacote `@fontsource-variable/inter`, junto com o build: nada é baixado da internet quando o sistema está em uso.
+Atalhos: `Ctrl+K` (ou `/`) abre a paleta de busca e ações; o botão de lua/sol troca o tema claro/escuro.
+
+No `.env`, preencha `DB_*` com o mesmo papel do `db_app` do `config.php`, `SESSION_DRIVER=file` e `CACHE_STORE=file`.
+**Nunca rode `php artisan migrate`** contra esse banco: a estrutura continua nos arquivos de `database/`.
+
+**Ponte de sessão (entrar uma vez só):** os dois sistemas ficam em endereços diferentes, então quem está logado num
+recebe uma passagem assinada para entrar no outro. Ela vale 60 segundos, só pode ser usada uma vez e quem recebe
+confere a locadora e o usuário de novo no banco. Para ligar, gere um segredo
+(`php -r "echo bin2hex(random_bytes(32));"`) e coloque o mesmo valor nos dois lados:
+
+| Onde | Chaves |
+|---|---|
+| `config.php` | `'laravel_url' => 'http://127.0.0.1:8010'`, `'ponte_segredo' => '<segredo>'` |
+| `laravel/.env` | `LOCGESTOR_LEGADO_URL=http://locgestor.test`, `LOCGESTOR_PONTE_SEGREDO=<segredo>` |
+
+Com as chaves vazias, a ponte fica desligada e o menu usa só o sistema atual.

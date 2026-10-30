@@ -1,9 +1,85 @@
+@import '@fontsource-variable/inter';
 @import 'tailwindcss';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/* Modo escuro pela classe .dark no <html> (escolha do usuário, guardada no navegador) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Menu retrátil: com a classe .menu-recolhido no <html>, o menu mostra só os ícones e abre por cima do conteúdo
+   enquanto o mouse está nele (ou o foco do teclado). "menu-fechado" vale para o próprio menu; "recolhido" para o que está dentro. */
+@custom-variant menu-fechado (.menu-recolhido &:not(:hover, :focus-within));
+@custom-variant recolhido (.menu-recolhido [data-menu]:not(:hover, :focus-within) &);
+
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+    /* Laranja da marca LocGestor */
+    --color-marca-50: #fff7ed;
+    --color-marca-100: #ffedd5;
+    --color-marca-200: #fed7aa;
+    --color-marca-300: #fdba74;
+    --color-marca-400: #fb923c;
+    --color-marca-500: #f97316;
+    --color-marca-600: #e8710a;
+    --color-marca-700: #c2570c;
+    --color-marca-800: #9a3412;
+    --color-marca-900: #7c2d12;
+}
+
+@layer base {
+    html { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01'; }
+    html.dark { color-scheme: dark; }   /* barras de rolagem e controles nativos também escuros */
+    body { @apply bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100; }
+    :focus-visible { @apply outline-2 outline-offset-2 outline-marca-500; }
+    [x-cloak], [hidden] { display: none !important; }
+}
+
+@layer components {
+    /* Botões (a base "btn" é um @utility, abaixo, para poder ser usada com @apply) */
+    .btn-primario { @apply btn bg-marca-600 text-white shadow-sm shadow-marca-600/20 hover:bg-marca-700; }
+    .btn-secundario { @apply btn border border-zinc-200 bg-white text-zinc-700 shadow-xs hover:bg-zinc-50
+                             dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800; }
+    .btn-fantasma { @apply btn text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800; }
+    .btn-whats { @apply btn bg-emerald-600 text-white shadow-sm hover:bg-emerald-700; }
+    .btn-icone { @apply inline-grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900
+                        dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100; }
+
+    /* Cartões */
+    .cartao { @apply rounded-2xl border border-zinc-200/80 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900; }
+    .cartao-cabecalho { @apply flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800; }
+    .cartao-titulo { @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100; }
+
+    /* Selos com bolinha de cor (a base "selo" é um @utility, abaixo) */
+    .selo-verde { @apply selo bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20; }
+    .selo-vermelho { @apply selo bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/20; }
+    .selo-amarelo { @apply selo bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20; }
+    .selo-azul { @apply selo bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20; }
+    .selo-cinza { @apply selo bg-zinc-100 text-zinc-600 ring-zinc-500/20 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700; }
+
+    /* Tabelas */
+    .tabela { @apply w-full text-left text-sm; }
+    .tabela thead th { @apply sticky top-0 z-[1] bg-zinc-50/90 px-4 py-2.5 text-xs font-medium text-zinc-500 backdrop-blur
+                              dark:bg-zinc-900/90 dark:text-zinc-400; }
+    .tabela tbody td { @apply border-t border-zinc-100 px-4 py-3 align-middle dark:border-zinc-800; }
+    .tabela tbody tr { @apply transition-colors; }
+    .tabela tbody tr[data-href] { @apply cursor-pointer hover:bg-marca-50/50 dark:hover:bg-zinc-800/50; }
+    .tabela .num { @apply text-right tabular-nums whitespace-nowrap; }
+
+    /* Campos */
+    .campo { @apply block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition placeholder:text-zinc-400
+                    focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15 focus:outline-none
+                    dark:border-zinc-800 dark:bg-zinc-900 dark:placeholder:text-zinc-500; }
+
+    /* Avatar com iniciais */
+    .avatar { @apply inline-grid shrink-0 place-items-center rounded-full bg-gradient-to-br font-semibold text-white; }
+}
+
+/* Bases reaproveitadas com @apply (no Tailwind 4, só @utility pode ser usado assim) */
+@utility btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium whitespace-nowrap transition disabled:pointer-events-none disabled:opacity-50;
+}
+@utility selo {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset;
+    &::before { content: ''; @apply size-1.5 rounded-full bg-current; }
 }
