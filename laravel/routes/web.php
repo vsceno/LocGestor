@@ -9,6 +9,7 @@ use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PainelController;
 use App\Http\Controllers\PonteController;
 use App\Http\Controllers\ProdutosController;
+use App\Http\Controllers\UnidadesController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
 
@@ -48,6 +49,12 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/produtos/kits/{id}/editar', [KitsController::class, 'edit'])->whereUuid('id')->name('kits.edit');
     Route::put('/produtos/kits/{id}', [KitsController::class, 'update'])->whereUuid('id')->name('kits.update');
     Route::delete('/produtos/kits/{id}', [KitsController::class, 'destroy'])->whereUuid('id')->name('kits.destroy');
+    Route::get('/produtos/{produto}/unidades/nova', [UnidadesController::class, 'create'])->whereUuid('produto')->name('unidades.create');
+    Route::post('/produtos/{produto}/unidades', [UnidadesController::class, 'store'])->whereUuid('produto')->name('unidades.store');
+    Route::get('/produtos/unidades/{id}', [UnidadesController::class, 'show'])->whereUuid('id')->name('unidades.show');
+    Route::put('/produtos/unidades/{id}', [UnidadesController::class, 'update'])->whereUuid('id')->name('unidades.update');
+    Route::post('/produtos/unidades/{id}/baixar', [UnidadesController::class, 'baixar'])->whereUuid('id')->name('unidades.baixar');
+    Route::delete('/produtos/unidades/{id}', [UnidadesController::class, 'destroy'])->whereUuid('id')->name('unidades.destroy');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');

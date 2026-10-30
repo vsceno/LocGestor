@@ -90,7 +90,7 @@ class BuscaController extends Controller
 
         if (!$soNumero) {
             $r['Patrimônio'] = array_map(fn ($x) => [
-                'rotulo' => 'Unidade ' . $x->patrimonio, 'ico' => 'manutencao', 'url' => legado('produtos', ['a' => 'unidade', 'id' => $x->id]),
+                'rotulo' => 'Unidade ' . $x->patrimonio, 'ico' => 'manutencao', 'url' => route('unidades.show', $x->id),
                 'detalhe' => $x->descricao . ($x->serie !== '' ? ' · série ' . $x->serie : '') . ($x->ativa ? '' : ' · baixada'),
             ], DB::select('SELECT u.id, u.patrimonio, u.serie, u.ativa, p.descricao FROM unidades u JOIN produtos p ON p.id = u.produto_id
                             WHERE lower(u.patrimonio) LIKE lower(?) OR lower(u.serie) LIKE lower(?)

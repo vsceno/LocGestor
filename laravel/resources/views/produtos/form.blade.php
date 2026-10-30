@@ -123,7 +123,7 @@
                             @endforeach
                         </dl>
                         <p class="text-xs text-zinc-500">O total não pode ficar menor que o que está fora nem que as unidades de patrimônio.
-                            <a class="text-marca-700 underline-offset-2 hover:underline dark:text-marca-400" href="{{ legado('produtos', ['a' => 'editar', 'id' => $p->id]) }}#unidades">Ver unidades</a></p>
+                            <a class="text-marca-700 underline-offset-2 hover:underline dark:text-marca-400" href="#patrimonio">Ver unidades</a></p>
                     @endif
                 </div>
             </section>
@@ -168,6 +168,10 @@
         </div>
     </div>
 </form>
+
+@if ($uso)
+    @include('produtos._unidades')
+@endif
 
 @if ($uso)
     <section class="mt-6 flex flex-col gap-3 rounded-2xl border border-red-200 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-red-900/60">

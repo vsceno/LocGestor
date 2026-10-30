@@ -815,7 +815,7 @@ PostgreSQL. No Laravel, `App\Support\Locadora` é o único lugar que define `app
 foi redefinida.
 
 Já no Laravel: login, painel, busca, clientes (lista, ficha, cadastro, edição, bloqueio e exclusão) e produtos (lista
-com disponibilidade, cadastro, edição e exclusão, categorias e kits). Patrimônio (unidades) e o resto abrem no sistema atual.
+com disponibilidade, cadastro, edição e exclusão, categorias, kits e patrimônio). O resto abre no sistema atual.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 

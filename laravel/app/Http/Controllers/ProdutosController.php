@@ -52,14 +52,15 @@ class ProdutosController extends Controller
 
     public function create(): View
     {
-        return view('produtos.form', ['p' => null, 'categorias' => $this->categorias(), 'codigos' => '', 'uso' => null]);
+        return view('produtos.form', ['p' => null, 'categorias' => $this->categorias(), 'codigos' => '', 'uso' => null, 'unidades' => []]);
     }
 
     public function edit(string $id): View
     {
         $p = $this->produto($id);
         $codigos = implode("\n", array_column(DB::select('SELECT codigo FROM produto_barras WHERE produto_id = ? ORDER BY principal DESC, codigo', [$id]), 'codigo'));
-        return view('produtos.form', ['p' => $p, 'categorias' => $this->categorias(), 'codigos' => $codigos, 'uso' => $this->uso($id)]);
+        return view('produtos.form', ['p' => $p, 'categorias' => $this->categorias(), 'codigos' => $codigos, 'uso' => $this->uso($id),
+                                      'unidades' => UnidadesController::comSituacao('u.produto_id = ?', [$id])]);
     }
 
     public function store(Request $request): RedirectResponse
