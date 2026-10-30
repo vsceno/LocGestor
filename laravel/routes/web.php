@@ -22,6 +22,7 @@ use App\Http\Controllers\ProdutosController;
 use App\Http\Controllers\RecibosController;
 use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\ReservasController;
+use App\Http\Controllers\RoteiroController;
 use App\Http\Controllers\SenhaController;
 use App\Http\Controllers\UnidadesController;
 use App\Http\Controllers\UsuariosController;
@@ -129,6 +130,9 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/configuracoes/auditoria', [AuditoriaController::class, 'index'])->name('config.auditoria');
     Route::get('/configuracoes/senha', [SenhaController::class, 'index'])->name('config.senha');
     Route::put('/configuracoes/senha', [SenhaController::class, 'salvar'])->name('config.senha.salvar');
+    Route::get('/roteiro', [RoteiroController::class, 'index'])->name('roteiro.index');
+    Route::post('/roteiro/marcar', [RoteiroController::class, 'marcar'])->name('roteiro.marcar');
+    Route::post('/roteiro/desmarcar', [RoteiroController::class, 'desmarcar'])->name('roteiro.desmarcar');
     Route::get('/locacoes/{numero}/contrato', [DocumentosController::class, 'contrato'])->whereNumber('numero')->name('documentos.contrato');
     Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
     Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');

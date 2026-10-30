@@ -6,7 +6,7 @@
             'locacoes'    => ['Locações', 'locacoes', route('locacoes.index')],
             'reservas'    => ['Reservas', 'reservas', route('reservas.index')],
             'orcamentos'  => ['Orçamentos', 'orcamentos', route('orcamentos.index')],
-            'roteiro'     => ['Roteiro', 'roteiro', legado('roteiro')],
+            'roteiro'     => ['Roteiro', 'roteiro', route('roteiro.index')],
         ],
         'Cadastros' => [
             'clientes'    => ['Clientes', 'clientes', route('clientes.index')],
