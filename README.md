@@ -816,8 +816,12 @@ foi redefinida.
 
 Já no Laravel: login, painel, busca, clientes (lista, ficha, cadastro, edição, bloqueio e exclusão) e produtos (lista
 com disponibilidade, cadastro, edição e exclusão, categorias, kits e patrimônio) e locações (lista, ficha, nova locação e devolução, com recebimento, prorrogação, cancelamento,
-entrega, patrimônio, WhatsApp e PIX), reservas (com kits), orçamentos (com conversão em locação ou reserva) e os lançamentos do fluxo de caixa e os recibos. Contrato, fatura, romaneio, orçamento
-impresso e vistorias (com fotos e assinatura) são do Laravel; o resto abre no sistema atual.
+entrega, patrimônio, WhatsApp e PIX), reservas (com kits), orçamentos (com conversão em locação ou reserva), o fluxo de
+caixa (lançamentos, contas a pagar com recorrentes e previsão), os recibos, a manutenção, os relatórios (com CSV,
+impressão e a exportação para o contador), as configurações (empresa e logomarca, usuários, senha e auditoria) e o
+roteiro do motorista. Contrato, fatura, romaneio, orçamento impresso e vistorias (com fotos e assinatura) também são
+do Laravel. Ainda no sistema atual: a plataforma (painel do operador, planos, uso e a cobrança pelo Asaas, com o
+webhook e a rotina diária). As telas antigas continuam acessíveis pelo endereço, mas o menu já leva ao Laravel.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 
