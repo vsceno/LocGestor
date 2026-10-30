@@ -333,3 +333,9 @@ document.querySelectorAll('form[data-nova-locacao]').forEach(async (form) => {
     const { novaLocacao } = await import('./locacao.js');
     novaLocacao(form);
 });
+
+/* ---------- Devolução (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-devolucao]').forEach(async (form) => {
+    const { devolucao } = await import('./devolucao.js');
+    devolucao(form);
+});

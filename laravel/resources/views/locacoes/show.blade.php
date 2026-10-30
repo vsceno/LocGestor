@@ -26,7 +26,7 @@
 
 @section('acoes')
     @if ($aberta)
-        <a class="btn-primario" href="{{ $documento('devolucao') }}"><x-icone nome="devolucao" class="size-4" /> Registrar devolução</a>
+        <a class="btn-primario" href="{{ route('locacoes.devolucao', $loc->numero) }}"><x-icone nome="devolucao" class="size-4" /> Registrar devolução</a>
     @endif
     <a class="btn-secundario" href="{{ route('locacoes.create', ['copiar' => $loc->id]) }}">Repetir locação</a>
 @endsection

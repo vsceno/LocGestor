@@ -4,6 +4,7 @@ use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\BuscaController;
 use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
+use App\Http\Controllers\DevolucaoController;
 use App\Http\Controllers\KitsController;
 use App\Http\Controllers\LocacoesController;
 use App\Http\Controllers\LoginController;
@@ -63,6 +64,8 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::post('/locacoes', [NovaLocacaoController::class, 'store'])->name('locacoes.store');
     Route::post('/locacoes/disponivel', [NovaLocacaoController::class, 'disponivel'])->name('locacoes.disponivel');
     Route::get('/locacoes/{numero}', [LocacoesController::class, 'show'])->whereNumber('numero')->name('locacoes.show');
+    Route::get('/locacoes/{numero}/devolucao', [DevolucaoController::class, 'create'])->whereNumber('numero')->name('locacoes.devolucao');
+    Route::post('/locacoes/{numero}/devolucao', [DevolucaoController::class, 'store'])->whereNumber('numero')->name('locacoes.devolver');
     foreach (['receber', 'prorrogar', 'cancelar', 'entrega', 'unidades'] as $acao) {
         Route::post("/locacoes/{numero}/$acao", [LocacoesController::class, $acao])->whereNumber('numero')->name("locacoes.$acao");
     }

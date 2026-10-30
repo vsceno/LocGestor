@@ -333,7 +333,10 @@ class LocacoesController extends Controller
             $voltaram = array_values(array_filter($alocadas[$it->id] ?? [], fn ($a) => $a->devolucao_id !== null));
             $opcoes = array_merge(
                 array_map(fn ($a) => (object) ['id' => $a->unidade_id, 'patrimonio' => $a->patrimonio, 'marcada' => true], $naRua),
-                array_map(fn ($u) => (object) ['id' => $u->id, 'patrimonio' => $u->patrimonio, 'marcada' => false], $livres[$it->produto_id] ?? []),
+                // Livres só se ainda há peça deste item na rua para indicar
+                $it->quantidade > $it->qtd_devolvida
+                    ? array_map(fn ($u) => (object) ['id' => $u->id, 'patrimonio' => $u->patrimonio, 'marcada' => false], $livres[$it->produto_id] ?? [])
+                    : [],
             );
             if ($naRua || $voltaram || $opcoes) {
                 $lista[] = (object) ['item' => $it, 'naRua' => $naRua, 'voltaram' => $voltaram, 'opcoes' => $opcoes];
