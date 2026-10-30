@@ -1019,8 +1019,8 @@ ok(str_contains($prev, 'vencido TESTE luz de outubro R$ 200,00') && $moeda($sem[
 preg_match('/Menor saldo no período (-?R\$ [\d.,]+)/u', $prev, $mm);
 ok(abs($moeda($mm[1] ?? 'x') - min(array_merge([$hoje], array_map(fn($x) => $moeda($x[5]), $sem)))) < 0.01, 'menor saldo considera o saldo de hoje e o de cada semana');
 $r1 = db("SELECT status, data_fim FROM reservas WHERE tenant_id = :t AND numero = 1", ['t' => $alfaId])->fetch();
-ok($r1['status'] !== 'ativa' || str_contains($prev, 'Reserva nº 1 - Francisco das Chagas Pinheiro (estimado) R$ 360,00'),
-   'reserva ativa entra estimada pelos preços (2 betoneiras + 4 carrinhos + 20 painéis por 2 dias = R$ 360,00)');
+ok($r1['status'] !== 'ativa' || str_contains($prev, 'Reserva nº 1 - Francisco das Chagas Pinheiro (estimado) R$ 540,00'),
+   'reserva ativa entra estimada pelos preços (2 betoneiras + 4 carrinhos + 20 painéis por 3 dias, contando o dia da saída = R$ 540,00)');
 ok(!str_contains(texto($beta->get('index.php?p=caixa&a=previsao')['corpo']), 'TESTE luz') && !str_contains($beta->get('index.php?p=caixa&a=contas')['corpo'], 'TESTE aluguel'),
    'Beta não vê contas nem previsão da Alfa');
 $alfa->enviar($contas, 'index.php?p=caixa&a=recorrente_salvar', ['id' => $REC, 'ativa' => ''] + $rec);
