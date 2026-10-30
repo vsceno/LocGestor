@@ -25,7 +25,7 @@
     // Ações rápidas da paleta de comandos (Ctrl+K)
     $comandos = [
         ['Nova locação', legado('locacoes', ['a' => 'nova']), 'locacoes'],
-        ['Novo cliente', legado('clientes', ['a' => 'novo']), 'clientes'],
+        ['Novo cliente', route('clientes.create'), 'clientes'],
         ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],
         ['Nova reserva', legado('reservas', ['a' => 'nova']), 'reservas'],
         ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],

@@ -62,6 +62,128 @@ class ClientesController extends Controller
         return view('clientes.show', compact('c', 'r', 'locacoes'));
     }
 
+    public function create(): View
+    {
+        return view('clientes.form', ['c' => null]);
+    }
+
+    public function edit(string $id): View
+    {
+        return view('clientes.form', ['c' => $this->cliente($id)]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        [$dados, $erros] = $this->validar($request, null);
+        if ($erros) {
+            return back()->withErrors($erros)->withInput();
+        }
+        $id = DB::selectOne('INSERT INTO clientes (' . implode(', ', array_keys($dados)) . ') VALUES ('
+            . implode(', ', array_fill(0, count($dados), '?')) . ') RETURNING id', array_values($dados))->id;
+        return redirect()->route('clientes.show', $id)->with('flash', [['tipo' => 'ok', 'msg' => 'Cliente cadastrado.']]);
+    }
+
+    public function update(Request $request, string $id): RedirectResponse
+    {
+        $this->cliente($id);
+        [$dados, $erros] = $this->validar($request, $id);
+        if ($erros) {
+            return back()->withErrors($erros)->withInput();
+        }
+        $sets = implode(', ', array_map(fn ($k) => "$k = ?", array_keys($dados)));
+        DB::update("UPDATE clientes SET $sets WHERE id = ?", [...array_values($dados), $id]);   // o RLS limita à locadora
+        return redirect()->route('clientes.show', $id)->with('flash', [['tipo' => 'ok', 'msg' => 'Cliente atualizado.']]);
+    }
+
+    public function bloquear(string $id): RedirectResponse
+    {
+        $this->cliente($id);
+        $bloq = DB::selectOne('UPDATE clientes SET bloqueado = NOT bloqueado WHERE id = ? RETURNING bloqueado', [$id])->bloqueado;
+        return redirect()->route('clientes.show', $id)->with('flash', [['tipo' => 'ok',
+            'msg' => $bloq ? 'Cliente bloqueado: não poderá fazer novas locações.' : 'Cliente desbloqueado.']]);
+    }
+
+    public function destroy(string $id): RedirectResponse
+    {
+        $this->cliente($id);
+        // Com locações, não exclui (o histórico e o caixa dependem dele); o banco também impede
+        if ((int) DB::selectOne('SELECT count(*) AS n FROM locacoes WHERE cliente_id = ?', [$id])->n > 0) {
+            return back()->with('flash', [['tipo' => 'erro', 'msg' => 'Este cliente tem locações e não pode ser excluído. Desative ou bloqueie o cadastro.']]);
+        }
+        DB::delete('DELETE FROM clientes WHERE id = ?', [$id]);
+        return redirect()->route('clientes.index')->with('flash', [['tipo' => 'ok', 'msg' => 'Cliente excluído.']]);
+    }
+
+    /** Cliente da locadora logada ou 404 (id malformado ou de outra locadora: o RLS esconde a linha). */
+    private function cliente(string $id): object
+    {
+        abort_unless(Str::isUuid($id), 404);
+        $c = DB::selectOne('SELECT * FROM clientes WHERE id = ?', [$id]);
+        abort_if($c === null, 404, 'Cliente não encontrado.');
+        return $c;
+    }
+
+    /**
+     * Mesmas regras de cliente_salvar() do sistema antigo. Devolve [dados para gravar, erros por campo].
+     * @return array{0: array<string, mixed>, 1: array<string, string>}
+     */
+    private function validar(Request $request, ?string $id): array
+    {
+        $txt = fn (string $k) => trim((string) $request->input($k, ''));
+        $tipo = $request->input('tipo') === 'PJ' ? 'PJ' : 'PF';
+        $doc = so_digitos($request->input('cpf_cnpj', ''));
+        $cep = so_digitos($request->input('cep', ''));
+        $c = [
+            'tipo'      => $tipo,
+            'nome'      => $txt('nome'),
+            'cpf_cnpj'  => $doc,
+            'rg_ie'     => $txt('rg_ie'),
+            'telefone'  => telefone_formatar($request->input('telefone', '')),
+            'celular'   => telefone_formatar($request->input('celular', '')),
+            'email'     => $txt('email'),
+            'cep'       => $cep === '' ? '' : substr($cep, 0, 5) . '-' . substr($cep, 5),
+            'endereco'  => $txt('endereco'),
+            'numero'    => $txt('numero'),
+            'bairro'    => $txt('bairro'),
+            'cidade'    => $txt('cidade'),
+            'uf'        => strtoupper($txt('uf')),
+            'obs'       => $txt('obs'),
+            'bloqueado' => $request->boolean('bloqueado') ? 'true' : 'false',
+            'ativo'     => $request->boolean('ativo') ? 'true' : 'false',
+        ];
+
+        $e = [];
+        if (mb_strlen($c['nome']) < 3 || mb_strlen($c['nome']) > 150) {
+            $e['nome'] = 'Informe o nome (3 a 150 caracteres).';
+        }
+        if ($doc !== '' && (strlen($doc) !== ($tipo === 'PF' ? 11 : 14) || !doc_valido($doc))) {
+            $e['cpf_cnpj'] = $tipo === 'PF' ? 'CPF inválido.' : 'CNPJ inválido.';
+        }
+        if ($c['email'] !== '' && filter_var($c['email'], FILTER_VALIDATE_EMAIL) === false) {
+            $e['email'] = 'E-mail inválido.';
+        }
+        if ($cep !== '' && strlen($cep) !== 8) {
+            $e['cep'] = 'CEP inválido (8 dígitos).';
+        }
+        if ($c['uf'] !== '' && !in_array($c['uf'], ufs(), true)) {
+            $e['uf'] = 'UF inválida.';
+        }
+        foreach (['rg_ie' => 20, 'telefone' => 20, 'celular' => 20, 'email' => 120, 'endereco' => 150, 'numero' => 10,
+                  'bairro' => 80, 'cidade' => 80, 'obs' => 2000] as $campo => $max) {
+            if (!isset($e[$campo]) && mb_strlen($c[$campo]) > $max) {
+                $e[$campo] = "Máximo de $max caracteres.";
+            }
+        }
+        // Aviso amigável antes da restrição única do banco (que continua valendo), só dentro da locadora (RLS)
+        if ($doc !== '' && !isset($e['cpf_cnpj'])) {
+            $outro = DB::selectOne('SELECT nome FROM clientes WHERE cpf_cnpj = ? AND id IS DISTINCT FROM CAST(? AS uuid)', [$doc, $id]);
+            if ($outro) {
+                $e['cpf_cnpj'] = sprintf('Já existe um cliente com este %s: %s.', $tipo === 'PF' ? 'CPF' : 'CNPJ', $outro->nome);
+            }
+        }
+        return [$c, $e];
+    }
+
     private function dadosLista(Request $request): array
     {
         $f = (array) $request->session()->get('filtro_clientes', []) + ['q' => '', 'situacao' => 'ativos'];

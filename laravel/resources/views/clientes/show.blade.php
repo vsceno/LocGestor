@@ -26,7 +26,7 @@
             @if ($wa)<a class="btn-whats" href="https://wa.me/{{ $wa }}" target="_blank" rel="noopener"><x-icone nome="whatsapp" class="size-4" /> WhatsApp</a>@endif
             @if (strlen($fone) >= 10)<a class="btn-secundario" href="tel:+55{{ ltrim($fone, '0') }}"><x-icone nome="telefone" class="size-4" /> Ligar</a>@endif
             @if ($c->email !== '')<a class="btn-secundario" href="mailto:{{ $c->email }}"><x-icone nome="email" class="size-4" /> E-mail</a>@endif
-            <a class="btn-secundario" href="{{ legado('clientes', ['a' => 'editar', 'id' => $c->id]) }}"><x-icone nome="editar" class="size-4" /> Editar</a>
+            <a class="btn-secundario" href="{{ route('clientes.edit', $c->id) }}"><x-icone nome="editar" class="size-4" /> Editar</a>
             <a class="btn-primario" href="{{ legado('locacoes', ['a' => 'nova', 'cliente' => $c->id]) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
         </div>
     </div>
@@ -102,6 +102,28 @@
         <div class="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <p class="text-xs font-medium tracking-wide text-zinc-500 uppercase">Observações</p>
             <p class="mt-1.5 text-sm {{ $c->obs !== '' ? '' : 'text-zinc-400' }}">{!! $c->obs !== '' ? nl2br(e($c->obs)) : 'Nenhuma observação.' !!}</p>
+        </div>
+        {{-- Ações do cadastro --}}
+        <div class="space-y-2 border-t border-zinc-100 px-5 py-4 dark:border-zinc-800">
+            <p class="text-xs font-medium tracking-wide text-zinc-500 uppercase">Ações do cadastro</p>
+            <form method="post" action="{{ route('clientes.bloquear', $c->id) }}"
+                  data-confirmar="{{ $c->bloqueado ? 'Desbloquear este cliente?' : 'Bloquear este cliente? Ele não poderá fazer novas locações.' }}">
+                @csrf
+                <button class="btn-secundario w-full justify-start">
+                    <x-icone :nome="$c->bloqueado ? 'ok' : 'alerta'" class="size-4 {{ $c->bloqueado ? 'text-emerald-600' : 'text-amber-600' }}" />
+                    {{ $c->bloqueado ? 'Desbloquear cliente' : 'Bloquear cliente' }}
+                </button>
+            </form>
+            @if ((int) $r->locacoes === 0)
+                <form method="post" action="{{ route('clientes.destroy', $c->id) }}" data-confirmar="Excluir este cliente definitivamente?">
+                    @csrf @method('DELETE')
+                    <button class="btn w-full justify-start border border-red-200 bg-white text-red-600 hover:bg-red-50 dark:border-red-900 dark:bg-transparent dark:hover:bg-red-950">
+                        <x-icone nome="fechar" class="size-4" /> Excluir cliente
+                    </button>
+                </form>
+            @else
+                <p class="text-xs text-zinc-500">Com locações no histórico, o cadastro não pode ser excluído; desative ou bloqueie.</p>
+            @endif
         </div>
     </section>
 </div>

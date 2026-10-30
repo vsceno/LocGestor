@@ -8,7 +8,7 @@
             <p class="mt-3 font-medium">Nenhum cliente nesta situação</p>
             <p class="mt-1 text-sm text-zinc-500">Os clientes cadastrados aparecem aqui.</p>
         @endif
-        <a class="btn-primario mt-5" href="{{ legado('clientes', ['a' => 'novo']) }}"><x-icone nome="mais" class="size-4" /> Cadastrar cliente</a>
+        <a class="btn-primario mt-5" href="{{ route('clientes.create') }}"><x-icone nome="mais" class="size-4" /> Cadastrar cliente</a>
     </div>
 @else
     <div class="overflow-x-auto">
@@ -38,7 +38,7 @@
                                 <a class="btn-icone hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10" href="https://wa.me/{{ $wa }}" target="_blank" rel="noopener"
                                    title="WhatsApp" aria-label="WhatsApp de {{ $c->nome }}"><x-icone nome="whatsapp" class="size-[18px]" /></a>
                             @endif
-                            <a class="btn-icone" href="{{ legado('clientes', ['a' => 'editar', 'id' => $c->id]) }}" title="Editar" aria-label="Editar {{ $c->nome }}">
+                            <a class="btn-icone" href="{{ route('clientes.edit', $c->id) }}" title="Editar" aria-label="Editar {{ $c->nome }}">
                                 <x-icone nome="editar" class="size-[18px]" /></a>
                         </div>
                     </td>

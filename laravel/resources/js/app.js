@@ -193,3 +193,75 @@ if (paleta) {
     });
     paleta.addEventListener('click', (ev) => { if (ev.target === paleta) { paleta.close(); } });   // clique fora fecha
 }
+
+/* ---------- Confirmação antes de enviar (excluir, bloquear...) ---------- */
+document.addEventListener('submit', (ev) => {
+    const msg = ev.target.dataset?.confirmar;
+    if (msg && !window.confirm(msg)) { ev.preventDefault(); }
+});
+
+/* ---------- Máscaras enquanto digita: data-mascara="doc|telefone|cep" (mesmas do sistema antigo) ---------- */
+const digitos = (v) => String(v).replace(/\D+/g, '');
+const mascaras = {
+    doc: (v) => {
+        const d = digitos(v).slice(0, 14);
+        if (d.length <= 11) {
+            return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        }
+        return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+            .replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    },
+    telefone: (v) => {
+        const d = digitos(v).slice(0, 11);
+        return d.length <= 10
+            ? d.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d{1,4})$/, '$1-$2')
+            : d.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+    },
+    cep: (v) => digitos(v).slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2'),
+};
+document.querySelectorAll('[data-mascara]').forEach((el) => {
+    const fn = mascaras[el.dataset.mascara];
+    if (!fn) { return; }
+    el.value = fn(el.value);
+    el.addEventListener('input', () => { el.value = fn(el.value); });
+});
+
+/* ---------- Endereço pelo CEP (ViaCEP); não apaga o que já foi digitado com o CEP inválido ---------- */
+document.querySelectorAll('[data-viacep]').forEach((campo) => {
+    const status = campo.form?.closest('form')?.querySelector('[data-cep-status]') ?? document.querySelector('[data-cep-status]');
+    let ultimo = digitos(campo.value);
+    const buscar = async () => {
+        const cep = digitos(campo.value);
+        if (cep.length !== 8 || cep === ultimo) { return; }
+        ultimo = cep;
+        if (status) { status.textContent = 'Buscando o CEP…'; }
+        try {
+            const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const j = await r.json();
+            if (j.erro) { if (status) { status.textContent = 'CEP não encontrado: preencha o endereço.'; } return; }
+            const f = campo.form;
+            const mapa = { endereco: j.logradouro, bairro: j.bairro, cidade: j.localidade, uf: j.uf };
+            Object.entries(mapa).forEach(([nome, valor]) => { if (f.elements[nome] && valor) { f.elements[nome].value = valor; } });
+            if (status) { status.textContent = 'Endereço preenchido pelo CEP. Confira o número.'; }
+            f.elements.numero?.focus();
+        } catch (e) {
+            if (status) { status.textContent = 'Sem conexão para consultar o CEP: preencha o endereço.'; }
+        }
+    };
+    campo.addEventListener('input', () => { if (digitos(campo.value).length === 8) { buscar(); } });
+    campo.addEventListener('blur', buscar);
+});
+
+/* ---------- Cliente: rótulos conforme pessoa física ou jurídica ---------- */
+document.querySelectorAll('[data-form-cliente]').forEach((form) => {
+    const atualizar = () => {
+        const pj = form.querySelector('[data-tipo]:checked')?.value === 'PJ';
+        const nome = form.querySelector('[data-rotulo-nome]');
+        if (nome) { nome.firstChild.textContent = pj ? 'Razão social ' : 'Nome completo '; }
+        const doc = form.querySelector('[data-rotulo-doc]');
+        if (doc) { doc.textContent = pj ? 'CNPJ' : 'CPF'; }
+        const ie = form.querySelector('[data-rotulo-ie]');
+        if (ie) { ie.textContent = pj ? 'Inscrição estadual' : 'RG'; }
+    };
+    form.querySelectorAll('[data-tipo]').forEach((r) => r.addEventListener('change', atualizar));
+});

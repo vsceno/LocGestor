@@ -3,7 +3,7 @@
 @section('subtitulo', 'Quem aluga com você: contatos, situação e histórico de locações.')
 
 @section('acoes')
-    <a class="btn-primario" href="{{ legado('clientes', ['a' => 'novo']) }}"><x-icone nome="mais" class="size-4" /> Novo cliente</a>
+    <a class="btn-primario" href="{{ route('clientes.create') }}"><x-icone nome="mais" class="size-4" /> Novo cliente</a>
 @endsection
 
 @section('conteudo')

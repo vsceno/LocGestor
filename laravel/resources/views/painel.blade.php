@@ -5,7 +5,7 @@
     $hoje = \Illuminate\Support\Str::ucfirst(\Carbon\Carbon::now()->locale('pt_BR')->translatedFormat('l, d \d\e F'));
     $atalhos = [
         ['Nova locação', 'Saída de equipamentos', 'locacoes', legado('locacoes', ['a' => 'nova'])],
-        ['Novo cliente', 'Cadastro rápido', 'clientes', legado('clientes', ['a' => 'novo'])],
+        ['Novo cliente', 'Cadastro rápido', 'clientes', route('clientes.create')],
         ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', legado('orcamentos', ['a' => 'novo'])],
         ['Registrar devolução', 'Entrada de equipamentos', 'devolucao', legado('locacoes')],
     ];
