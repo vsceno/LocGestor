@@ -74,7 +74,7 @@ class BuscaController extends Controller
 
         if ($numero >= 0) {
             $r['Reservas'] = array_map(fn ($x) => [
-                'rotulo' => 'Reserva nº ' . $x->numero, 'ico' => 'reservas', 'url' => legado('reservas', ['a' => 'ver', 'n' => $x->numero]),
+                'rotulo' => 'Reserva nº ' . $x->numero, 'ico' => 'reservas', 'url' => route('reservas.show', $x->numero),
                 'detalhe' => $x->nome . ' · ' . data_br($x->data_inicio) . ' · ' . $x->status,
             ], DB::select('SELECT r.numero, r.data_inicio, r.status, c.nome FROM reservas r JOIN clientes c ON c.id = r.cliente_id WHERE r.numero = ?', [$numero]));
         }

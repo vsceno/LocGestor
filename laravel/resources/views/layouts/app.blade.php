@@ -4,7 +4,7 @@
         'Operação' => [
             'painel'      => ['Painel', 'painel', route('painel')],
             'locacoes'    => ['Locações', 'locacoes', route('locacoes.index')],
-            'reservas'    => ['Reservas', 'reservas', legado('reservas')],
+            'reservas'    => ['Reservas', 'reservas', route('reservas.index')],
             'orcamentos'  => ['Orçamentos', 'orcamentos', legado('orcamentos')],
             'roteiro'     => ['Roteiro', 'roteiro', legado('roteiro')],
         ],
@@ -28,7 +28,7 @@
         ['Novo cliente', route('clientes.create'), 'clientes'],
         ['Novo produto', route('produtos.create'), 'produtos'],
         ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],
-        ['Nova reserva', legado('reservas', ['a' => 'nova']), 'reservas'],
+        ['Nova reserva', route('reservas.create'), 'reservas'],
         ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],

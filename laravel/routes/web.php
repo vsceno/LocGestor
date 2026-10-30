@@ -12,6 +12,7 @@ use App\Http\Controllers\NovaLocacaoController;
 use App\Http\Controllers\PainelController;
 use App\Http\Controllers\PonteController;
 use App\Http\Controllers\ProdutosController;
+use App\Http\Controllers\ReservasController;
 use App\Http\Controllers\UnidadesController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,13 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     foreach (['receber', 'prorrogar', 'cancelar', 'entrega', 'unidades'] as $acao) {
         Route::post("/locacoes/{numero}/$acao", [LocacoesController::class, $acao])->whereNumber('numero')->name("locacoes.$acao");
     }
+    Route::get('/reservas', [ReservasController::class, 'index'])->name('reservas.index');
+    Route::get('/reservas/nova', [ReservasController::class, 'create'])->name('reservas.create');
+    Route::post('/reservas', [ReservasController::class, 'store'])->name('reservas.store');
+    Route::get('/reservas/{numero}', [ReservasController::class, 'show'])->whereNumber('numero')->name('reservas.show');
+    Route::get('/reservas/{numero}/editar', [ReservasController::class, 'edit'])->whereNumber('numero')->name('reservas.edit');
+    Route::put('/reservas/{numero}', [ReservasController::class, 'update'])->whereNumber('numero')->name('reservas.update');
+    Route::post('/reservas/{numero}/cancelar', [ReservasController::class, 'cancelar'])->whereNumber('numero')->name('reservas.cancelar');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');

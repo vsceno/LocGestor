@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Estoque;
+use App\Support\Formulario;
 use App\Support\Locacoes;
 use App\Support\Recusa;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +25,7 @@ class NovaLocacaoController extends Controller
     /** Texto do cliente na lista: "Nome · documento" (o id nunca aparece). Igual a cliente_rotulo(). */
     public static function rotuloCliente(object $c): string
     {
-        return $c->cpf_cnpj !== '' ? $c->nome . ' · ' . doc_formatar($c->cpf_cnpj) : $c->nome;
+        return Formulario::rotuloCliente($c);
     }
 
     public function create(Request $request): View
@@ -115,7 +116,7 @@ class NovaLocacaoController extends Controller
     private function criar(Request $request): array
     {
         $hoje = now()->toDateString();
-        $cliente = $this->resolverCliente((string) $request->input('cliente', ''));
+        $cliente = Formulario::cliente((string) $request->input('cliente', ''));
         if ($cliente->bloqueado) {
             throw new Recusa("O cliente {$cliente->nome} está bloqueado e não pode fazer novas locações.");
         }
@@ -135,9 +136,9 @@ class NovaLocacaoController extends Controller
             throw new Recusa('A devolução prevista não pode ser antes da saída.');
         }
 
-        $acrescimo = $this->reais($request->input('acrescimo'));
-        $desconto = $this->reais($request->input('desconto'));
-        $adiantamento = $this->reais($request->input('adiantamento'));
+        $acrescimo = Formulario::reais($request->input('acrescimo'));
+        $desconto = Formulario::reais($request->input('desconto'));
+        $adiantamento = Formulario::reais($request->input('adiantamento'));
         if ($acrescimo < 0 || $desconto < 0 || $adiantamento < 0) {
             throw new Recusa('Acréscimo, desconto e adiantamento não podem ser negativos.');
         }
@@ -157,8 +158,8 @@ class NovaLocacaoController extends Controller
         if (mb_strlen($obs) > 2000) {
             throw new Recusa('Observações muito longas (máximo de 2.000 caracteres).');
         }
-        $fe = $this->reais($request->input('frete_entrega'));
-        $fr = $this->reais($request->input('frete_recolhimento'));
+        $fe = Formulario::reais($request->input('frete_entrega'));
+        $fr = Formulario::reais($request->input('frete_recolhimento'));
         if ($fe < 0 || $fr < 0 || $fe > 9999999999 || $fr > 9999999999) {
             throw new Recusa('Os fretes não podem ser negativos.');
         }
@@ -174,7 +175,7 @@ class NovaLocacaoController extends Controller
             throw new Recusa('Reserva inválida.');
         }
 
-        $itens = $this->itens($request);
+        $itens = Formulario::itens($request, 'locação');
         foreach ($itens as $pid => $it) {
             $itens[$pid]['prev'] ??= $prev;
             if ($itens[$pid]['prev'] < $saida) {
@@ -252,25 +253,6 @@ class NovaLocacaoController extends Controller
         });
     }
 
-    /** Cliente pelo texto escolhido na lista ("Nome · documento"), só entre os ativos. Igual a cliente_resolver(). */
-    private function resolverCliente(string $texto): object
-    {
-        $partes = explode(' · ', trim($texto), 2);
-        $nome = trim($partes[0]);
-        $doc = so_digitos($partes[1] ?? '');
-        if ($nome === '') {
-            throw new Recusa('Escolha o cliente.');
-        }
-        $achados = DB::select("SELECT id, nome, cpf_cnpj, bloqueado FROM clientes WHERE ativo AND nome = ? AND (? = '' OR cpf_cnpj = ?)", [$nome, $doc, $doc]);
-        if (!$achados) {
-            throw new Recusa('Cliente não encontrado. Escolha um cliente da lista ou cadastre-o antes.');
-        }
-        if (count($achados) > 1) {
-            throw new Recusa('Há mais de um cliente com esse nome. Escolha na lista a opção com o documento.');
-        }
-        return $achados[0];
-    }
-
     /** Desconto ou acréscimo só com administrador logado ou a senha de um administrador ativo. Devolve quem autorizou. */
     private function autorizador(float $acrescimo, float $desconto, string $senha): ?string
     {
@@ -290,78 +272,12 @@ class NovaLocacaoController extends Controller
         throw new Recusa('Desconto ou acréscimo precisa da senha de um administrador.');
     }
 
-    /**
-     * Itens do formulário => [produto_id => [qtd, diaria, prev, periodo]]. Igual a itens_do_form(): linhas do mesmo produto
-     * somam; valor vazio fica null (usa o do cadastro); o mesmo produto não pode ter períodos ou devoluções diferentes.
-     */
-    private function itens(Request $request): array
-    {
-        $qtds = (array) $request->input('quantidade', []);
-        $valores = (array) $request->input('diaria', []);
-        $prevs = (array) $request->input('prev', []);
-        $periodos = (array) $request->input('periodo', []);
-        $itens = [];
-        foreach ((array) $request->input('produto_id', []) as $i => $pid) {
-            $pid = (string) $pid;
-            if ($pid === '') {
-                continue;
-            }
-            $linha = (int) $i + 1;
-            if (!Str::isUuid($pid)) {
-                throw new Recusa("Produto inválido na linha $linha.");
-            }
-            $qtd = filter_var($qtds[$i] ?? '', FILTER_VALIDATE_INT);
-            if ($qtd === false || $qtd < 1 || $qtd > 100000) {
-                throw new Recusa("Quantidade inválida na linha $linha.");
-            }
-            $valorTxt = trim((string) ($valores[$i] ?? ''));
-            $prevTxt = trim((string) ($prevs[$i] ?? ''));
-            if ($prevTxt !== '' && !$this->dataValida($prevTxt)) {
-                throw new Recusa("Data de devolução inválida na linha $linha.");
-            }
-            $per = trim((string) ($periodos[$i] ?? ''));
-            if ($per !== '' && !in_array($per, ['automatico', 'diaria', 'semanal', 'quinzenal', 'mensal'], true)) {
-                throw new Recusa("Período inválido na linha $linha.");
-            }
-            $per = $per === '' ? 'automatico' : $per;
-            $itens[$pid] ??= ['qtd' => 0, 'diaria' => null, 'prev' => null, 'periodo' => null];
-            if ($itens[$pid]['periodo'] !== null && $itens[$pid]['periodo'] !== $per) {
-                throw new Recusa('O mesmo produto aparece com períodos diferentes. Use uma linha por produto.');
-            }
-            $itens[$pid]['periodo'] = $per;
-            $itens[$pid]['qtd'] += $qtd;
-            if ($itens[$pid]['diaria'] === null && $valorTxt !== '') {
-                $itens[$pid]['diaria'] = $this->reais($valorTxt);
-            }
-            if ($prevTxt !== '') {
-                if ($itens[$pid]['prev'] !== null && $itens[$pid]['prev'] !== $prevTxt) {
-                    throw new Recusa('O mesmo produto aparece com datas de devolução diferentes. Use uma linha por produto.');
-                }
-                $itens[$pid]['prev'] = $prevTxt;
-            }
-        }
-        if (!$itens) {
-            throw new Recusa('Inclua pelo menos um item na locação.');
-        }
-        return $itens;
-    }
-
     /** Linha do formulário a partir de um item de reserva ou de locação (o automático vira diária). */
     private function linhaDe(object $it, string $prev): array
     {
         $per = $it->periodo === 'automatico' ? 'diaria' : $it->periodo;
         $valor = $per === 'diaria' ? $it->valor_diaria : $it->{'valor_' . $per};
         return ['produto_id' => $it->produto_id, 'quantidade' => (string) $it->quantidade, 'diaria' => numero($valor, 2), 'prev' => $prev, 'periodo' => $per];
-    }
-
-    /** Valor em reais como o parse_money() antigo: inválido recusa a operação com a mesma mensagem. */
-    private function reais($v): float
-    {
-        $n = valor_br($v ?? '');
-        if ($n === null) {
-            throw new Recusa('Valor inválido: ' . trim(str_replace(['R$', ' '], '', (string) $v)));
-        }
-        return $n;
     }
 
     private function dataValida(string $d): bool

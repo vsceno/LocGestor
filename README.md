@@ -816,7 +816,7 @@ foi redefinida.
 
 Já no Laravel: login, painel, busca, clientes (lista, ficha, cadastro, edição, bloqueio e exclusão) e produtos (lista
 com disponibilidade, cadastro, edição e exclusão, categorias, kits e patrimônio) e locações (lista, ficha, nova locação e devolução, com recebimento, prorrogação, cancelamento,
-entrega, patrimônio, WhatsApp e PIX). Documentos, vistorias e o resto abrem no sistema atual.
+entrega, patrimônio, WhatsApp e PIX) e reservas (com kits). Documentos, vistorias e o resto abrem no sistema atual.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 
@@ -833,7 +833,8 @@ mklink /J novo laravel\public
 
 A junção `novo` (ignorada pelo git) aponta só para `laravel/public`. O `.htaccess` da raiz devolve 404 para qualquer
 endereço `/laravel/...` e nega qualquer arquivo `.env`: o código, o `vendor` e os segredos do Laravel nunca são servidos.
-No `.env`, use `APP_URL=http://locgestor.test/novo` e `SESSION_PATH=/novo` (o cookie de sessão fica só nessa pasta).
+No `.env`, use `APP_URL=http://locgestor.test/novo`, `ASSET_URL=/novo` (os pedaços de JavaScript carregados sob demanda
+usam esse caminho; rode `npm run build` depois de mudar) e `SESSION_PATH=/novo` (o cookie de sessão fica só nessa pasta).
 
 As telas do Laravel usam **Tailwind CSS 4** compilado pelo Vite (`npm run build` gera `public/build`). A fonte Inter vem
 do pacote `@fontsource-variable/inter`, junto com o build: nada é baixado da internet quando o sistema está em uso.
