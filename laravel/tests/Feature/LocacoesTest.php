@@ -141,6 +141,7 @@ class LocacoesTest extends TestCase
                                    WHERE t.slug = 'alfa-locacoes' AND l.status = 'aberta'
                                      AND NOT EXISTS (SELECT 1 FROM locacoes b JOIN tenants tb ON tb.id = b.tenant_id WHERE tb.slug = 'beta-eventos' AND b.numero = l.numero)
                                    ORDER BY l.numero DESC LIMIT 1")[0];
+        $caixaAntes = $this->lerComoAdmin('SELECT count(*) AS n FROM caixa WHERE locacao_id = ?', [$l->id])[0]->n;
         $this->entrarComo('beta-eventos');
         $this->get("/locacoes/{$l->numero}")->assertNotFound();
         foreach (['receber' => ['valor' => '10', 'forma' => 'PIX'], 'prorrogar' => ['data' => '2030-01-01'], 'cancelar' => ['forma' => 'PIX'],
@@ -149,6 +150,6 @@ class LocacoesTest extends TestCase
         }
         $depois = $this->lerComoAdmin('SELECT status, data_prev_devolucao FROM locacoes WHERE id = ?', [$l->id])[0];
         $this->assertSame(['aberta', $l->data_prev_devolucao], [$depois->status, $depois->data_prev_devolucao]);
-        $this->assertEmpty($this->lerComoAdmin("SELECT 1 FROM caixa WHERE locacao_id = ? AND criado_em > now() - interval '1 minute'", [$l->id]));
+        $this->assertSame($caixaAntes, $this->lerComoAdmin('SELECT count(*) AS n FROM caixa WHERE locacao_id = ?', [$l->id])[0]->n);
     }
 }
