@@ -113,8 +113,8 @@ BEGIN
         -- 1 a 3 produtos diferentes por locação
         FOR p IN SELECT id, qtd_total, valor_diaria FROM produtos
                   ORDER BY random() LIMIT 1 + floor(random() * 3)::INT LOOP
-            INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-            VALUES (v_loc, p.id, 1 + floor(random() * GREATEST(1, p.qtd_total / 4))::INT, p.valor_diaria);
+            INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+            VALUES (v_loc, p.id, 1 + floor(random() * GREATEST(1, p.qtd_total / 4))::INT, p.valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc));
         END LOOP;
 
         -- Desconto ocasional em locações maiores
@@ -169,8 +169,8 @@ BEGIN
     VALUES (v_num, v_cli, CURRENT_DATE - 10, CURRENT_DATE - 3, 'Obra Residencial Parque das Dunas - Rua Ana Bilhar, 500',
             'Entrega feita pelo caminhão da locadora.', v_admin)
     RETURNING id INTO v_loc;
-    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-    SELECT v_loc, id, x.q, valor_diaria FROM produtos
+    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+    SELECT v_loc, id, x.q, valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc) FROM produtos
       JOIN (VALUES ('AND-001', 40), ('ESC-300', 30), ('BET-400', 1)) AS x(cod, q) ON x.cod = produtos.codigo;
     INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, locacao_id, usuario_id)
     VALUES (CURRENT_DATE - 10, 'E', 'Locação', 'Adiantamento locação nº ' || v_num || ' - Construtora Jaguaribe Ltda',
@@ -182,8 +182,8 @@ BEGIN
     INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso, usuario_id)
     VALUES (v_num, v_cli, CURRENT_DATE - 2, CURRENT_DATE + 5, 'Reforma - Rua Coronel Antônio Botelho, 215', v_admin)
     RETURNING id INTO v_loc;
-    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-    SELECT v_loc, id, x.q, valor_diaria FROM produtos
+    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+    SELECT v_loc, id, x.q, valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc) FROM produtos
       JOIN (VALUES ('MAR-10', 1), ('CAR-MAO', 2)) AS x(cod, q) ON x.cod = produtos.codigo;
 
     -- Locação em aberto 3 (vence amanhã, com acréscimo de frete e adiantamento): Serralheria Cariri
@@ -192,8 +192,8 @@ BEGIN
     INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso, acrescimo, usuario_id)
     VALUES (v_num, v_cli, CURRENT_DATE - 1, CURRENT_DATE + 1, 'Galpão novo - Rua Padre Cícero, 1200', 80.00, v_admin)
     RETURNING id INTO v_loc;
-    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-    SELECT v_loc, id, x.q, valor_diaria FROM produtos
+    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+    SELECT v_loc, id, x.q, valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc) FROM produtos
       JOIN (VALUES ('GER-6K', 1), ('COM-SAP', 1)) AS x(cod, q) ON x.cod = produtos.codigo;
     INSERT INTO caixa (data, tipo, categoria, descricao, valor, forma, locacao_id, usuario_id)
     VALUES (CURRENT_DATE - 1, 'E', 'Locação', 'Adiantamento locação nº ' || v_num || ' - Serralheria Cariri ME',
@@ -299,8 +299,8 @@ BEGIN
         RETURNING id INTO v_loc;
 
         FOR p IN SELECT id, qtd_total, valor_diaria FROM produtos ORDER BY random() LIMIT 2 LOOP
-            INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, qtd_devolvida, valor_diaria)
-            VALUES (v_loc, p.id, 1 + floor(random() * GREATEST(1, p.qtd_total / 3))::INT, 0, p.valor_diaria);
+            INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, qtd_devolvida, valor_diaria, data_prev_devolucao)
+            VALUES (v_loc, p.id, 1 + floor(random() * GREATEST(1, p.qtd_total / 3))::INT, 0, p.valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc));
         END LOOP;
 
         INSERT INTO devolucoes (locacao_id, data, usuario_id) VALUES (v_loc, v_prev, v_admin)
@@ -332,8 +332,8 @@ BEGIN
     INSERT INTO locacoes (numero, cliente_id, data_saida, data_prev_devolucao, local_uso, usuario_id)
     VALUES (v_num, v_cli, CURRENT_DATE - 1, CURRENT_DATE + 2, 'Aniversário - Sítio Lagoa Redonda', v_admin)
     RETURNING id INTO v_loc;
-    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria)
-    SELECT v_loc, id, x.q, valor_diaria FROM produtos
+    INSERT INTO locacao_itens (locacao_id, produto_id, quantidade, valor_diaria, data_prev_devolucao)
+    SELECT v_loc, id, x.q, valor_diaria, (SELECT data_prev_devolucao FROM locacoes WHERE id = v_loc) FROM produtos
       JOIN (VALUES ('TEN-5X5', 2), ('MES-4C', 15), ('TOA-RED', 15)) AS x(cod, q) ON x.cod = produtos.codigo;
 
     PERFORM set_config('app.tenant_id', '', false);
