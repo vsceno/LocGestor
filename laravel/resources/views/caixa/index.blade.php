@@ -9,11 +9,7 @@
 @section('subtitulo', 'Extrato com saldo do período. Os recebimentos de locação entram sozinhos pelas telas de locação.')
 
 @section('conteudo')
-<nav class="mb-6 inline-flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800" aria-label="Seções do caixa">
-    <a href="{{ route('caixa.index') }}" aria-current="page" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-zinc-100">Lançamentos</a>
-    <a href="{{ legado('caixa', ['a' => 'contas']) }}" class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Contas a pagar</a>
-    <a href="{{ legado('caixa', ['a' => 'previsao']) }}" class="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Previsão</a>
-</nav>
+@include('caixa._abas', ['ativa' => 'lancamentos'])
 
 <form method="get" action="{{ route('caixa.index') }}" class="cartao mb-6 flex flex-wrap items-end gap-3 p-4">
     <label class="block"><span class="text-xs text-zinc-500">De</span><input type="date" name="de" value="{{ $de }}" class="campo mt-1"></label>

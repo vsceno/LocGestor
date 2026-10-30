@@ -205,5 +205,6 @@
         @endforeach
     </template>
 </dialog>
+@yield('scripts')
 </body>
 </html>
