@@ -13,7 +13,6 @@
     $periodos = ['diaria' => ['Diária', 'dia'], 'semanal' => ['Semanal', 'semana'], 'quinzenal' => ['Quinzenal', 'quinzena'], 'mensal' => ['Mensal', 'mês']];
     $erroEm = fn (string $onde) => $errors->has($onde)
         ? '<p class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300" role="alert">' . e($errors->first($onde)) . '</p>' : '';
-    $documento = fn (string $acao, array $extra = []) => legado('locacoes', ['a' => $acao, 'n' => $loc->numero] + $extra);
 @endphp
 @extends('layouts.app', ['titulo' => 'Locação nº ' . $loc->numero, 'ativo' => 'locacoes', 'migalhas' => [['Locações', route('locacoes.index')]]])
 
@@ -255,7 +254,7 @@
             @elseif ($saldo > 0.004 && $semChavePix && session('usuario.perfil') === 'admin')
                 <section class="cartao p-5">
                     <h2 class="cartao-titulo">Cobrar por PIX</h2>
-                    <p class="mt-2 text-sm text-zinc-500">Cadastre a chave PIX da locadora em <a class="text-marca-700 hover:underline dark:text-marca-400" href="{{ legado('config') }}">Configurações</a>
+                    <p class="mt-2 text-sm text-zinc-500">Cadastre a chave PIX da locadora em <a class="text-marca-700 hover:underline dark:text-marca-400" href="{{ route('config.index') }}">Configurações</a>
                         para mostrar aqui o QR Code com o valor do saldo.</p>
                 </section>
             @endif
