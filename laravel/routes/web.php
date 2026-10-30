@@ -7,6 +7,7 @@ use App\Http\Controllers\ClientesController;
 use App\Http\Controllers\KitsController;
 use App\Http\Controllers\LocacoesController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\NovaLocacaoController;
 use App\Http\Controllers\PainelController;
 use App\Http\Controllers\PonteController;
 use App\Http\Controllers\ProdutosController;
@@ -58,6 +59,9 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::delete('/produtos/unidades/{id}', [UnidadesController::class, 'destroy'])->whereUuid('id')->name('unidades.destroy');
     Route::get('/locacoes', [LocacoesController::class, 'index'])->name('locacoes.index');
     Route::post('/locacoes/filtrar', [LocacoesController::class, 'filtrar'])->name('locacoes.filtrar');
+    Route::get('/locacoes/nova', [NovaLocacaoController::class, 'create'])->name('locacoes.create');
+    Route::post('/locacoes', [NovaLocacaoController::class, 'store'])->name('locacoes.store');
+    Route::post('/locacoes/disponivel', [NovaLocacaoController::class, 'disponivel'])->name('locacoes.disponivel');
     Route::get('/locacoes/{numero}', [LocacoesController::class, 'show'])->whereNumber('numero')->name('locacoes.show');
     foreach (['receber', 'prorrogar', 'cancelar', 'entrega', 'unidades'] as $acao) {
         Route::post("/locacoes/{numero}/$acao", [LocacoesController::class, $acao])->whereNumber('numero')->name("locacoes.$acao");

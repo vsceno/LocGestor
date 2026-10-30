@@ -327,3 +327,9 @@ document.querySelectorAll('[data-pix]').forEach(async (bloco) => {
         setTimeout(() => { botao.textContent = 'Copiar código'; }, 2000);
     });
 });
+
+/* ---------- Nova locação (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-nova-locacao]').forEach(async (form) => {
+    const { novaLocacao } = await import('./locacao.js');
+    novaLocacao(form);
+});

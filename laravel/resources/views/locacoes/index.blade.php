@@ -3,7 +3,7 @@
 @section('subtitulo', 'Equipamentos na rua, devoluções e o que cada cliente deve.')
 
 @section('acoes')
-    <a class="btn-primario" href="{{ legado('locacoes', ['a' => 'nova']) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
+    <a class="btn-primario" href="{{ route('locacoes.create') }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
 @endsection
 
 @section('conteudo')

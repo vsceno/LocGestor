@@ -24,7 +24,7 @@
     $migalhas = $migalhas ?? [];
     // Ações rápidas da paleta de comandos (Ctrl+K)
     $comandos = [
-        ['Nova locação', legado('locacoes', ['a' => 'nova']), 'locacoes'],
+        ['Nova locação', route('locacoes.create'), 'locacoes'],
         ['Novo cliente', route('clientes.create'), 'clientes'],
         ['Novo produto', route('produtos.create'), 'produtos'],
         ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],

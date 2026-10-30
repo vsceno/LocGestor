@@ -4,7 +4,7 @@
     $primeiroNome = explode(' ', trim($usuario->nome))[0];
     $hoje = \Illuminate\Support\Str::ucfirst(\Carbon\Carbon::now()->locale('pt_BR')->translatedFormat('l, d \d\e F'));
     $atalhos = [
-        ['Nova locação', 'Saída de equipamentos', 'locacoes', legado('locacoes', ['a' => 'nova'])],
+        ['Nova locação', 'Saída de equipamentos', 'locacoes', route('locacoes.create')],
         ['Novo cliente', 'Cadastro rápido', 'clientes', route('clientes.create')],
         ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', legado('orcamentos', ['a' => 'novo'])],
         ['Registrar devolução', 'Entrada de equipamentos', 'devolucao', route('locacoes.index')],
@@ -30,7 +30,7 @@
 @endsection
 
 @section('acoes')
-    <a class="btn-primario" href="{{ legado('locacoes', ['a' => 'nova']) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
+    <a class="btn-primario" href="{{ route('locacoes.create') }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
 @endsection
 
 @section('conteudo')

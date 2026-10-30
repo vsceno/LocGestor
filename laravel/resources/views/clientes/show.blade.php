@@ -27,7 +27,7 @@
             @if (strlen($fone) >= 10)<a class="btn-secundario" href="tel:+55{{ ltrim($fone, '0') }}"><x-icone nome="telefone" class="size-4" /> Ligar</a>@endif
             @if ($c->email !== '')<a class="btn-secundario" href="mailto:{{ $c->email }}"><x-icone nome="email" class="size-4" /> E-mail</a>@endif
             <a class="btn-secundario" href="{{ route('clientes.edit', $c->id) }}"><x-icone nome="editar" class="size-4" /> Editar</a>
-            <a class="btn-primario" href="{{ legado('locacoes', ['a' => 'nova', 'cliente' => $c->id]) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
+            <a class="btn-primario" href="{{ route('locacoes.create', ['cliente' => $c->id]) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
         </div>
     </div>
 </section>

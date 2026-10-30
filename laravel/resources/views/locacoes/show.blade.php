@@ -28,7 +28,7 @@
     @if ($aberta)
         <a class="btn-primario" href="{{ $documento('devolucao') }}"><x-icone nome="devolucao" class="size-4" /> Registrar devolução</a>
     @endif
-    <a class="btn-secundario" href="{{ legado('locacoes', ['a' => 'nova', 'copiar' => $loc->id]) }}">Repetir locação</a>
+    <a class="btn-secundario" href="{{ route('locacoes.create', ['copiar' => $loc->id]) }}">Repetir locação</a>
 @endsection
 
 @section('conteudo')
@@ -66,7 +66,7 @@
                                 <span class="block font-mono text-xs text-zinc-500">{{ $it->codigo }}</span></td>
                             <td class="num">{{ numero($it->quantidade) }} <span class="text-xs text-zinc-400">{{ $it->unidade }}</span></td>
                             <td class="num {{ $it->qtd_devolvida > 0 ? '' : 'text-zinc-400' }}">{{ numero($it->qtd_devolvida) }}</td>
-                            <td class="num">@if ($pend > 0)<span class="{{ $atraso > 0 ? 'selo-vermelho' : 'selo-amarelo' }}">{{ numero($pend) }}</span>@else<span class="text-zinc-400">0</span>@endif</td>
+                            <td class="num">@if ($cancelada)<span class="text-zinc-400">—</span>@elseif ($pend > 0)<span class="{{ $atraso > 0 ? 'selo-vermelho' : 'selo-amarelo' }}">{{ numero($pend) }}</span>@else<span class="text-zinc-400">0</span>@endif</td>
                             <td class="whitespace-nowrap">
                                 @if ($per){{ $per[0] }}<span class="block text-xs text-zinc-500">{{ moeda($preco) }}/{{ $per[1] }}</span>
                                 @else Automático<span class="block text-xs text-zinc-500">{{ moeda($it->valor_diaria) }}/dia</span>@endif
