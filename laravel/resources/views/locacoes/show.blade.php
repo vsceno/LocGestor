@@ -182,8 +182,8 @@
                 <h2 class="cartao-titulo">Vistorias (checklist, fotos e assinatura)</h2>
                 @unless ($cancelada)
                     <div class="flex gap-2">
-                        @unless ($temRetirada)<a class="btn-primario" href="{{ $documento('vistoria', ['tipo' => 'retirada']) }}">Vistoria de retirada</a>@endunless
-                        <a class="btn-secundario" href="{{ $documento('vistoria', ['tipo' => 'devolucao']) }}">Vistoria de devolução</a>
+                        @unless ($temRetirada)<a class="btn-primario" href="{{ route('vistorias.create', ['numero' => $loc->numero, 'tipo' => 'retirada']) }}">Vistoria de retirada</a>@endunless
+                        <a class="btn-secundario" href="{{ route('vistorias.create', ['numero' => $loc->numero, 'tipo' => 'devolucao']) }}">Vistoria de devolução</a>
                     </div>
                 @endunless
             </div>
@@ -202,7 +202,7 @@
                             <td class="num">{{ numero($v->fotos) }}</td>
                             <td>@if ($v->problemas > 0)<span class="selo-vermelho">{{ numero($v->problemas) }}</span>@else<span class="selo-verde">nenhum</span>@endif</td>
                             <td>@if ($v->assinada)<span class="selo-verde">{{ $v->assinante_nome }}</span>@else<span class="selo-cinza">sem assinatura</span>@endif</td>
-                            <td><a class="btn-secundario whitespace-nowrap" href="{{ legado('locacoes', ['a' => 'vistoria_ver', 'id' => $v->id]) }}" target="_blank" rel="noopener">Ver / imprimir</a></td></tr>
+                            <td><a class="btn-secundario whitespace-nowrap" href="{{ route('vistorias.show', $v->id) }}" target="_blank" rel="noopener">Ver / imprimir</a></td></tr>
                     @endforeach</tbody>
                 </table></div>
             @endif

@@ -2,26 +2,43 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Arquivos;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * Entrega de arquivos da pasta do sistema antigo. O caminho vem do banco (com RLS da locadora logada)
- * e precisa ter o formato que o sistema grava; nada vem da URL.
+ * Entrega de arquivos (logomarca, fotos e assinaturas de vistoria). O caminho vem do banco, nunca da URL, e o banco
+ * (com RLS da locadora logada) só acha o registro da própria locadora: de outra, a resposta é 404.
  */
 class ArquivosController extends Controller
 {
     public function logo(): BinaryFileResponse
     {
-        $rel = (string) (DB::selectOne("SELECT logo_arquivo FROM empresa")->logo_arquivo ?? '');
-        abort_unless(preg_match('#^[0-9a-f-]{36}/\d{4}/[0-9a-f]{32}\.png$#', $rel) === 1, 404);
-        $caminho = rtrim(config('locgestor.pasta_arquivos'), '/\\') . '/' . $rel;
-        abort_unless(is_file($caminho), 404);
+        return $this->enviar(DB::selectOne("SELECT NULLIF(logo_arquivo, '') AS a FROM empresa")?->a, 'image/png');
+    }
+
+    public function foto(string $id): BinaryFileResponse
+    {
+        abort_unless(Str::isUuid($id), 404);
+        return $this->enviar(DB::selectOne('SELECT arquivo AS a FROM vistoria_fotos WHERE id = ?', [$id])?->a, 'image/jpeg');
+    }
+
+    public function assinatura(string $id): BinaryFileResponse
+    {
+        abort_unless(Str::isUuid($id), 404);
+        return $this->enviar(DB::selectOne("SELECT NULLIF(assinatura_arquivo, '') AS a FROM vistorias WHERE id = ?", [$id])?->a, 'image/png');
+    }
+
+    private function enviar(?string $relativo, string $mime): BinaryFileResponse
+    {
+        $caminho = Arquivos::caminho($relativo);
+        abort_if($caminho === null || !is_file($caminho), 404);
 
         return response()->file($caminho, [
-            'Content-Type' => 'image/png',
+            'Content-Type' => $mime,
             'Cache-Control' => 'private, max-age=86400',
-            'Content-Security-Policy' => "default-src 'none'",
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
         ]);
     }
 }

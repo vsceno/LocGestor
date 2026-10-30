@@ -18,6 +18,7 @@ use App\Http\Controllers\ProdutosController;
 use App\Http\Controllers\RecibosController;
 use App\Http\Controllers\ReservasController;
 use App\Http\Controllers\UnidadesController;
+use App\Http\Controllers\VistoriasController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
 
@@ -99,6 +100,11 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
     Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');
     Route::get('/orcamentos/{id}/imprimir', [OrcamentosController::class, 'imprimir'])->whereUuid('id')->name('orcamentos.imprimir');
+    Route::get('/locacoes/{numero}/vistoria', [VistoriasController::class, 'create'])->whereNumber('numero')->name('vistorias.create');
+    Route::post('/locacoes/{numero}/vistoria', [VistoriasController::class, 'store'])->whereNumber('numero')->name('vistorias.store');
+    Route::get('/vistorias/{id}', [VistoriasController::class, 'show'])->whereUuid('id')->name('vistorias.show');
+    Route::get('/arquivos/foto/{id}', [ArquivosController::class, 'foto'])->whereUuid('id')->name('arquivos.foto');
+    Route::get('/arquivos/assinatura/{id}', [ArquivosController::class, 'assinatura'])->whereUuid('id')->name('arquivos.assinatura');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');

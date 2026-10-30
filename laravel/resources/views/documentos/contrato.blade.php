@@ -74,7 +74,7 @@
         </div>
         <div class="{{ $assinatura ? 'assinado' : '' }}">
             @if ($assinatura)
-                <img src="{{ config('locgestor.legado_url') }}/index.php?p=arquivos&amp;a=assinatura&amp;id={{ $assinatura->id }}" alt="Assinatura do locatário">
+                <img src="{{ route('arquivos.assinatura', $assinatura->id) }}" alt="Assinatura do locatário">
             @endif
             LOCATÁRIO<br>{{ $loc->cliente_nome }}
             @if ($cliente->cpf_cnpj !== '')

@@ -351,3 +351,9 @@ document.querySelectorAll('form[data-orcamento]').forEach(async (form) => {
     const { orcamento } = await import('./orcamento.js');
     orcamento(form);
 });
+
+/* ---------- Vistoria: assinatura e fotos (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-vistoria]').forEach(async (form) => {
+    const { vistoria } = await import('./vistoria.js');
+    vistoria(form);
+});
