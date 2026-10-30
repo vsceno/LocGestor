@@ -16,7 +16,7 @@
         'Financeiro' => [
             'caixa'       => ['Fluxo de caixa', 'caixa', route('caixa.index')],
             'recibos'     => ['Recibos', 'recibos', route('recibos.index')],
-            'relatorios'  => ['Relatórios', 'relatorios', legado('relatorios')],
+            'relatorios'  => ['Relatórios', 'relatorios', route('relatorios.index')],
         ],
     ];
     $nomeLocadora = $empresa->nome_fantasia ?: $empresa->razao_social;
@@ -36,7 +36,7 @@
         ['Ir para clientes', route('clientes.index'), 'clientes'],
         ['Ir para locações', route('locacoes.index'), 'locacoes'],
         ['Ir para produtos', route('produtos.index'), 'produtos'],
-        ['Ir para relatórios', legado('relatorios'), 'relatorios'],
+        ['Ir para relatórios', route('relatorios.index'), 'relatorios'],
         ['Configurações', legado('config'), 'config'],
     ];
     $acoesPaleta = array_map(fn ($c) => ['rotulo' => $c[0], 'url' => $c[1], 'ico' => $c[2]], $comandos);

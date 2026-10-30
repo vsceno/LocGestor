@@ -18,6 +18,7 @@ use App\Http\Controllers\PainelController;
 use App\Http\Controllers\PonteController;
 use App\Http\Controllers\ProdutosController;
 use App\Http\Controllers\RecibosController;
+use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\ReservasController;
 use App\Http\Controllers\UnidadesController;
 use App\Http\Controllers\VistoriasController;
@@ -112,6 +113,10 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::post('/recibos', [RecibosController::class, 'store'])->name('recibos.store');
     Route::get('/recibos/{id}', [RecibosController::class, 'show'])->whereUuid('id')->name('recibos.show');
     Route::get('/recibos/{id}/imprimir', [RecibosController::class, 'imprimir'])->whereUuid('id')->name('recibos.imprimir');
+    Route::get('/relatorios', [RelatoriosController::class, 'index'])->name('relatorios.index');
+    Route::get('/relatorios/contador', [RelatoriosController::class, 'contador'])->name('relatorios.contador');
+    Route::get('/relatorios/contador/baixar', [RelatoriosController::class, 'contadorBaixar'])->name('relatorios.contador.baixar');
+    Route::get('/relatorios/{chave}', [RelatoriosController::class, 'ver'])->where('chave', '[a-z_]+')->name('relatorios.ver');
     Route::get('/locacoes/{numero}/contrato', [DocumentosController::class, 'contrato'])->whereNumber('numero')->name('documentos.contrato');
     Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
     Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');
