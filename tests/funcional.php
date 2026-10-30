@@ -1528,6 +1528,42 @@ ok(dbv("SELECT count(*) FROM login_tentativas WHERE chave !~ '^[0-9a-f]{64}$'") 
 db('DELETE FROM login_tentativas');
 
 // =====================================================================
+secao('Ponte de sessão com o Laravel (lado deste sistema)');
+if (strlen((string) ($config['ponte_segredo'] ?? '')) < 32 || (string) ($config['laravel_url'] ?? '') === '') {
+    echo "  (pulado: ponte desligada, sem ponte_segredo e laravel_url no config.php)\n";
+} else {
+    $b64 = fn(string $s) => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
+    $passagem = function (array $mudar = [], ?string $segredo = null) use ($b64, $config, $alfaId, $base) {
+        $u = dbv("SELECT id FROM usuarios WHERE tenant_id = :t AND login = 'admin'", ['t' => $alfaId]);
+        $d = $mudar + ['para' => 'legado', 't' => $alfaId, 'u' => $u, 'e' => time(), 'd' => 'p=clientes',
+                       'x' => time() + 60, 'n' => bin2hex(random_bytes(16))];
+        $corpo = $b64(json_encode($d));
+        return $corpo . '.' . $b64(hash_hmac('sha256', $corpo, $segredo ?? $config['ponte_segredo'], true));
+    };
+    $chegar = function (string $t) use ($BASE): array {
+        $n = new Navegador($BASE);
+        $r = $n->get('index.php?p=login&a=ponte&t=' . urlencode($t));
+        return [$r, $n];
+    };
+    $boa = $passagem();
+    [$r1, $n1] = $chegar($boa);
+    ok(str_contains($r1['local'], 'p=clientes') && str_contains($n1->get('index.php?p=clientes')['corpo'], '>Alfa Locações</strong>'),
+       'passagem válida do Laravel abre a sessão na tela pedida');
+    [$r2] = $chegar($boa);
+    ok(str_contains($r2['local'], 'p=login'), 'a mesma passagem não serve duas vezes');
+    [$r3] = $chegar($passagem([], str_repeat('x', 64)));
+    ok(str_contains($r3['local'], 'p=login'), 'passagem assinada com outro segredo é recusada');
+    [$r4] = $chegar($passagem(['x' => time() - 1]));
+    ok(str_contains($r4['local'], 'p=login'), 'passagem vencida é recusada');
+    [$r5] = $chegar($passagem(['para' => 'laravel']));
+    ok(str_contains($r5['local'], 'p=login'), 'passagem feita para o Laravel não entra aqui');
+    [$r6, $n6] = $chegar($passagem(['t' => $betaId]));
+    ok(str_contains($r6['local'], 'p=login') && str_contains($n6->get('index.php?p=dashboard')['local'], 'p=login'),
+       'usuário da Alfa com a locadora da Beta: o RLS não acha o usuário e nada abre');
+    ok(str_contains($alfa->get('index.php?p=dashboard')['corpo'], 'p=login&amp;a=ir&amp;d=%2Fclientes'),
+       'com a ponte ligada, o menu leva Clientes para o Laravel');
+}
+
 secao('Painel da plataforma');
 $senhaSuporte = getenv('LOCGESTOR_SUPORTE_SENHA');
 if (!$senhaSuporte) {

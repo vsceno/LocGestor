@@ -286,7 +286,7 @@ function layout_start(string $titulo, string $menuAtivo = ''): void
     </div>
     <nav class="menu">
         <?php foreach (AREA === 'plataforma' ? MENU_PLATAFORMA : MENU as $mod => [$rotulo, $ico]): ?>
-            <a href="<?= e(url($mod)) ?>"<?= $mod === $menuAtivo ? ' class="ativo" aria-current="page"' : '' ?>>
+            <a href="<?= e((function_exists('ponte_url_menu') ? ponte_url_menu($mod) : null) ?? url($mod)) ?>"<?= $mod === $menuAtivo ? ' class="ativo" aria-current="page"' : '' ?>>
                 <?= icone($ico) ?><span><?= e($rotulo) ?></span>
             </a>
         <?php endforeach; ?>

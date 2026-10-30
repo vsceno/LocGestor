@@ -16,6 +16,7 @@ require __DIR__ . '/app/arquivos.php';
 require __DIR__ . '/app/negocio.php';
 require __DIR__ . '/app/orcamento.php';
 require __DIR__ . '/app/recibo.php';
+require __DIR__ . '/app/ponte.php';
 
 // Senha temporária: até trocá-la, o usuário só acessa a tela de troca de senha (e o Sair)
 if (!empty(user()['trocar_senha']) && get('p') !== 'login'

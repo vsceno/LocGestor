@@ -128,3 +128,61 @@ function login_sair(): void
     flash('Você saiu do sistema.');
     redirect(url('login'));
 }
+
+// ---------------------------------------------------------------------
+// Ponte de sessão com o Laravel (app/ponte.php), durante a migração
+// ---------------------------------------------------------------------
+
+/** index.php?p=login&a=ir&d=/clientes : quem está logado aqui entra na tela do Laravel sem digitar a senha. */
+function login_ir(): void
+{
+    $destino = get('d', '/painel');
+    if (!ponte_ligada() || user() === null || !empty($_SESSION['suporte']) || !is_uuid((string) ($_SESSION['usuario']['id'] ?? ''))
+        || !preg_match('#^/[a-z0-9/_-]*(\?[A-Za-z0-9=&%_.-]*)?$#', $destino)) {
+        redirect(url('dashboard'));
+    }
+    header('Referrer-Policy: no-referrer');
+    redirect(rtrim((string) config('laravel_url'), '/') . '/ponte?' . http_build_query(['t' => ponte_gerar($destino)]));
+}
+
+/** index.php?p=login&a=ponte&t=... : chegada do Laravel. Confere tudo de novo no banco antes de abrir a sessão. */
+function login_ponte(): void
+{
+    header('Referrer-Policy: no-referrer');
+    $d = ponte_validar(get('t'));
+    if ($d === null) {
+        log_app('ALERTA DE SEGURANÇA', 'Passagem do Laravel recusada (assinatura, prazo ou já usada).');
+        flash('O link de acesso expirou. Entre com sua senha.', 'aviso');
+        redirect(url('login'));
+    }
+    $t = one('SELECT id, slug, status, vencimento, carencia_dias FROM tenants WHERE id = :id', ['id' => $d['t']]);
+    if ($t === null || $t['status'] !== 'ativa' || tenant_inadimplente($t)) {
+        flash('Acesso suspenso. Entre em contato com o suporte.', 'erro');
+        redirect(url('login'));
+    }
+    tenant_definir($t['id']);   // a busca do usuário já passa pelo RLS da locadora
+    $u = one('SELECT id, nome, login, perfil, ativo, senha_redefinida_em FROM usuarios WHERE id = :id', ['id' => $d['u']]);
+    if ($u === null || !$u['ativo']
+        || ($u['senha_redefinida_em'] !== null && strtotime((string) $u['senha_redefinida_em']) > (int) $d['e'])) {
+        tenant_limpar();
+        flash('Entre com sua senha.', 'aviso');
+        redirect(url('login'));
+    }
+    session_regenerate_id(true);
+    $_SESSION = [
+        'tenant_id'   => $t['id'],
+        'tenant_slug' => $t['slug'],
+        'usuario'     => ['id' => $u['id'], 'nome' => $u['nome'], 'login' => $u['login'], 'perfil' => $u['perfil']],
+        'login_em'    => (int) $d['e'],   // o login original: a regra da senha redefinida continua valendo
+    ];
+    log_app('INFO', 'Entrada pela ponte do Laravel.');
+    // Destino: "p=modulo&a=acao&..." deste sistema (assinado pelo Laravel; conferido mesmo assim)
+    parse_str((string) ($d['d'] ?? ''), $q);
+    $p = (string) ($q['p'] ?? 'dashboard');
+    unset($q['p']);
+    if (!preg_match('/^[a-z_]+$/', $p) || (isset($q['a']) && !preg_match('/^[a-z_]+$/', (string) $q['a']))) {
+        $p = 'dashboard';
+        $q = [];
+    }
+    redirect(url($p, array_filter($q, 'is_string')));
+}

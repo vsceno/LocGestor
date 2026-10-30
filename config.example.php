@@ -37,6 +37,11 @@ return [
     'cadastro_publico'    => false,
     'cadastro_dias_teste' => 14,
     'cadastro_plano'      => '',
+    // Ponte de sessão com o Laravel (pasta laravel/) durante a migração. Vazios = ponte desligada.
+    // O segredo (64 caracteres aleatórios) é o mesmo de LOCGESTOR_PONTE_SEGREDO no laravel/.env. Gere com:
+    //   php -r "echo bin2hex(random_bytes(32));"
+    'laravel_url'   => '',
+    'ponte_segredo' => '',
     // Cobrança automática das mensalidades pelo Asaas (vazio = desligada; veja o README).
     // A chave da API é segredo: fica só aqui, nunca no Git.
     'asaas' => [
