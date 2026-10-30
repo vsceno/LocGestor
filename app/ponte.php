@@ -75,7 +75,7 @@ function ponte_validar(string $passagem): ?array
 }
 
 /** Telas que já estão no Laravel: o menu deste sistema leva para lá (pela ponte) quando ela está ligada. */
-const PONTE_TELAS_LARAVEL = ['clientes' => '/clientes', 'produtos' => '/produtos', 'locacoes' => '/locacoes', 'reservas' => '/reservas', 'orcamentos' => '/orcamentos'];
+const PONTE_TELAS_LARAVEL = ['clientes' => '/clientes', 'produtos' => '/produtos', 'locacoes' => '/locacoes', 'reservas' => '/reservas', 'orcamentos' => '/orcamentos', 'caixa' => '/caixa'];
 
 function ponte_url_menu(string $modulo): ?string
 {

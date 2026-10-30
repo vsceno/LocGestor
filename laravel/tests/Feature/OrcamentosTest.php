@@ -91,11 +91,20 @@ class OrcamentosTest extends TestCase
 
     public function test_beta_nao_ve_nem_converte_orcamento_da_alfa(): void
     {
-        $o = $this->lerComoAdmin("SELECT o.id FROM orcamentos o JOIN tenants t ON t.id = o.tenant_id WHERE t.slug = 'alfa-locacoes' LIMIT 1")[0];
+        // A demonstração pode não ter orçamento: cria um como Alfa (fica na transação do teste)
+        $this->entrarComo('alfa-locacoes');
+        $this->post('/orcamentos', $this->dados())->assertSessionHasNoErrors();
+        $o = $this->salvo();
+        $this->post('/sair');
+
         $this->entrarComo('beta-eventos');
         $this->get("/orcamentos/{$o->id}")->assertNotFound();
         $this->post("/orcamentos/{$o->id}/converter", ['tipo' => 'reserva'])->assertNotFound();
         $this->delete("/orcamentos/{$o->id}")->assertNotFound();
-        $this->assertNotEmpty($this->lerComoAdmin('SELECT id FROM orcamentos WHERE id = ?', [$o->id]));
+        $this->get('/orcamentos?situacao=todos')->assertOk()->assertDontSee(route('orcamentos.show', $o->id), false);
+        $this->post('/sair');
+
+        $this->entrarComo('alfa-locacoes');
+        $this->assertSame('aberto', $this->salvo()->status);
     }
 }

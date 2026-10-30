@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\BuscaController;
+use App\Http\Controllers\CaixaController;
 use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
 use App\Http\Controllers\DevolucaoController;
@@ -84,6 +85,9 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/orcamentos/{id}', [OrcamentosController::class, 'show'])->whereUuid('id')->name('orcamentos.show');
     Route::post('/orcamentos/{id}/converter', [OrcamentosController::class, 'converter'])->whereUuid('id')->name('orcamentos.converter');
     Route::delete('/orcamentos/{id}', [OrcamentosController::class, 'destroy'])->whereUuid('id')->name('orcamentos.destroy');
+    Route::get('/caixa', [CaixaController::class, 'index'])->name('caixa.index');
+    Route::post('/caixa', [CaixaController::class, 'store'])->name('caixa.store');
+    Route::delete('/caixa/{id}', [CaixaController::class, 'destroy'])->whereUuid('id')->name('caixa.destroy');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');

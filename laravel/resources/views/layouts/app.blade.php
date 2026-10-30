@@ -14,7 +14,7 @@
             'manutencoes' => ['Manutenção', 'manutencao', legado('manutencoes')],
         ],
         'Financeiro' => [
-            'caixa'       => ['Fluxo de caixa', 'caixa', legado('caixa')],
+            'caixa'       => ['Fluxo de caixa', 'caixa', route('caixa.index')],
             'recibos'     => ['Recibos', 'recibos', legado('recibos')],
             'relatorios'  => ['Relatórios', 'relatorios', legado('relatorios')],
         ],
@@ -29,7 +29,7 @@
         ['Novo produto', route('produtos.create'), 'produtos'],
         ['Novo orçamento', route('orcamentos.create'), 'orcamentos'],
         ['Nova reserva', route('reservas.create'), 'reservas'],
-        ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
+        ['Lançar no caixa', route('caixa.index'), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],
         ['Ir para locações', route('locacoes.index'), 'locacoes'],
