@@ -814,9 +814,10 @@ PostgreSQL. No Laravel, `App\Support\Locadora` é o único lugar que define `app
 `SessaoLocadora` confere em toda requisição se a locadora está ativa e em dia, se o usuário está ativo e se a senha não
 foi redefinida.
 
-Já no Laravel: login, painel e clientes (lista e ficha). O resto abre no sistema atual.
+Já no Laravel: login, painel, busca e clientes (lista, ficha, cadastro, edição, bloqueio e exclusão). O resto abre no
+sistema atual.
 
-**Subir o Laravel (desenvolvimento):**
+**Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 
 ```bat
 cd laravel
@@ -825,8 +826,13 @@ copy .env.example .env
 php artisan key:generate
 npm install
 npm run build
-php artisan serve --port=8010
+cd ..
+mklink /J novo laravel\public
 ```
+
+A junção `novo` (ignorada pelo git) aponta só para `laravel/public`. O `.htaccess` da raiz devolve 404 para qualquer
+endereço `/laravel/...` e nega qualquer arquivo `.env`: o código, o `vendor` e os segredos do Laravel nunca são servidos.
+No `.env`, use `APP_URL=http://locgestor.test/novo` e `SESSION_PATH=/novo` (o cookie de sessão fica só nessa pasta).
 
 As telas do Laravel usam **Tailwind CSS 4** compilado pelo Vite (`npm run build` gera `public/build`). A fonte Inter vem
 do pacote `@fontsource-variable/inter`, junto com o build: nada é baixado da internet quando o sistema está em uso.
@@ -835,6 +841,13 @@ Atalhos: `Ctrl+K` (ou `/`) abre a paleta de busca e ações; o botão de lua/sol
 No `.env`, preencha `DB_*` com o mesmo papel do `db_app` do `config.php`, `SESSION_DRIVER=file` e `CACHE_STORE=file`.
 **Nunca rode `php artisan migrate`** contra esse banco: a estrutura continua nos arquivos de `database/`.
 
+**Testes do Laravel:** `cd laravel` e `php artisan test`. Eles usam o mesmo banco e o mesmo papel do `.env` (o RLS vale) e
+precisam dos dados de demonstração (`03_demo.sql`). Cada teste roda numa transação desfeita no fim, então nada fica
+gravado. Para enxergar dados de outra locadora (e provar que a tela não mostra), os testes usam uma conexão de
+superusuário só para leitura (`DB_ADMIN_USERNAME`/`DB_ADMIN_PASSWORD`, ou `PGUSER`/`PGPASSWORD`, padrão `postgres`).
+Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de clientes, ponte de sessão e busca.
+No GitHub, rodam junto com os testes do sistema atual (linha do PHP 8.4).
+
 **Ponte de sessão (entrar uma vez só):** os dois sistemas ficam em endereços diferentes, então quem está logado num
 recebe uma passagem assinada para entrar no outro. Ela vale 60 segundos, só pode ser usada uma vez e quem recebe
 confere a locadora e o usuário de novo no banco. Para ligar, gere um segredo
@@ -842,7 +855,7 @@ confere a locadora e o usuário de novo no banco. Para ligar, gere um segredo
 
 | Onde | Chaves |
 |---|---|
-| `config.php` | `'laravel_url' => 'http://127.0.0.1:8010'`, `'ponte_segredo' => '<segredo>'` |
+| `config.php` | `'laravel_url' => 'http://locgestor.test/novo'`, `'ponte_segredo' => '<segredo>'` |
 | `laravel/.env` | `LOCGESTOR_LEGADO_URL=http://locgestor.test`, `LOCGESTOR_PONTE_SEGREDO=<segredo>` |
 
 Com as chaves vazias, a ponte fica desligada e o menu usa só o sistema atual.

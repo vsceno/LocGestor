@@ -13,3 +13,6 @@ desktop.ini
 # Arquivos enviados (fotos de vistoria, assinaturas): nunca vão para o Git
 /storage/*
 !/storage/.htaccess
+
+# Atalho (junção do Windows) para laravel/public, servido em http://locgestor.test/novo
+/novo

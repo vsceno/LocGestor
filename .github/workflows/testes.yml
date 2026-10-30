@@ -46,7 +46,7 @@ jobs:
           coverage: none
 
       - name: Sintaxe de todos os arquivos PHP
-        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+        run: find . -name '*.php' -not -path './.git/*' -not -path './laravel/*' -print0 | xargs -0 -n1 php -l
 
       - name: Instalar o banco (papéis, estrutura, plataforma e demonstração)
         run: |
@@ -65,6 +65,32 @@ jobs:
                   $c["db_app"]["password"] = getenv("SENHA_APP");
                   $c["db_plataforma"]["password"] = getenv("SENHA_PLATAFORMA");
                   file_put_contents("config.php", "<?php\nreturn " . var_export($c, true) . ";\n");'
+
+      # Laravel (pasta laravel/): exige PHP 8.3+, então roda só na linha do 8.4.
+      # Mesmo banco e mesmo papel locgestor_app (o RLS vale); cada teste é desfeito no fim.
+      - name: Laravel - dependências
+        if: matrix.php == '8.4'
+        working-directory: laravel
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Laravel - .env do teste
+        if: matrix.php == '8.4'
+        working-directory: laravel
+        run: |
+          cp .env.example .env
+          cat >> .env <<EOF
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_DATABASE=locgestor
+          DB_USERNAME=locgestor_app
+          DB_PASSWORD=$SENHA_APP
+          EOF
+          php artisan key:generate --no-interaction
+
+      - name: Laravel - testes (login, isolamento, clientes, ponte e busca)
+        if: matrix.php == '8.4'
+        working-directory: laravel
+        run: php artisan test
 
       - name: Testes de isolamento entre locadoras
         run: php tests/isolamento.php
