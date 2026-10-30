@@ -44,7 +44,7 @@
                     <td class="num {{ $p->alugado > 0 ? '' : 'text-zinc-400' }}">{{ numero($p->alugado) }}</td>
                     <td class="num {{ $p->reservado > 0 ? '' : 'text-zinc-400' }}">{{ numero($p->reservado) }}</td>
                     <td class="num">
-                        @if ($p->manutencao > 0)<a class="text-marca-700 underline-offset-2 hover:underline dark:text-marca-400" href="{{ legado('manutencoes') }}">{{ numero($p->manutencao) }}</a>
+                        @if ($p->manutencao > 0)<a class="text-marca-700 underline-offset-2 hover:underline dark:text-marca-400" href="{{ route('manutencoes.index') }}">{{ numero($p->manutencao) }}</a>
                         @else<span class="text-zinc-400">0</span>@endif
                     </td>
                     <td class="num"><span class="{{ $selo }}">{{ numero($p->disponivel) }}</span></td>

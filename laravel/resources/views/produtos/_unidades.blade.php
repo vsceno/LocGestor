@@ -9,7 +9,7 @@
             <p class="text-xs text-zinc-500">{{ numero($ativas) }} de {{ numero($p->qtd_total) }} peça(s) com número de patrimônio{{ $uso->manutencao > 0 ? ' · ' . numero($uso->manutencao) . ' em manutenção' : '' }}</p>
         </div>
         <div class="flex gap-2">
-            <a class="btn-secundario" href="{{ legado('manutencoes', ['a' => 'nova', 'produto' => $p->id]) }}"><x-icone nome="manutencao" class="size-4" /> Enviar para manutenção</a>
+            <a class="btn-secundario" href="{{ route('manutencoes.create', ['produto' => $p->id]) }}"><x-icone nome="manutencao" class="size-4" /> Enviar para manutenção</a>
             @if ($ativas < $p->qtd_total)
                 <a class="btn-primario" href="{{ route('unidades.create', $p->id) }}"><x-icone nome="mais" class="size-4" /> Nova unidade</a>
             @endif

@@ -78,7 +78,7 @@
             <section class="cartao p-5">
                 <h2 class="cartao-titulo">Manutenção</h2>
                 <p class="mt-1 text-xs text-zinc-500">A unidade fica indisponível até a manutenção ser concluída.</p>
-                <a class="btn-secundario mt-3" href="{{ legado('manutencoes', ['a' => 'nova', 'unidade' => $u->id]) }}"><x-icone nome="manutencao" class="size-4" /> Enviar para manutenção</a>
+                <a class="btn-secundario mt-3" href="{{ route('manutencoes.create', ['unidade' => $u->id]) }}"><x-icone nome="manutencao" class="size-4" /> Enviar para manutenção</a>
             </section>
             <form method="post" action="{{ route('unidades.baixar', $u->id) }}" class="cartao border-red-200 p-5 dark:border-red-900/60"
                   data-confirmar="Dar baixa nesta unidade? O estoque do produto diminui 1.">
@@ -125,7 +125,7 @@
                                 @if ($h->tipo === 'locacao')
                                     <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ route('locacoes.show', $h->numero) }}">Locação nº {{ $h->numero }}</a>
                                 @else
-                                    <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ legado('manutencoes', ['a' => 'ver', 'id' => $h->ref]) }}">Manutenção nº {{ $h->numero }}</a>
+                                    <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ route('manutencoes.show', $h->ref) }}">Manutenção nº {{ $h->numero }}</a>
                                 @endif
                             </td>
                             <td class="tabular-nums">{{ data_br($h->inicio) }}</td>

@@ -11,7 +11,7 @@
         'Cadastros' => [
             'clientes'    => ['Clientes', 'clientes', route('clientes.index')],
             'produtos'    => ['Produtos', 'produtos', route('produtos.index')],
-            'manutencoes' => ['Manutenção', 'manutencao', legado('manutencoes')],
+            'manutencoes' => ['Manutenção', 'manutencao', route('manutencoes.index')],
         ],
         'Financeiro' => [
             'caixa'       => ['Fluxo de caixa', 'caixa', route('caixa.index')],
@@ -30,6 +30,7 @@
         ['Novo recibo', route('recibos.create'), 'recibos'],
         ['Novo orçamento', route('orcamentos.create'), 'orcamentos'],
         ['Nova reserva', route('reservas.create'), 'reservas'],
+        ['Nova manutenção', route('manutencoes.create'), 'manutencao'],
         ['Lançar no caixa', route('caixa.index'), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],
