@@ -218,7 +218,7 @@
                            ['Romaneio de troca', $documento('romaneio', ['tipo' => 'troca'])]] as [$doc, $url])
                     <a class="btn-secundario justify-center" href="{{ $url }}" target="_blank" rel="noopener">{{ $doc }}</a>
                 @endforeach
-                <a class="btn-secundario col-span-2 justify-center" href="{{ legado('recibos', ['a' => 'novo', 'locacao' => $loc->id]) }}"><x-icone nome="recibos" class="size-4" /> Emitir recibo</a>
+                <a class="btn-secundario col-span-2 justify-center" href="{{ route('recibos.create', ['locacao' => $loc->id]) }}"><x-icone nome="recibos" class="size-4" /> Emitir recibo</a>
             </div>
         </section>
 

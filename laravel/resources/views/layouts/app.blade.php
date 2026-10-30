@@ -15,7 +15,7 @@
         ],
         'Financeiro' => [
             'caixa'       => ['Fluxo de caixa', 'caixa', route('caixa.index')],
-            'recibos'     => ['Recibos', 'recibos', legado('recibos')],
+            'recibos'     => ['Recibos', 'recibos', route('recibos.index')],
             'relatorios'  => ['Relatórios', 'relatorios', legado('relatorios')],
         ],
     ];
@@ -27,6 +27,7 @@
         ['Nova locação', route('locacoes.create'), 'locacoes'],
         ['Novo cliente', route('clientes.create'), 'clientes'],
         ['Novo produto', route('produtos.create'), 'produtos'],
+        ['Novo recibo', route('recibos.create'), 'recibos'],
         ['Novo orçamento', route('orcamentos.create'), 'orcamentos'],
         ['Nova reserva', route('reservas.create'), 'reservas'],
         ['Lançar no caixa', route('caixa.index'), 'caixa'],
