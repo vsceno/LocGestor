@@ -214,8 +214,8 @@
         <section class="cartao p-5">
             <h2 class="cartao-titulo">Documentos</h2>
             <div class="mt-3 grid grid-cols-2 gap-2">
-                @foreach ([['Contrato', $documento('contrato')], ['Fatura', $documento('fatura')], ['Romaneio', $documento('romaneio')],
-                           ['Romaneio de troca', $documento('romaneio', ['tipo' => 'troca'])]] as [$doc, $url])
+                @foreach ([['Contrato', route('documentos.contrato', $loc->numero)], ['Fatura', route('documentos.fatura', $loc->numero)], ['Romaneio', route('documentos.romaneio', $loc->numero)],
+                           ['Romaneio de troca', route('documentos.romaneio', ['numero' => $loc->numero, 'tipo' => 'troca'])]] as [$doc, $url])
                     <a class="btn-secundario justify-center" href="{{ $url }}" target="_blank" rel="noopener">{{ $doc }}</a>
                 @endforeach
                 <a class="btn-secundario col-span-2 justify-center" href="{{ route('recibos.create', ['locacao' => $loc->id]) }}"><x-icone nome="recibos" class="size-4" /> Emitir recibo</a>

@@ -816,8 +816,8 @@ foi redefinida.
 
 Já no Laravel: login, painel, busca, clientes (lista, ficha, cadastro, edição, bloqueio e exclusão) e produtos (lista
 com disponibilidade, cadastro, edição e exclusão, categorias, kits e patrimônio) e locações (lista, ficha, nova locação e devolução, com recebimento, prorrogação, cancelamento,
-entrega, patrimônio, WhatsApp e PIX), reservas (com kits), orçamentos (com conversão em locação ou reserva) e os lançamentos do fluxo de caixa e os recibos. Documentos
-impressos, vistorias e o resto abrem no sistema atual.
+entrega, patrimônio, WhatsApp e PIX), reservas (com kits), orçamentos (com conversão em locação ou reserva) e os lançamentos do fluxo de caixa e os recibos. Contrato, fatura, romaneio e orçamento
+impressos são do Laravel; vistorias e o resto abrem no sistema atual.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 

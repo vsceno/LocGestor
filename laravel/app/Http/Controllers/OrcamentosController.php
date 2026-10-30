@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Documentos;
 use App\Support\Formulario;
 use App\Support\Locacoes;
 use App\Support\Recusa;
@@ -132,6 +133,28 @@ class OrcamentosController extends Controller
         return $r['tipo'] === 'locacao'
             ? redirect()->route('locacoes.show', $r['numero'])->with('flash', [['tipo' => 'ok', 'msg' => "Orçamento convertido em locação nº {$r['numero']}."]])
             : redirect()->route('reservas.show', $r['numero'])->with('flash', [['tipo' => 'ok', 'msg' => "Orçamento convertido em reserva nº {$r['numero']}."]]);
+    }
+
+    /** Impressão A4 do orçamento: mesmos itens e valores da ficha (orcamentos_imprimir() do sistema antigo). */
+    public function imprimir(string $id): View
+    {
+        $o = $this->orcamento($id);
+        $dias = Locacoes::diasCobranca($o->data_saida, $o->data_prev_devolucao);
+        $itens = DB::select("SELECT oi.quantidade, oi.periodo, oi.valor_diaria, oi.valor_semanal, oi.valor_quinzenal, oi.valor_mensal,
+                                    p.descricao, p.unidade,
+                                    CASE WHEN oi.periodo = 'automatico'
+                                         THEN preco_periodo(CAST(? AS integer), oi.valor_diaria, oi.valor_semanal, oi.valor_mensal)
+                                         ELSE preco_plano(CAST(? AS integer), oi.periodo, oi.valor_diaria, oi.valor_semanal, oi.valor_quinzenal, oi.valor_mensal)
+                                    END AS preco_total
+                               FROM orcamento_itens oi JOIN produtos p ON p.id = oi.produto_id
+                              WHERE oi.orcamento_id = ? ORDER BY p.descricao", [$dias, $dias, $o->id]);
+        return view('impressao.orcamento', [
+            'o'        => $o,
+            'dias'     => $dias,
+            'itens'    => Documentos::preparar($itens),
+            'subtotal' => array_sum(array_map(fn ($i) => $i->quantidade * (float) $i->preco_total, $itens)),
+            'empresa'  => DB::selectOne('SELECT * FROM empresa'),
+        ]);
     }
 
     public function destroy(string $id): RedirectResponse

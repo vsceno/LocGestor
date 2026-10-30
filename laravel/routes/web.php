@@ -5,6 +5,7 @@ use App\Http\Controllers\BuscaController;
 use App\Http\Controllers\CaixaController;
 use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
+use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\DevolucaoController;
 use App\Http\Controllers\KitsController;
 use App\Http\Controllers\LocacoesController;
@@ -94,6 +95,10 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::post('/recibos', [RecibosController::class, 'store'])->name('recibos.store');
     Route::get('/recibos/{id}', [RecibosController::class, 'show'])->whereUuid('id')->name('recibos.show');
     Route::get('/recibos/{id}/imprimir', [RecibosController::class, 'imprimir'])->whereUuid('id')->name('recibos.imprimir');
+    Route::get('/locacoes/{numero}/contrato', [DocumentosController::class, 'contrato'])->whereNumber('numero')->name('documentos.contrato');
+    Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
+    Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');
+    Route::get('/orcamentos/{id}/imprimir', [OrcamentosController::class, 'imprimir'])->whereUuid('id')->name('orcamentos.imprimir');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');

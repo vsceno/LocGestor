@@ -165,3 +165,11 @@ if (!function_exists('valor_br')) {
         return is_numeric($s) ? round((float) $s, 2) : null;
     }
 }
+
+if (!function_exists('asset_legado')) {
+    /** Arquivo estático do sistema antigo (CSS e JS de impressão), com ?v= para não usar a versão antiga do cache. */
+    function asset_legado(string $caminho): string
+    {
+        return rtrim((string) config('locgestor.legado_url'), '/') . '/' . $caminho . '?v=' . (int) @filemtime(base_path('../' . $caminho));
+    }
+}

@@ -17,7 +17,7 @@
 @endsection
 
 @section('acoes')
-    <a class="btn-secundario" href="{{ legado('orcamentos', ['a' => 'imprimir', 'id' => $o->id]) }}" target="_blank" rel="noopener">Imprimir</a>
+    <a class="btn-secundario" href="{{ route('orcamentos.imprimir', $o->id) }}" target="_blank" rel="noopener">Imprimir</a>
     @if ($whatsapp)
         <a class="btn border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-300"
            href="{{ $whatsapp }}" target="_blank" rel="noopener"><x-icone nome="whatsapp" class="size-4" /> Enviar no WhatsApp</a>
