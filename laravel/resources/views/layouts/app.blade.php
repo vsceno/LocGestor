@@ -3,7 +3,7 @@
     $grupos = [
         'Operação' => [
             'painel'      => ['Painel', 'painel', route('painel')],
-            'locacoes'    => ['Locações', 'locacoes', legado('locacoes')],
+            'locacoes'    => ['Locações', 'locacoes', route('locacoes.index')],
             'reservas'    => ['Reservas', 'reservas', legado('reservas')],
             'orcamentos'  => ['Orçamentos', 'orcamentos', legado('orcamentos')],
             'roteiro'     => ['Roteiro', 'roteiro', legado('roteiro')],
@@ -32,7 +32,7 @@
         ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],
-        ['Ir para locações', legado('locacoes'), 'locacoes'],
+        ['Ir para locações', route('locacoes.index'), 'locacoes'],
         ['Ir para produtos', route('produtos.index'), 'produtos'],
         ['Ir para relatórios', legado('relatorios'), 'relatorios'],
         ['Configurações', legado('config'), 'config'],

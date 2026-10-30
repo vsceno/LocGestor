@@ -123,7 +123,7 @@
                         <tr>
                             <td>
                                 @if ($h->tipo === 'locacao')
-                                    <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ legado('locacoes', ['a' => 'ver', 'n' => $h->numero]) }}">Locação nº {{ $h->numero }}</a>
+                                    <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ route('locacoes.show', $h->numero) }}">Locação nº {{ $h->numero }}</a>
                                 @else
                                     <a class="font-medium text-marca-700 hover:underline dark:text-marca-400" href="{{ legado('manutencoes', ['a' => 'ver', 'id' => $h->ref]) }}">Manutenção nº {{ $h->numero }}</a>
                                 @endif

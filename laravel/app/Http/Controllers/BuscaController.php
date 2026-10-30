@@ -66,7 +66,7 @@ class BuscaController extends Controller
         }
 
         $r['Locações'] = array_map(fn ($l) => [
-            'rotulo' => 'Locação nº ' . $l->numero, 'ico' => 'locacoes', 'url' => legado('locacoes', ['a' => 'ver', 'n' => $l->numero]),
+            'rotulo' => 'Locação nº ' . $l->numero, 'ico' => 'locacoes', 'url' => route('locacoes.show', $l->numero),
             'detalhe' => $l->nome . ' · ' . data_br($l->data_saida) . ' · ' . $l->status,
         ], DB::select('SELECT l.numero, l.data_saida, l.status, c.nome FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
                         WHERE l.numero = ? OR (NOT CAST(? AS boolean) AND lower(l.local_uso) LIKE lower(?))

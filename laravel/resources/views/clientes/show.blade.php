@@ -59,7 +59,7 @@
                     <thead><tr><th>Locação</th><th>Saída</th><th>Devolução</th><th>Situação</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead>
                     <tbody>
                     @foreach ($locacoes as $l)
-                        @php $saldo = $l->status === 'cancelada' ? 0 : $l->valor_atual - $l->valor_pago; $url = legado('locacoes', ['a' => 'ver', 'n' => $l->numero]); @endphp
+                        @php $saldo = $l->status === 'cancelada' ? 0 : $l->valor_atual - $l->valor_pago; $url = route('locacoes.show', $l->numero); @endphp
                         <tr data-href="{{ $url }}">
                             <td><a href="{{ $url }}" class="font-medium hover:text-marca-600">#{{ $l->numero }}</a></td>
                             <td class="tabular-nums text-zinc-600 dark:text-zinc-400">{{ data_br($l->data_saida) }}</td>

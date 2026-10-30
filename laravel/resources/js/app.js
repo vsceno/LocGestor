@@ -302,3 +302,28 @@ document.querySelectorAll('form[data-form-kit]').forEach((form) => {
     caixa.addEventListener('change', somar);
     somar();
 });
+
+/* ---------- PIX: QR Code e "copia e cola" (a biblioteca só é baixada nas páginas com PIX) ---------- */
+document.querySelectorAll('[data-pix]').forEach(async (bloco) => {
+    const codigo = bloco.dataset.pix;
+    const alvo = bloco.querySelector('[data-pix-qr]');
+    if (alvo) {
+        const { default: qrcode } = await import('qrcode-generator');
+        const qr = qrcode(0, 'M');   // tamanho automático, correção de erro média (igual ao sistema antigo)
+        qr.addData(codigo);
+        qr.make();
+        alvo.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    }
+    const botao = bloco.querySelector('[data-pix-copiar]');
+    const campo = bloco.querySelector('[data-pix-codigo]');
+    botao?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(codigo);
+        } catch {
+            campo.select();             // http sem certificado: a área de transferência moderna fica bloqueada
+            document.execCommand('copy');
+        }
+        botao.textContent = 'Copiado!';
+        setTimeout(() => { botao.textContent = 'Copiar código'; }, 2000);
+    });
+});
