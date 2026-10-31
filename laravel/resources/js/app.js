@@ -357,3 +357,17 @@ document.querySelectorAll('form[data-vistoria]').forEach(async (form) => {
     const { vistoria } = await import('./vistoria.js');
     vistoria(form);
 });
+
+/* ---------- Recados do painel: fechados ficam guardados no navegador de cada pessoa (sem armazenamento, voltam depois) ---------- */
+(() => {
+    const chave = 'lg_recados_fechados';
+    const lidos = () => { try { return JSON.parse(localStorage.getItem(chave) || '[]'); } catch (e) { return []; } };
+    document.querySelectorAll('[data-recado]').forEach((el) => {
+        const id = el.dataset.recado;
+        if (lidos().includes(id)) { el.hidden = true; }
+        el.querySelector('.recado-fechar')?.addEventListener('click', () => {
+            el.hidden = true;
+            guardar(chave, JSON.stringify([...lidos(), id].slice(-50)));
+        });
+    });
+})();

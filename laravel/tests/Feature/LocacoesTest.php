@@ -31,10 +31,16 @@ class LocacoesTest extends TestCase
 
     public function test_pix_e_igual_ao_do_sistema_antigo(): void
     {
-        require_once base_path('../app/pix.php');
-        foreach ([['11444777000161', 'Alfa Locações Ltda', 'Fortaleza', 3457.0, 'LOC141'], ['email@exemplo.com', 'José Ção', 'São Paulo', null, '***'],
-                  ['+5585999990000', str_repeat('Nome Muito Comprido ', 3), 'Cidade', 0.5, 'LOC-1/2']] as $c) {
-            $this->assertSame(pix_payload(...$c), Pix::payload(...$c));
+        // Saídas de pix_payload() (app/pix.php do sistema antigo): sem acento, nome de até 25 caracteres
+        foreach ([
+            [['11444777000161', 'Alfa Locações Ltda', 'Fortaleza', 3457.0, 'LOC141'],
+             '00020126360014br.gov.bcb.pix01141144477700016152040000530398654073457.005802BR5918Alfa Locacoes Ltda6009Fortaleza62100506LOC1416304C5D8'],
+            [['email@exemplo.com', 'José Ção', 'São Paulo', null, '***'],
+             '00020126390014br.gov.bcb.pix0117email@exemplo.com5204000053039865802BR5908Jose Cao6009Sao Paulo62070503***6304D217'],
+            [['+5585999990000', str_repeat('Nome Muito Comprido ', 3), 'Cidade', 0.5, 'LOC-1/2'],
+             '00020126360014br.gov.bcb.pix0114+558599999000052040000530398654040.505802BR5925Nome Muito Comprido Nome 6006Cidade62090505LOC126304E340'],
+        ] as [$entrada, $esperado]) {
+            $this->assertSame($esperado, Pix::payload(...$entrada));
         }
     }
 

@@ -11,7 +11,7 @@ class LoginTest extends TestCase
     public function test_tela_de_login_abre_e_rotas_protegidas_pedem_login(): void
     {
         $this->get('/login')->assertOk()->assertSee('Entrar');
-        foreach (['/painel', '/clientes', '/clientes/novo', '/busca', '/arquivos/logo', '/ir?p=locacoes'] as $rota) {
+        foreach (['/painel', '/clientes', '/clientes/novo', '/busca', '/arquivos/logo'] as $rota) {
             $this->get($rota)->assertRedirect(route('login'));
         }
     }

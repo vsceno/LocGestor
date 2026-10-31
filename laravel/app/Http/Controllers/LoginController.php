@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Locadora;
+use App\Support\LoginProtecao;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
@@ -36,8 +37,8 @@ class LoginController extends Controller
         $login = strtolower(trim((string) $request->input('login')));
         $senha = $request->input('senha');
 
-        $chaves = $this->chaves($request, "$slug|$login");
-        if ($this->bloqueado($chaves)) {
+        $chaves = LoginProtecao::chaves('locadora', "$slug|$login", $request->ip());
+        if (LoginProtecao::bloqueado($chaves)) {
             usleep(random_int(600000, 1000000));
             Log::alert('Login bloqueado por excesso de tentativas.');
             return $this->voltar($slug, 'Muitas tentativas de acesso. Aguarde ' . config('locgestor.login_janela_min') . ' minutos e tente de novo.');
@@ -66,7 +67,7 @@ class LoginController extends Controller
             DB::update('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [password_hash($senha, PASSWORD_DEFAULT), $u->id]);
         }
         DB::update('UPDATE usuarios SET ultimo_acesso = now() WHERE id = ?', [$u->id]);
-        DB::delete('DELETE FROM login_tentativas WHERE chave = ?', [$chaves['conta']]);
+        LoginProtecao::sucesso($chaves);
 
         $request->session()->regenerate();
         $request->session()->put([
@@ -82,35 +83,14 @@ class LoginController extends Controller
 
     public function sair(Request $request): RedirectResponse
     {
-        Locadora::limpar();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        Locadora::encerrarSessao($request->session());
         return redirect()->route('login');
-    }
-
-    /** Chaves das tentativas: mesma fórmula do sistema antigo (login_chaves), área "locadora". */
-    private function chaves(Request $request, string $conta): array
-    {
-        return [
-            'ip'    => hash('sha256', 'ip|' . $request->ip()),
-            'conta' => hash('sha256', 'conta|locadora|' . mb_strtolower($conta)),
-        ];
-    }
-
-    private function bloqueado(array $chaves): bool
-    {
-        $r = DB::selectOne('SELECT count(*) FILTER (WHERE chave = ?) AS conta, count(*) FILTER (WHERE chave = ?) AS ip
-                              FROM login_tentativas
-                             WHERE chave IN (?, ?) AND criado_em > now() - make_interval(mins => ?)',
-            [$chaves['conta'], $chaves['ip'], $chaves['conta'], $chaves['ip'], config('locgestor.login_janela_min')]);
-        return $r->conta >= config('locgestor.login_max_conta') || $r->ip >= config('locgestor.login_max_ip');
     }
 
     private function falhar(array $chaves, string $slug): RedirectResponse
     {
         Locadora::limpar();
-        DB::insert('INSERT INTO login_tentativas (chave) VALUES (?), (?)', [$chaves['conta'], $chaves['ip']]);
-        DB::delete("DELETE FROM login_tentativas WHERE criado_em < now() - INTERVAL '1 day'");
+        LoginProtecao::falhou($chaves);
         usleep(random_int(600000, 1000000));   // atraso contra tentativa e erro
         Log::warning('Login recusado.');
         return $this->voltar($slug, 'Dados de acesso inválidos.');

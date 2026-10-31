@@ -766,7 +766,7 @@ function tenants_suporte_entrar(): void
        VALUES (:t, :l, :m, :h, now() + make_interval(mins => :min))",
       ['t' => $t['id'], 'l' => user()['login'] ?? '', 'm' => $motivo, 'h' => $hash, 'min' => SUPORTE_CODIGO_MIN]);
     log_app('INFO', "Acesso de suporte aberto na locadora {$t['slug']} por " . (user()['login'] ?? '-') . '.');
-    redirect('index.php?p=suporte&a=entrar&t=' . rawurlencode($codigo));
+    redirect(rtrim((string) config('laravel_url', ''), '/') . '/suporte/entrar?t=' . rawurlencode($codigo));
 }
 
 // ---------------------------------------------------------------------

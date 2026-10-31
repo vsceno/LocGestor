@@ -1,14 +1,8 @@
 <?php
 
 return [
-    // Telas que ainda não foram para o Laravel abrem no sistema antigo
-    'legado_url' => env('LOCGESTOR_LEGADO_URL', 'http://locgestor.test'),
-
     // Mesma pasta de arquivos do sistema antigo (fotos de vistoria, assinaturas, logomarca)
     'pasta_arquivos' => env('LOCGESTOR_PASTA_ARQUIVOS', base_path('../storage')),
-
-    // Ponte de sessão com o sistema antigo: mesmo segredo de ponte_segredo no ../config.php (vazio = desligada)
-    'ponte_segredo' => env('LOCGESTOR_PONTE_SEGREDO', ''),
 
     'por_pagina' => 20,
 
@@ -16,4 +10,22 @@ return [
     'login_janela_min' => 15,
     'login_max_conta' => 5,
     'login_max_ip' => 20,
+
+    // Cadastro público ("Teste grátis"): desligado por padrão (as mesmas chaves do config.php do sistema antigo)
+    'cadastro_publico' => filter_var(env('LOCGESTOR_CADASTRO_PUBLICO', false), FILTER_VALIDATE_BOOLEAN),
+    'cadastro_dias_teste' => (int) env('LOCGESTOR_CADASTRO_DIAS_TESTE', 14),
+    'cadastro_plano' => env('LOCGESTOR_CADASTRO_PLANO', ''),
+
+    // Cobrança automática das mensalidades pelo Asaas. Sem chave, fica desligada (a rotina só suspende e avisa).
+    // Os nomes são os mesmos das variáveis LOCGESTOR_ASAAS_* do sistema antigo (config.php).
+    'asaas' => [
+        'ambiente' => env('LOCGESTOR_ASAAS_AMBIENTE', 'sandbox') === 'producao' ? 'producao' : 'sandbox',
+        'url' => env('LOCGESTOR_ASAAS_URL', ''),
+        'chave' => env('LOCGESTOR_ASAAS_CHAVE', ''),
+        'webhook_token' => env('LOCGESTOR_ASAAS_WEBHOOK_TOKEN', ''),
+        'dias_antes' => max(1, min(30, (int) env('LOCGESTOR_ASAAS_DIAS_ANTES', 10))),
+    ],
+
+    // Contato mostrado no aviso de mensalidade da locadora (vazio = sem contato)
+    'suporte_contato' => env('LOCGESTOR_SUPORTE_CONTATO', ''),
 ];

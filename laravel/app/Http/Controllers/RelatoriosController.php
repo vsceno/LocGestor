@@ -98,8 +98,10 @@ class RelatoriosController extends Controller
     private function periodo(Request $request): array
     {
         $padrao = now()->startOfMonth()->subMonths(11)->toDateString();
-        $de = Formulario::dataValida((string) $request->query('de', $padrao)) ? (string) $request->query('de') : $padrao;
-        $ate = Formulario::dataValida((string) $request->query('ate', now()->toDateString())) ? (string) $request->query('ate') : now()->toDateString();
+        $de = (string) $request->query('de', $padrao);
+        $ate = (string) $request->query('ate', now()->toDateString());
+        $de = Formulario::dataValida($de) ? $de : $padrao;
+        $ate = Formulario::dataValida($ate) ? $ate : now()->toDateString();
         return $ate < $de ? [$ate, $de] : [$de, $ate];
     }
 

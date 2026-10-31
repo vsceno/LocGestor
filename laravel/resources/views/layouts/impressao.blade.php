@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ $titulo }}</title>
-<link rel="stylesheet" href="{{ asset_legado('assets/css/print.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/css/print.css') }}">
 </head>
 <body>
 <div class="barra-impressao">

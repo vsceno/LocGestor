@@ -1,5 +1,4 @@
 @php
-    // Telas já no Laravel usam rota; as outras abrem no sistema antigo (pela ponte, já logado)
     $grupos = [
         'Operação' => [
             'painel'      => ['Painel', 'painel', route('painel')],
@@ -59,6 +58,7 @@
     })();
 </script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
+@include('layouts._pwa')
 </head>
 <body class="h-full">
 <div class="flex min-h-full">
@@ -152,6 +152,52 @@
                 </button>
             </div>
         </header>
+
+        {{-- Acesso de suporte: sessão só de leitura, com prazo; o botão encerra e a ação fica na auditoria da locadora --}}
+        @if (session('suporte'))
+            <div role="status" class="border-b border-amber-200 bg-amber-50 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6 lg:px-8">
+                    <span>Acesso de suporte (somente leitura) · termina às {{ date('H:i', session('suporte.expira')) }} · motivo: {{ session('suporte.motivo') }}</span>
+                    <form method="post" action="{{ route('suporte.sair') }}">
+                        @csrf
+                        <button class="font-medium underline underline-offset-2">Encerrar acesso</button>
+                    </form>
+                </div>
+            </div>
+        @endif
+
+        {{-- Mensalidade do LocGestor: aviso só para o administrador; com fatura em aberto, o botão leva ao pagamento --}}
+        @php $mensalidade = \App\Support\Mensalidade::aviso(); @endphp
+        @if ($mensalidade)
+            <div role="alert" class="border-b text-sm {{ $mensalidade['tipo'] === 'erro'
+                    ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300' }}">
+                <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6 lg:px-8">
+                    <span>{{ $mensalidade['texto'] }}</span>
+                    @if ($mensalidade['link'] !== '')
+                        <a href="{{ $mensalidade['link'] }}" target="_blank" rel="noopener noreferrer" class="btn-primario py-1 text-xs">Pagar agora</a>
+                    @endif
+                </div>
+            </div>
+        @endif
+
+        {{-- Recados do painel da plataforma: todas as locadoras veem até a validade; fechar fica guardado no navegador --}}
+        @foreach (\App\Support\Recados::ativos() as $recado)
+            @php
+                $cor = [
+                    'aviso' => 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200',
+                    'novidade' => 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200',
+                    'manutencao' => 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200',
+                ][$recado->tipo] ?? 'border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100';
+            @endphp
+            <div role="note" data-recado="{{ $recado->id }}" class="recado border-b text-sm {{ $cor }}">
+                <div class="mx-auto flex max-w-7xl items-start gap-3 px-4 py-2 sm:px-6 lg:px-8">
+                    <p class="flex-1"><strong>{{ $recado->titulo }}</strong> · {{ $recado->texto }}
+                        <small class="opacity-70">(até {{ data_br($recado->expira_em) }})</small></p>
+                    <button type="button" class="recado-fechar shrink-0 text-lg leading-none opacity-70 hover:opacity-100" aria-label="Fechar recado">×</button>
+                </div>
+            </div>
+        @endforeach
 
         <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
             {{-- Telas com cabeçalho próprio (ex.: ficha do cliente) passam ocultarTitulo => true --}}

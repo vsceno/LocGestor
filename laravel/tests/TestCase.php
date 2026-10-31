@@ -5,6 +5,7 @@ namespace Tests;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
 /**
  * Base dos testes do Laravel.
@@ -28,6 +29,12 @@ abstract class TestCase extends BaseTestCase
             'username' => env('DB_ADMIN_USERNAME', env('PGUSER', 'postgres')),
             'password' => env('DB_ADMIN_PASSWORD', env('PGPASSWORD', '')),
         ])]);
+
+        // Logomarca, fotos e assinaturas dos testes vão para uma pasta temporária: a pasta de verdade tem os arquivos
+        // das locadoras, e trocar uma logomarca apaga a anterior do disco (o banco volta, o arquivo não).
+        $pasta = sys_get_temp_dir() . '/locgestor-teste-' . bin2hex(random_bytes(6));
+        config(['locgestor.pasta_arquivos' => $pasta]);
+        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory($pasta));
     }
 
     /** Leitura como superusuário (enxerga todas as locadoras). Só SELECT. */

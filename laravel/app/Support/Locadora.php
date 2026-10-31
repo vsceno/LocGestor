@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -80,5 +81,17 @@ final class Locadora
     public static function definirUsuario(string $id, string $login): void
     {
         DB::select("SELECT set_config('app.usuario_id', ?, false), set_config('app.usuario', ?, false)", [$id, mb_substr($login, 0, 80)]);
+    }
+
+    /**
+     * Encerra só a sessão da locadora. O painel da plataforma pode estar aberto no mesmo navegador (as duas áreas
+     * dividem a sessão), então as chaves do painel ficam; a sessão ganha um id novo (contra fixação).
+     */
+    public static function encerrarSessao(Session $sessao): void
+    {
+        self::limpar();
+        $sessao->forget(['tenant_id', 'tenant_slug', 'usuario', 'login_em', 'suporte']);
+        $sessao->regenerate();
+        $sessao->regenerateToken();
     }
 }

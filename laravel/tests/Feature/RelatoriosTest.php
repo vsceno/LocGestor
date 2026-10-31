@@ -25,6 +25,15 @@ class RelatoriosTest extends TestCase
         $this->get('/relatorios/nao_existe')->assertNotFound();
     }
 
+    /** Abrir pelo menu (sem ?de= e ?ate=) usa os últimos 12 meses, como o sistema antigo. */
+    public function test_sem_periodo_na_url_usa_os_ultimos_12_meses(): void
+    {
+        $this->entrarComo();
+        $inicio = now()->startOfMonth()->subMonths(11)->format('d/m/Y');
+        $this->get('/relatorios/faturamento?imprimir=1')->assertOk()
+            ->assertSee("Período: $inicio a " . now()->format('d/m/Y'));
+    }
+
     public function test_periodo_inverte_datas_trocadas_e_imprime_o_periodo(): void
     {
         $this->entrarComo();

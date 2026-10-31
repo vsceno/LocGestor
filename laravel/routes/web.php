@@ -3,6 +3,7 @@
 use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\BuscaController;
+use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CaixaController;
 use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
@@ -17,24 +18,32 @@ use App\Http\Controllers\ManutencoesController;
 use App\Http\Controllers\NovaLocacaoController;
 use App\Http\Controllers\OrcamentosController;
 use App\Http\Controllers\PainelController;
-use App\Http\Controllers\PonteController;
 use App\Http\Controllers\ProdutosController;
 use App\Http\Controllers\RecibosController;
 use App\Http\Controllers\RelatoriosController;
 use App\Http\Controllers\ReservasController;
 use App\Http\Controllers\RoteiroController;
 use App\Http\Controllers\SenhaController;
+use App\Http\Controllers\SuporteController;
 use App\Http\Controllers\UnidadesController;
 use App\Http\Controllers\UsuariosController;
 use App\Http\Controllers\VistoriasController;
+use App\Http\Controllers\WebhookAsaasController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [LoginController::class, 'index'])->name('login');
 Route::post('/login', [LoginController::class, 'entrar'])->name('login.entrar');
 Route::post('/sair', [LoginController::class, 'sair'])->name('sair');
-// Chegada pela ponte de sessão do sistema antigo (a passagem assinada é a autorização)
-Route::get('/ponte', [PonteController::class, 'entrar'])->name('ponte');
+// Link de suporte do painel da plataforma: o código de uso único é a autorização (não exige login)
+Route::get('/suporte/entrar', [SuporteController::class, 'entrar'])->name('suporte.entrar');
+// Cadastro público ("Teste grátis"): só existe com LOCGESTOR_CADASTRO_PUBLICO ligado (senão, 404)
+Route::get('/cadastro', [CadastroController::class, 'form'])->name('cadastro');
+Route::post('/cadastro', [CadastroController::class, 'criar'])->name('cadastro.criar');
+Route::get('/cadastro/pronto', [CadastroController::class, 'pronto'])->name('cadastro.pronto');
+// Avisos do Asaas (mensalidades): o endereço antigo (webhook_asaas.php) entrega a requisição a esta rota.
+// Sem CSRF (ver bootstrap/app.php); a autorização é o token do cabeçalho asaas-access-token.
+Route::post('/webhook/asaas', [WebhookAsaasController::class, 'receber'])->name('webhook.asaas');
 
 // Tudo abaixo exige sessão de uma locadora: o middleware define o app.tenant_id (RLS) da conexão
 Route::middleware(SessaoLocadora::class)->group(function () {
@@ -145,6 +154,9 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');
-    Route::get('/ir', [PonteController::class, 'ir'])->name('ir');
     Route::get('/arquivos/logo', [ArquivosController::class, 'logo'])->name('arquivos.logo');
+    Route::post('/suporte/sair', [SuporteController::class, 'sair'])->name('suporte.sair');
 });
+
+// Painel da plataforma (dono do SaaS): tem sessão própria, separada da sessão das locadoras
+require __DIR__.'/plataforma.php';

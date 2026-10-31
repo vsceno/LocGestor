@@ -51,18 +51,6 @@ if (!function_exists('data_br')) {
     }
 }
 
-if (!function_exists('legado')) {
-    /** Endereço de uma tela que ainda está no sistema antigo (index.php?p=...). */
-    function legado(string $modulo, array $params = []): string
-    {
-        // Com a ponte ligada, passa por /ir: o sistema antigo abre já logado, sem pedir a senha de novo
-        if (\App\Support\Ponte::ligada()) {
-            return route('ir', ['p' => $modulo] + $params);
-        }
-        return rtrim(config('locgestor.legado_url'), '/') . '/index.php?' . http_build_query(['p' => $modulo] + $params);
-    }
-}
-
 if (!function_exists('whatsapp_numero')) {
     /** Número para o wa.me (55 + DDD + número), do celular ou do telefone; null se nenhum servir. Mesma regra do sistema antigo. */
     function whatsapp_numero(object $c): ?string
@@ -163,13 +151,5 @@ if (!function_exists('valor_br')) {
             $s = str_replace(['.', ','], ['', '.'], $s);
         }
         return is_numeric($s) ? round((float) $s, 2) : null;
-    }
-}
-
-if (!function_exists('asset_legado')) {
-    /** Arquivo estático do sistema antigo (CSS e JS de impressão), com ?v= para não usar a versão antiga do cache. */
-    function asset_legado(string $caminho): string
-    {
-        return rtrim((string) config('locgestor.legado_url'), '/') . '/' . $caminho . '?v=' . (int) @filemtime(base_path('../' . $caminho));
     }
 }

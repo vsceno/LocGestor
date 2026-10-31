@@ -66,7 +66,7 @@
 
 @section('scripts')
     @if ($pix)
-        <script src="{{ asset_legado('assets/vendor/qrcode.js') }}"></script>
-        <script src="{{ asset_legado('assets/js/pix.js') }}"></script>
+        <script src="{{ asset('assets/vendor/qrcode.js') }}"></script>
+        <script src="{{ asset('assets/js/pix.js') }}"></script>
     @endif
 @endsection

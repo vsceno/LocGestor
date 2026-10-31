@@ -71,6 +71,6 @@
 @endsection
 
 @section('scripts')
-    <script src="{{ asset_legado('assets/vendor/chart.umd.js') }}"></script>
-    <script src="{{ asset_legado('assets/js/graficos.js') }}"></script>
+    <script src="{{ asset('assets/vendor/chart.umd.js') }}"></script>
+    <script src="{{ asset('assets/js/graficos.js') }}"></script>
 @endsection

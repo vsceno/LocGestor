@@ -148,30 +148,22 @@ Abra o `config.php` e preencha `password` em `db_app` e em `db_plataforma` com a
 No Laragon, clique em **Recarregar** (*Reload*). Ele cria o virtual host e a entrada no arquivo `hosts`
 (pode pedir permissão de administrador).
 
-### 2.6 Conferir o isolamento
+### 2.6 Rodar os testes
+
+Os testes do sistema estão na pasta `laravel/`. Eles usam o mesmo banco, com a conta `locgestor_app`, e cada
+teste é desfeito no fim:
 
 ```bat
-php tests\isolamento.php
+cd laravel
+php artisan test
 ```
 
-Conecta como `locgestor_app` (com a senha do `config.php`) e roda os testes de isolamento entre locadoras.
-Precisa terminar com **"todos os testes de isolamento passaram"**. Rode de novo sempre que mexer no banco.
+Entre eles estão o isolamento entre locadoras no próprio banco (RLS), as telas de cada módulo, o painel da
+plataforma, o WhatsApp, o PWA e a cobrança automática do Asaas (com a API simulada, sem conta no Asaas).
+Precisa terminar com **todos os testes passando**. Rode de novo sempre que mexer no banco.
 
-### 2.7 Testes funcionais (pelas telas)
-
-```bat
-set LOCGESTOR_SUPORTE_SENHA=senha-do-suporte
-php tests\funcional.php
-```
-
-Usa o sistema como um navegador: login, clientes, o roteiro de cobrança (R$ 845 previsto / R$ 520 final),
-isolamento pelas URLs e pela API, reservas, caixa e perfis, relatórios e CSV, proteção do login e o painel da
-plataforma. Tudo o que cria leva o prefixo `TESTE`/`teste` e é **apagado no fim**, mesmo se algum teste falhar.
-Sem `LOCGESTOR_SUPORTE_SENHA`, a parte do painel da plataforma é pulada. Outro endereço: `LOCGESTOR_URL`.
-
-`php tests\cobranca.php` testa a cobrança automática das mensalidades: sobe sozinho um simulador da API do Asaas
-(porta 8091) e uma cópia do sistema apontada para ele (porta 8092), e confere rotina diária, webhook, botão
-"Pagar agora", isolamento e falhas do Asaas. Não precisa de conta no Asaas.
+A única parte que ainda roda no PHP da raiz é o cadastro público (`tests\cadastro.php`), enquanto o cadastro do
+sistema antigo estiver em uso.
 
 **No GitHub** ([.github/workflows/testes.yml](.github/workflows/testes.yml)), a cada push e pull request, os
 testes rodam sozinhos com **PHP 8.1 e 8.4** e **PostgreSQL 18**: instala o banco do zero, aplica as migrações,
@@ -356,7 +348,8 @@ teste.
 - O aplicativo guarda no aparelho **só** arquivos estáticos (estilos, scripts, ícones). As telas, com dados de
   clientes e locações, vêm sempre do servidor e nunca ficam salvas: num celular compartilhado, nada sobra depois
   de sair do sistema. Sem internet, aparece a página "Sem conexão".
-- Arquivos: `manifest.webmanifest`, `sw.js` (service worker), `offline.html`, `assets/js/pwa.js` e `assets/icons/`.
+- Arquivos (em `laravel/public/`): `manifest.webmanifest`, `sw.js` (service worker), `offline.html` e
+  `assets/icons/`. Quem registra o aplicativo é a partial `laravel/resources/views/layouts/_pwa.blade.php`.
 
 ### Roteiro do motorista
 
@@ -436,39 +429,33 @@ reservas, clientes, produtos, kits, categorias, patrimônio, manutenções, caix
 
 ```
 locgestor/
-├── index.php              sistema das locadoras: index.php?p=<modulo>&a=<acao>
-├── plataforma.php         painel do dono do SaaS (sessão e papel de banco próprios)
-├── webhook_asaas.php      avisos de pagamento do Asaas (confere na API antes de dar baixa)
-├── cadastro.php           cadastro público de locadoras (desligado por padrão)
-├── config.example.php     modelo de configuração (versionado, sem senhas)
+├── laravel/               o sistema das locadoras e o painel da plataforma (Laravel 13), em /novo
+│   ├── app/               Controllers, Middleware e Support (regras: Locadora, Cobrancas, Assinaturas...)
+│   ├── routes/            web.php (locadoras), plataforma.php (painel do dono do SaaS), console.php (rotina)
+│   ├── resources/views/   telas em Blade (layouts/app.blade.php para a locadora)
+│   ├── public/            entrada do Laravel, compilados (build/), PWA (manifest, sw.js) e assets copiados
+│   └── tests/             testes do sistema (php artisan test)
+├── index.php              endereço antigo: só redireciona para o Laravel (/novo)
+├── plataforma.php         painel antigo do dono do SaaS (ainda em uso até a migração ser confirmada)
+├── webhook_asaas.php      avisos de pagamento do Asaas: entrega ao Laravel (POST /webhook/asaas)
+├── cadastro.php           cadastro público antigo de locadoras (desligado por padrão)
+├── config.example.php     modelo de configuração do sistema antigo (versionado, sem senhas)
 ├── config.php             configuração real (NÃO versionado)
 ├── .htaccess              sem listagem; bloqueia config*.php, .md, .sql, .bat, .log, .git
-├── app/                   (bloqueado para a web)
-│   ├── bootstrap.php      sessão, PDO, helpers, CSRF, formatação, validação, rotas e erros
-│   ├── tenant.php         contexto da locadora (único lugar que define app.tenant_id)
-│   ├── layout.php         menu, layout das telas e das páginas de impressão
-│   ├── arquivos.php       gravação e leitura de fotos/assinaturas (regrava toda imagem)
-│   ├── asaas.php          cliente da API do Asaas
-│   ├── assinatura.php     mensalidades: pagamento, suspensão e cobranças automáticas
-│   └── negocio.php        todas as regras de negócio
-├── modulos/               uma tela por arquivo: login, dashboard, clientes, produtos,
-│                          manutencoes, locacoes, reservas, caixa, relatorios, config, api, arquivos, busca, roteiro
-├── modulos_plataforma/    login, locadoras (tenants, mensalidades) e planos do painel da plataforma
-├── assets/css/            app.css (telas) e print.css (A4)
-├── assets/js/             app.js (máscaras, ViaCEP, itens, devolução), graficos.js e vistoria.js (assinatura e fotos)
-├── assets/vendor/         chart.umd.js (Chart.js 4.4.1) e qrcode.js (QR Code do PIX), locais
+├── app/                   (bloqueado para a web) bootstrap, tenant, suporte, layout e Asaas do sistema antigo
+├── modulos_plataforma/    telas antigas do painel da plataforma (login, locadoras, planos, números...)
+├── assets/                css/app.css, js/app.js e graficos.js, vendor/chart.umd.js (usados pelo painel antigo)
 ├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
 │                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
-├── tarefas/               diaria.php: rotina diária (cobranças do Asaas e suspensões); bloqueada para a web
-├── tests/                 isolamento.php (isolamento entre locadoras), funcional.php (pelas telas) e
-│                          cobranca.php (cobrança automática, com asaas_simulador.php no lugar do Asaas)
+├── tarefas/               diaria.php: rotina diária do sistema antigo; bloqueada para a web
+├── tests/                 cadastro.php (cadastro público do sistema antigo)
 ├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push
 ├── storage/               fotos e assinaturas das vistorias (não versionadas; acesso direto bloqueado)
 └── logs/                  app.log e php-erros.log (não versionados)
 ```
 
-Cada rota chama a função `<modulo>_<acao>()` do arquivo `modulos/<modulo>.php`.
-Ações de gravação seguem POST → Redirect → GET.
+As telas das locadoras estão em `laravel/` (rotas em `laravel/routes/web.php`). As telas antigas do sistema das
+locadoras (`modulos/`) foram retiradas depois de cada uma ter teste no Laravel.
 
 ---
 
@@ -492,10 +479,10 @@ O isolamento **não depende de o programador lembrar do `WHERE tenant_id`**. Que
 **Regras para quem for mexer no código:**
 
 - toda tabela nova de locadora: `tenant_id ... DEFAULT app_tenant_id()`, `UNIQUE (tenant_id, id)`, FKs compostas,
-  e incluí-la na lista do bloco de RLS do `01_schema.sql` **e** na lista `TABELAS` de `tests/isolamento.php`;
+  e incluí-la na lista do bloco de RLS do `01_schema.sql` **e** na lista `TABELAS` de `laravel/tests/Feature/IsolamentoBancoTest.php`;
 - toda view nova: `WITH (security_invoker = true)`;
 - **nunca** crie função `SECURITY DEFINER` (o schema e o teste recusam);
-- depois de qualquer mudança no banco, rode `php tests\isolamento.php`.
+- depois de qualquer mudança no banco, rode `php artisan test` na pasta `laravel/`.
 
 > ⚠ **PgBouncer:** se um dia for usado, configure **`pool_mode = session`**. Em modo `transaction`, o
 > `app.tenant_id` definido por uma requisição fica na conexão do servidor e **vaza para o próximo cliente**,
@@ -569,7 +556,7 @@ Preparação para o futuro:
 - **Auditoria** de toda alteração nos cadastros e movimentos (seção 3), sem dados pessoais nem senhas.
 - Pilhas de erro do PHP sem os argumentos das funções (`zend.exception_ignore_args`): a senha do banco nunca
   chega ao `php-erros.log`.
-- Pastas `app/`, `modulos/`, `modulos_plataforma/`, `database/`, `tests/` e `logs/` são bloqueadas para a web.
+- Pastas `app/`, `modulos_plataforma/`, `database/`, `tests/` e `logs/` são bloqueadas para a web.
 
 ---
 
@@ -579,7 +566,7 @@ Preparação para o futuro:
 |---|---|
 | "Copie config.example.php para config.php..." | crie o `config.php` (passo 2.4) |
 | "Não foi possível conectar ao banco de dados" | PostgreSQL desligado ou senha errada no `config.php` |
-| `php tests\isolamento.php` acusa falha | **não use o sistema em produção** até corrigir: algo no banco deixou de isolar as locadoras |
+| `php artisan test` (em `laravel/`) acusa falha no isolamento | **não use o sistema em produção** até corrigir: algo no banco deixou de isolar as locadoras |
 | Gráficos vazios em `http://localhost/locgestor/` | um `.htaccess` em `C:\laragon\www` que bloqueia `/vendor/` impede o Chart.js de carregar. Acesse por `http://locgestor.test` |
 | Arquivos "travados" (erro no `git commit`, log com linhas faltando) | programas de backup/sincronização (TeraBox, OneDrive etc.) prendem os arquivos enquanto copiam. Exclua a pasta do projeto da sincronização (ela também contém o `config.php` com as senhas) |
 | PostgreSQL aceita qualquer senha | o Laragon vem com `trust` no `pg_hba.conf`. Siga a seção 10.5 antes de expor a máquina |
@@ -625,7 +612,8 @@ psql -U postgres -d locgestor -f database\migrations\024_periodo_do_item.sql
 psql -U postgres -d locgestor -f database\migrations\025_dias_cobranca.sql
 psql -U postgres -d locgestor -f database\migrations\026_periodo_orcamento_reserva.sql
 psql -U postgres -d locgestor -f database\migrations\027_logomarca.sql
-php tests\isolamento.php
+cd laravel
+php artisan test
 ```
 
 | Migração | O que faz |
@@ -709,7 +697,8 @@ máquina não protege contra defeito no disco, roubo ou vírus.
 psql -U postgres -c "DROP DATABASE locgestor"
 psql -U postgres -d postgres -v senha_app=SENHA_APP -v senha_plataforma=SENHA_PLAT -f database\00_roles.sql
 pg_restore -U postgres -d locgestor C:\laragon\backups\locgestor\locgestor_AAAAMMDD_HHMMSS.dump
-php tests\isolamento.php
+cd laravel
+php artisan test
 ```
 
 O `00_roles.sql` recria os papéis e o banco vazio; o `pg_restore` traz as tabelas, os dados, o RLS e as permissões.
@@ -738,7 +727,7 @@ afetados pela mudança, então siga na ordem:
    host    all    all    127.0.0.1/32    scram-sha-256
    host    all    all    ::1/128         scram-sha-256
    ```
-5. **Inicie o PostgreSQL** e confira: `psql -U postgres` deve pedir senha; `php tests\isolamento.php` deve passar;
+5. **Inicie o PostgreSQL** e confira: `psql -U postgres` deve pedir senha; `php artisan test` (em `laravel/`) deve passar;
    abra o LocGestor e os outros projetos.
 
 Se algo parar de funcionar, volte `scram-sha-256` para `trust` no `pg_hba.conf` e reinicie o PostgreSQL.
@@ -781,7 +770,7 @@ Como funciona e o que protege:
   estornado pelo painel: se o dinheiro voltar ao cliente no Asaas, ajuste o vencimento à mão.
 - O sistema da locadora só lê o **link** das cobranças **dela** (RLS na tabela `assinatura_cobrancas`).
 - Mensalidade já vencida é cobrada com vencimento para hoje (o Asaas não aceita data passada).
-- Os testes (`php tests\cobranca.php`) usam um simulador da API; antes de cobrar de verdade, faça um ciclo
+- Os testes da cobrança (`laravel/tests/Feature/Plataforma/CobrancaAsaasTest.php`) usam a API simulada; antes de cobrar de verdade, faça um ciclo
   completo no **sandbox** (gerar, pagar pela fatura de teste e conferir a baixa).
 
 ---
@@ -820,8 +809,13 @@ entrega, patrimônio, WhatsApp e PIX), reservas (com kits), orçamentos (com con
 caixa (lançamentos, contas a pagar com recorrentes e previsão), os recibos, a manutenção, os relatórios (com CSV,
 impressão e a exportação para o contador), as configurações (empresa e logomarca, usuários, senha e auditoria) e o
 roteiro do motorista. Contrato, fatura, romaneio, orçamento impresso e vistorias (com fotos e assinatura) também são
-do Laravel. Ainda no sistema atual: a plataforma (painel do operador, planos, uso e a cobrança pelo Asaas, com o
-webhook e a rotina diária). As telas antigas continuam acessíveis pelo endereço, mas o menu já leva ao Laravel.
+do Laravel. A plataforma também: o painel do operador (`/novo/plataforma/login`, com sessão própria) tem locadoras
+(cadastro, plano, mensalidade, pagamentos e estorno, suspensão, senha temporária, acesso de suporte e cancelamento),
+planos, números, uso por locadora, recados, auditoria e a troca da senha do operador. O cadastro público ("Teste
+grátis") fica no Laravel, desligado por padrão (`LOCGESTOR_CADASTRO_PUBLICO=true` no `.env` liga). A cobrança pelo Asaas
+(cobrança automática, conferência, webhook em `/webhook/asaas` e a rotina diária `php artisan locgestor:rotina-diaria`,
+agendada às 06:00 pelo `schedule:run`) também é do Laravel. O endereço antigo do webhook (`webhook_asaas.php`) só
+encaminha a requisição para ele. As telas antigas continuam acessíveis pelo endereço, mas o menu já leva ao Laravel.
 
 **Subir o Laravel (desenvolvimento, Laragon):** o Laravel responde em `http://locgestor.test/novo`, pelo mesmo Apache.
 
@@ -852,17 +846,9 @@ No `.env`, preencha `DB_*` com o mesmo papel do `db_app` do `config.php`, `SESSI
 precisam dos dados de demonstração (`03_demo.sql`). Cada teste roda numa transação desfeita no fim, então nada fica
 gravado. Para enxergar dados de outra locadora (e provar que a tela não mostra), os testes usam uma conexão de
 superusuário só para leitura (`DB_ADMIN_USERNAME`/`DB_ADMIN_PASSWORD`, ou `PGUSER`/`PGPASSWORD`, padrão `postgres`).
-Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de clientes e de produtos, ponte de sessão e busca.
+Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de clientes e de produtos, o painel e a busca.
 No GitHub, rodam junto com os testes do sistema atual (linha do PHP 8.4).
 
-**Ponte de sessão (entrar uma vez só):** os dois sistemas ficam em endereços diferentes, então quem está logado num
-recebe uma passagem assinada para entrar no outro. Ela vale 60 segundos, só pode ser usada uma vez e quem recebe
-confere a locadora e o usuário de novo no banco. Para ligar, gere um segredo
-(`php -r "echo bin2hex(random_bytes(32));"`) e coloque o mesmo valor nos dois lados:
-
-| Onde | Chaves |
-|---|---|
-| `config.php` | `'laravel_url' => 'http://locgestor.test/novo'`, `'ponte_segredo' => '<segredo>'` |
-| `laravel/.env` | `LOCGESTOR_LEGADO_URL=http://locgestor.test`, `LOCGESTOR_PONTE_SEGREDO=<segredo>` |
-
-Com as chaves vazias, a ponte fica desligada e o menu usa só o sistema atual.
+**Endereço antigo:** `http://locgestor.test/` e `index.php` levam para o sistema novo (`/novo`). Quem chega por
+ele entra de novo com a senha: não há mais passagem entre os dois sistemas. O `config.php` só precisa de
+`'laravel_url' => 'http://locgestor.test/novo'`, que é o endereço para onde o redirecionamento vai.
