@@ -7,6 +7,7 @@ use App\Http\Controllers\Plataforma\LoginController;
 use App\Http\Controllers\Plataforma\NumerosController;
 use App\Http\Controllers\Plataforma\PlanosController;
 use App\Http\Controllers\Plataforma\RecadosController;
+use App\Http\Controllers\Plataforma\RecibosController;
 use App\Http\Controllers\Plataforma\UsoController;
 use App\Http\Middleware\SessaoPlataforma;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,8 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::post('/locadoras/{id}/suporte', [LocadorasController::class, 'suporteEntrar'])->whereUuid('id')->name('locadoras.suporte');
         Route::post('/locadoras/{id}/pagamento', [LocadorasController::class, 'pagamento'])->whereUuid('id')->name('locadoras.pagamento');
         Route::post('/locadoras/{id}/estornar', [LocadorasController::class, 'estornar'])->whereUuid('id')->name('locadoras.estornar');
+        Route::get('/locadoras/{id}/pagamentos/{pagamento}/recibo', [RecibosController::class, 'show'])
+            ->whereUuid('id')->whereUuid('pagamento')->name('locadoras.recibo');
         Route::post('/locadoras/{id}/senha', [LocadorasController::class, 'resetSenha'])->whereUuid('id')->name('locadoras.senha');
         Route::post('/locadoras/{id}/cancelar', [LocadorasController::class, 'cancelarContrato'])->whereUuid('id')->name('locadoras.cancelar');
         Route::post('/locadoras/{id}/cobranca/config', [LocadorasController::class, 'cobrancaConfig'])->whereUuid('id')->name('locadoras.cobranca.config');

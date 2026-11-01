@@ -28,4 +28,15 @@ return [
 
     // Contato mostrado no aviso de mensalidade da locadora (vazio = sem contato)
     'suporte_contato' => env('LOCGESTOR_SUPORTE_CONTATO', ''),
+
+    // Dados da LocGestor nos documentos da plataforma (recibos). Sem razão social e CNPJ, nenhum recibo é emitido.
+    'emitente' => [
+        'razao_social' => env('LOCGESTOR_EMITENTE_RAZAO', ''),
+        'cnpj' => env('LOCGESTOR_EMITENTE_CNPJ', ''),
+        'endereco' => env('LOCGESTOR_EMITENTE_ENDERECO', ''),
+        'contato' => env('LOCGESTOR_EMITENTE_CONTATO', ''),
+    ],
+
+    // Termos de uso publicados. Sem este endereço, o cadastro público não abre: ninguém se cadastra sem aceitar um texto.
+    'termos_url' => env('LOCGESTOR_TERMOS_URL', ''),
 ];

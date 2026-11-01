@@ -47,6 +47,7 @@ class Assinaturas
         if (empty($t->vencimento)) {
             return null;
         }
+
         return Carbon::parse($t->vencimento)->addDays((int) $t->carencia_dias)->toDateString();
     }
 
@@ -54,6 +55,7 @@ class Assinaturas
     public static function inadimplente(object $t): bool
     {
         $limite = self::limitePagamento($t);
+
         return $limite !== null && now()->toDateString() > $limite;
     }
 
@@ -68,11 +70,12 @@ class Assinaturas
         }
         $dias = self::diasAte($t->vencimento);
         if ($dias < 0) {
-            return ['vencida há ' . (-$dias) . ' dia(s)', 'selo-amarelo'];
+            return ['vencida há '.(-$dias).' dia(s)', 'selo-amarelo'];
         }
         if ($dias <= 5) {
             return [$dias === 0 ? 'vence hoje' : "vence em $dias dia(s)", 'selo-amarelo'];
         }
+
         return ['em dia', 'selo-verde'];
     }
 
@@ -83,18 +86,19 @@ class Assinaturas
         if ($t->status === 'suspensa') {
             $motivos[] = $t->motivo_suspensao === 'inadimplencia' ? 'suspensa por inadimplência' : 'suspensa';
         }
-        if (!empty($t->vencimento)) {
+        if (! empty($t->vencimento)) {
             $dias = self::diasAte($t->vencimento);
             if ($dias < 0) {
-                $motivos[] = 'mensalidade vencida há ' . (-$dias) . ' dia(s)';
+                $motivos[] = 'mensalidade vencida há '.(-$dias).' dia(s)';
             } elseif ($dias <= 5) {
                 $motivos[] = $dias === 0 ? 'mensalidade vence hoje' : "mensalidade vence em $dias dia(s)";
             }
         }
         $referencia = $t->ultimo_acesso ?? $t->criado_em;
         if ($t->status === 'ativa' && $referencia !== null && Carbon::parse($referencia)->lt(now()->subDays(7))) {
-            $motivos[] = $t->ultimo_acesso !== null ? 'sem acesso desde ' . data_br($t->ultimo_acesso) : 'nunca acessou';
+            $motivos[] = $t->ultimo_acesso !== null ? 'sem acesso desde '.data_br($t->ultimo_acesso) : 'nunca acessou';
         }
+
         return $motivos;
     }
 
@@ -103,8 +107,8 @@ class Assinaturas
     {
         return match ($filtro) {
             'atencao' => $t->alertas !== [],
-            'vencidas' => !empty($t->vencimento) && self::diasAte($t->vencimento) < 0,
-            'vencendo' => !empty($t->vencimento) && ($dias = self::diasAte($t->vencimento)) >= 0 && $dias <= 5,
+            'vencidas' => ! empty($t->vencimento) && self::diasAte($t->vencimento) < 0,
+            'vencendo' => ! empty($t->vencimento) && ($dias = self::diasAte($t->vencimento)) >= 0 && $dias <= 5,
             'suspensas' => $t->status === 'suspensa',
             'sem_acesso' => array_filter($t->alertas, fn ($m) => str_contains($m, 'acesso') || str_contains($m, 'acessou')) !== [],
             'sem_cobranca' => empty($t->vencimento),
@@ -134,13 +138,14 @@ class Assinaturas
             $erros[] = 'Escolha o plano.';
         }
         $venc = trim((string) ($d['vencimento'] ?? ''));
-        if ($venc !== '' && !Formulario::dataValida($venc)) {
+        if ($venc !== '' && ! Formulario::dataValida($venc)) {
             $erros[] = 'Data de vencimento inválida.';
         }
         $carencia = filter_var($d['carencia_dias'] ?? '', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 60]]);
         if ($carencia === false) {
             $erros[] = 'A carência deve ser de 0 a 60 dias.';
         }
+
         return ['plano' => $plano, 'vencimento' => $venc === '' ? null : $venc, 'carencia' => $carencia, 'erros' => $erros];
     }
 
@@ -152,9 +157,10 @@ class Assinaturas
      * @return array{t: object, novo: string, valor: float, reativou: bool, pagamento_id: string}
      */
     public static function registrarPagamento(string $locadoraId, int $meses, string $data, ?float $valor, string $forma,
-                                              string $obs, ?string $usuarioId): array
+        string $obs, ?string $usuarioId): array
     {
         $db = DB::connection('plataforma');
+
         return $db->transaction(function () use ($db, $locadoraId, $meses, $data, $valor, $forma, $obs, $usuarioId) {
             $t = $db->selectOne(
                 'SELECT t.id, t.slug, t.nome, t.vencimento, t.status, t.motivo_suspensao, p.preco_mensal
@@ -171,10 +177,16 @@ class Assinaturas
             $base = $t->vencimento ?? now()->toDateString();
             // Soma de meses pelo banco: 31/01 + 1 mês = 28/02 (e não 03/03)
             $novo = $db->selectOne('SELECT (CAST(? AS date) + make_interval(months => ?))::date AS novo', [$base, $meses])->novo;
+            // Número do recibo: o contador anda nesta transação, então um pagamento desfeito não deixa buraco
+            $reciboNumero = $db->selectOne(
+                "INSERT INTO plataforma_sequencias (nome, ultimo) VALUES ('recibo', 1)
+                 ON CONFLICT (nome) DO UPDATE SET ultimo = plataforma_sequencias.ultimo + 1
+                 RETURNING ultimo"
+            )->ultimo;
             $pagamentoId = $db->selectOne(
-                'INSERT INTO assinatura_pagamentos (locadora_id, data, meses, valor, forma, vencimento_anterior, vencimento_novo, obs, usuario_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-                [$locadoraId, $data, $meses, $valor, $forma, $base, $novo, $obs, $usuarioId]
+                'INSERT INTO assinatura_pagamentos (locadora_id, data, meses, valor, forma, vencimento_anterior, vencimento_novo, obs, usuario_id, recibo_numero)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+                [$locadoraId, $data, $meses, $valor, $forma, $base, $novo, $obs, $usuarioId, $reciboNumero]
             )->id;
             $reativou = $t->status === 'suspensa' && $t->motivo_suspensao === 'inadimplencia';
             $db->update("UPDATE tenants SET vencimento = ?,

@@ -13,15 +13,16 @@ class CadastroPublicoTest extends PlataformaTestCase
     /** Liga o cadastro só para este teste. */
     private function ligado(): void
     {
-        config(['locgestor.cadastro_publico' => true, 'locgestor.cadastro_dias_teste' => 14, 'locgestor.cadastro_plano' => '']);
+        config(['locgestor.cadastro_publico' => true, 'locgestor.cadastro_dias_teste' => 14, 'locgestor.cadastro_plano' => '',
+            'locgestor.termos_url' => 'https://termos.exemplo.com/uso']);
     }
 
     /** O que o formulário envia (identificador único a cada teste). */
     private function formulario(array $sobre = []): array
     {
         return $sobre + [
-            'nome' => 'Locadora Teste Grátis ' . Str::random(4),
-            'slug' => 'gratis-' . strtolower(Str::random(10)),
+            'nome' => 'Locadora Teste Grátis '.Str::random(4),
+            'slug' => 'gratis-'.strtolower(Str::random(10)),
             'cnpj' => '', 'email' => 'contato@exemplo.com', 'telefone' => '(85) 99999-0000',
             'admin_nome' => 'Maria Teste', 'admin_login' => 'maria',
             'senha' => 'senha-forte-123', 'senha_confirma' => 'senha-forte-123',
@@ -42,6 +43,15 @@ class CadastroPublicoTest extends PlataformaTestCase
         $this->post(route('cadastro.criar'), $this->formulario())->assertNotFound();
     }
 
+    public function test_ligado_mas_sem_termos_publicados_nao_abre(): void
+    {
+        // Sem texto de termos, ninguém se cadastra: a página não existe e a entrada não mostra o link
+        config(['locgestor.cadastro_publico' => true, 'locgestor.termos_url' => '']);
+        $this->get(route('cadastro'))->assertNotFound();
+        $this->post(route('cadastro.criar'), $this->formulario())->assertNotFound();
+        $this->get(route('login'))->assertDontSee('Teste grátis');
+    }
+
     public function test_ligado_mostra_o_formulario_e_o_link_na_entrada(): void
     {
         $this->ligado();
@@ -60,7 +70,7 @@ class CadastroPublicoTest extends PlataformaTestCase
 
         $t = DB::connection('plataforma')->selectOne('SELECT id, status, vencimento, carencia_dias, email_contato FROM tenants WHERE slug = ?', [$dados['slug']]);
         $this->assertSame(['ativa', now()->addDays(14)->toDateString(), 5, 'contato@exemplo.com'],
-                          [$t->status, $t->vencimento, (int) $t->carencia_dias, $t->email_contato]);
+            [$t->status, $t->vencimento, (int) $t->carencia_dias, $t->email_contato]);
 
         // O admin escolheu a própria senha: não é obrigado a trocá-la no primeiro acesso
         $admin = Locadoras::noContexto($t->id, fn ($db) => $db->selectOne("SELECT login, trocar_senha FROM usuarios WHERE login = 'maria'"));
@@ -106,6 +116,7 @@ class CadastroPublicoTest extends PlataformaTestCase
             ->post(route('cadastro.criar'), $dados)
             ->assertSessionHas('flash', function ($f) {
                 $msg = $f[0]['msg'];
+
                 return str_contains($msg, 'Identificador inválido') && str_contains($msg, 'telefone com DDD')
                     && str_contains($msg, '8 caracteres') && str_contains($msg, 'aceita os termos');
             });
@@ -115,7 +126,7 @@ class CadastroPublicoTest extends PlataformaTestCase
     public function test_identificador_repetido_e_recusado(): void
     {
         $this->ligado();
-        $slug = 'repetido-' . strtolower(Str::random(8));
+        $slug = 'repetido-'.strtolower(Str::random(8));
         $this->criarLocadora(['slug' => $slug]);
 
         $this->withSession($this->preenchidoComCalma())

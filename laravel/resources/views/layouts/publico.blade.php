@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="{{ asset('assets/brand/emblema-locgestor-64.png') }}">
 <title>{{ $titulo ?? 'LocGestor' }} · LocGestor</title>
 <script>try { var t = localStorage.getItem('lg-tema'); if (t === 'escuro' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {}</script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -15,7 +16,7 @@
         <div class="absolute -right-24 -bottom-40 size-[520px] rounded-full bg-indigo-600/30 blur-3xl"></div>
         <div class="relative flex h-full flex-col justify-between p-12 text-white">
             <div class="flex items-center gap-3">
-                <span class="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 font-bold shadow-lg shadow-marca-600/40">LG</span>
+                <img src="{{ asset('assets/brand/emblema-locgestor-256.png') }}" alt="" class="size-10 object-contain">
                 <span class="text-lg font-semibold">LocGestor</span>
             </div>
             <div>
@@ -30,7 +31,7 @@
     <div class="flex items-center justify-center p-6 sm:p-12">
         <div class="w-full max-w-md">
             <div class="mb-8 flex items-center gap-3 lg:hidden">
-                <span class="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 font-bold text-white">LG</span>
+                <img src="{{ asset('assets/brand/emblema-locgestor-256.png') }}" alt="LocGestor" class="size-10 object-contain">
                 <span class="text-lg font-semibold">LocGestor</span>
             </div>
             @yield('formulario')

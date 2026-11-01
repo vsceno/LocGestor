@@ -25,7 +25,8 @@ class LoginTest extends TestCase
 
     public function test_senha_errada_e_empresa_inexistente_recebem_a_mesma_mensagem_e_contam_tentativa(): void
     {
-        $antes = DB::selectOne('SELECT count(*) AS n FROM login_tentativas')->n;
+        // Conta só as tentativas deste teste: a proteção apaga as de mais de 1 dia, então a contagem total varia com o relógio
+        $desteTeste = 'SELECT count(*) AS n FROM login_tentativas WHERE criado_em = now()';
 
         $this->post('/login', ['empresa' => 'alfa-locacoes', 'login' => 'admin', 'senha' => 'errada'])->assertRedirect(route('login'));
         $this->assertSame('Dados de acesso inválidos.', session('flash')[0]['msg']);
@@ -33,7 +34,7 @@ class LoginTest extends TestCase
         $this->assertSame('Dados de acesso inválidos.', session('flash')[0]['msg']);
 
         // Cada erro grava a chave da conta e a do IP
-        $this->assertSame($antes + 4, DB::selectOne('SELECT count(*) AS n FROM login_tentativas')->n);
+        $this->assertSame(4, DB::selectOne($desteTeste)->n);
         $this->assertNull(session('tenant_id'));
     }
 
@@ -41,7 +42,7 @@ class LoginTest extends TestCase
     {
         // Mesma chave que o sistema antigo usa (login_chaves), área "locadora"
         $chave = hash('sha256', 'conta|locadora|alfa-locacoes|admin');
-        DB::insert("INSERT INTO login_tentativas (chave) SELECT ? FROM generate_series(1, 5)", [$chave]);
+        DB::insert('INSERT INTO login_tentativas (chave) SELECT ? FROM generate_series(1, 5)', [$chave]);
 
         $this->post('/login', ['empresa' => 'alfa-locacoes', 'login' => 'admin', 'senha' => 'admin123'])->assertRedirect(route('login'));
         $this->assertStringContainsString('Muitas tentativas', session('flash')[0]['msg']);
@@ -59,7 +60,7 @@ class LoginTest extends TestCase
     {
         $this->entrarComo();
         // Desativado depois do login (a transação do teste desfaz no fim)
-        DB::update("UPDATE usuarios SET ativo = false WHERE id = ?", [session('usuario.id')]);
+        DB::update('UPDATE usuarios SET ativo = false WHERE id = ?', [session('usuario.id')]);
         $this->get('/painel')->assertRedirect(route('login'));
         $this->assertStringContainsString('desativado', session('flash')[0]['msg']);
     }

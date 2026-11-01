@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="{{ asset('assets/brand/emblema-locgestor-64.png') }}">
 <title>Painel da plataforma · LocGestor</title>
 <script>try { var t = localStorage.getItem('lg-tema'); if (t === 'escuro' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {}</script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -11,7 +12,7 @@
 <div class="flex min-h-full items-center justify-center p-6">
     <div class="w-full max-w-sm">
         <div class="mb-8 flex items-center gap-3">
-            <span class="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 font-bold text-white">LG</span>
+            <img src="{{ asset('assets/brand/emblema-locgestor-256.png') }}" alt="LocGestor" class="size-10 object-contain">
             <div><p class="text-lg font-semibold">LocGestor</p><p class="text-sm text-zinc-500">Painel da plataforma</p></div>
         </div>
         <h1 class="text-2xl font-semibold tracking-tight">Entrar</h1>
