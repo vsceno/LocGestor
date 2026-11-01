@@ -66,7 +66,7 @@ class BuscaController extends Controller
         }
 
         $r['Locações'] = array_map(fn ($l) => [
-            'rotulo' => 'Locação nº ' . $l->numero, 'ico' => 'locacoes', 'url' => legado('locacoes', ['a' => 'ver', 'n' => $l->numero]),
+            'rotulo' => 'Locação nº ' . $l->numero, 'ico' => 'locacoes', 'url' => route('locacoes.show', $l->numero),
             'detalhe' => $l->nome . ' · ' . data_br($l->data_saida) . ' · ' . $l->status,
         ], DB::select('SELECT l.numero, l.data_saida, l.status, c.nome FROM locacoes l JOIN clientes c ON c.id = l.cliente_id
                         WHERE l.numero = ? OR (NOT CAST(? AS boolean) AND lower(l.local_uso) LIKE lower(?))
@@ -74,14 +74,14 @@ class BuscaController extends Controller
 
         if ($numero >= 0) {
             $r['Reservas'] = array_map(fn ($x) => [
-                'rotulo' => 'Reserva nº ' . $x->numero, 'ico' => 'reservas', 'url' => legado('reservas', ['a' => 'ver', 'n' => $x->numero]),
+                'rotulo' => 'Reserva nº ' . $x->numero, 'ico' => 'reservas', 'url' => route('reservas.show', $x->numero),
                 'detalhe' => $x->nome . ' · ' . data_br($x->data_inicio) . ' · ' . $x->status,
             ], DB::select('SELECT r.numero, r.data_inicio, r.status, c.nome FROM reservas r JOIN clientes c ON c.id = r.cliente_id WHERE r.numero = ?', [$numero]));
         }
 
         // Código de barras confere exato (leitor USB); código e descrição só fora do modo "#número"
         $r['Produtos'] = array_map(fn ($x) => [
-            'rotulo' => $x->codigo . ' — ' . $x->descricao, 'ico' => 'produtos', 'url' => legado('produtos', ['a' => 'editar', 'id' => $x->id]),
+            'rotulo' => $x->codigo . ' — ' . $x->descricao, 'ico' => 'produtos', 'url' => route('produtos.edit', $x->id),
             'detalhe' => ($x->ativo ? '' : 'inativo · ') . numero($x->qtd_total) . ' em estoque',
         ], DB::select('SELECT p.id, p.codigo, p.descricao, p.qtd_total, p.ativo FROM produtos p
                         WHERE (NOT CAST(? AS boolean) AND (lower(p.codigo) LIKE lower(?) OR lower(p.descricao) LIKE lower(?)))
@@ -90,7 +90,7 @@ class BuscaController extends Controller
 
         if (!$soNumero) {
             $r['Patrimônio'] = array_map(fn ($x) => [
-                'rotulo' => 'Unidade ' . $x->patrimonio, 'ico' => 'manutencao', 'url' => legado('produtos', ['a' => 'unidade', 'id' => $x->id]),
+                'rotulo' => 'Unidade ' . $x->patrimonio, 'ico' => 'manutencao', 'url' => route('unidades.show', $x->id),
                 'detalhe' => $x->descricao . ($x->serie !== '' ? ' · série ' . $x->serie : '') . ($x->ativa ? '' : ' · baixada'),
             ], DB::select('SELECT u.id, u.patrimonio, u.serie, u.ativa, p.descricao FROM unidades u JOIN produtos p ON p.id = u.produto_id
                             WHERE lower(u.patrimonio) LIKE lower(?) OR lower(u.serie) LIKE lower(?)

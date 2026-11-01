@@ -6,6 +6,7 @@
 <title>Entrar · LocGestor</title>
 <script>try { var t = localStorage.getItem('lg-tema'); if (t === 'escuro' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {}</script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
+@include('layouts._pwa')
 </head>
 <body class="h-full">
 <div class="grid min-h-full lg:grid-cols-2">
@@ -60,6 +61,9 @@
                 </label>
                 <button class="btn-primario w-full py-2.5">Entrar</button>
             </form>
+            @if (config('locgestor.cadastro_publico'))
+                <p class="mt-6 text-center text-sm text-zinc-500">Ainda não tem conta? <a href="{{ route('cadastro') }}" class="font-medium text-marca-700 hover:underline">Teste grátis</a></p>
+            @endif
         </div>
     </div>
 </div>

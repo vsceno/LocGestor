@@ -12,7 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Avisos do Asaas: quem chama é o Asaas, sem formulário; a autorização é o token do cabeçalho asaas-access-token
+        $middleware->validateCsrfTokens(except: ['webhook/asaas']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

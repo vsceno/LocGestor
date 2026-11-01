@@ -53,7 +53,7 @@ document.querySelectorAll('form[data-busca-viva]').forEach((form) => {
     if (!destino || !campo) { return; }
     let espera;
     let pedido = 0;
-    campo.addEventListener('input', () => {
+    const atualizar = (demora) => {
         clearTimeout(espera);
         espera = setTimeout(async () => {
             const meu = ++pedido;
@@ -71,8 +71,11 @@ document.querySelectorAll('form[data-busca-viva]').forEach((form) => {
             } finally {
                 if (meu === pedido) { destino.classList.remove('opacity-50'); }
             }
-        }, 250);
-    });
+        }, demora);
+    };
+    campo.addEventListener('input', () => atualizar(250));
+    // Listas de escolha do filtro (ex.: categoria) atualizam na hora
+    form.querySelectorAll('select[data-envia-ao-mudar]').forEach((s) => s.addEventListener('change', () => atualizar(0)));
     campo.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); } });
 });
 
@@ -193,3 +196,178 @@ if (paleta) {
     });
     paleta.addEventListener('click', (ev) => { if (ev.target === paleta) { paleta.close(); } });   // clique fora fecha
 }
+
+/* ---------- Confirmação antes de enviar (excluir, bloquear...) ---------- */
+document.addEventListener('submit', (ev) => {
+    const msg = ev.target.dataset?.confirmar;
+    if (msg && !window.confirm(msg)) { ev.preventDefault(); }
+});
+
+/* ---------- Máscaras enquanto digita: data-mascara="doc|telefone|cep" (mesmas do sistema antigo) ---------- */
+const digitos = (v) => String(v).replace(/\D+/g, '');
+const mascaras = {
+    doc: (v) => {
+        const d = digitos(v).slice(0, 14);
+        if (d.length <= 11) {
+            return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        }
+        return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+            .replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    },
+    telefone: (v) => {
+        const d = digitos(v).slice(0, 11);
+        return d.length <= 10
+            ? d.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d{1,4})$/, '$1-$2')
+            : d.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+    },
+    cep: (v) => digitos(v).slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2'),
+};
+document.querySelectorAll('[data-mascara]').forEach((el) => {
+    const fn = mascaras[el.dataset.mascara];
+    if (!fn) { return; }
+    el.value = fn(el.value);
+    el.addEventListener('input', () => { el.value = fn(el.value); });
+});
+
+/* ---------- Endereço pelo CEP (ViaCEP); não apaga o que já foi digitado com o CEP inválido ---------- */
+document.querySelectorAll('[data-viacep]').forEach((campo) => {
+    const status = campo.form?.closest('form')?.querySelector('[data-cep-status]') ?? document.querySelector('[data-cep-status]');
+    let ultimo = digitos(campo.value);
+    const buscar = async () => {
+        const cep = digitos(campo.value);
+        if (cep.length !== 8 || cep === ultimo) { return; }
+        ultimo = cep;
+        if (status) { status.textContent = 'Buscando o CEP…'; }
+        try {
+            const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const j = await r.json();
+            if (j.erro) { if (status) { status.textContent = 'CEP não encontrado: preencha o endereço.'; } return; }
+            const f = campo.form;
+            const mapa = { endereco: j.logradouro, bairro: j.bairro, cidade: j.localidade, uf: j.uf };
+            Object.entries(mapa).forEach(([nome, valor]) => { if (f.elements[nome] && valor) { f.elements[nome].value = valor; } });
+            if (status) { status.textContent = 'Endereço preenchido pelo CEP. Confira o número.'; }
+            f.elements.numero?.focus();
+        } catch (e) {
+            if (status) { status.textContent = 'Sem conexão para consultar o CEP: preencha o endereço.'; }
+        }
+    };
+    campo.addEventListener('input', () => { if (digitos(campo.value).length === 8) { buscar(); } });
+    campo.addEventListener('blur', buscar);
+});
+
+/* ---------- Cliente: rótulos conforme pessoa física ou jurídica ---------- */
+document.querySelectorAll('[data-form-cliente]').forEach((form) => {
+    const atualizar = () => {
+        const pj = form.querySelector('[data-tipo]:checked')?.value === 'PJ';
+        const nome = form.querySelector('[data-rotulo-nome]');
+        if (nome) { nome.firstChild.textContent = pj ? 'Razão social ' : 'Nome completo '; }
+        const doc = form.querySelector('[data-rotulo-doc]');
+        if (doc) { doc.textContent = pj ? 'CNPJ' : 'CPF'; }
+        const ie = form.querySelector('[data-rotulo-ie]');
+        if (ie) { ie.textContent = pj ? 'Inscrição estadual' : 'RG'; }
+    };
+    form.querySelectorAll('[data-tipo]').forEach((r) => r.addEventListener('change', atualizar));
+});
+
+/* ---------- Composição do kit: adicionar/remover linhas e somar a diária ---------- */
+document.querySelectorAll('form[data-form-kit]').forEach((form) => {
+    const caixa = form.querySelector('[data-kit-linhas]');
+    const total = form.querySelector('[data-kit-total]');
+    const adicionar = form.querySelector('[data-kit-adicionar]');
+    const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const somar = () => {
+        let soma = 0;
+        caixa.querySelectorAll('[data-kit-linha]').forEach((l) => {
+            const op = l.querySelector('select').selectedOptions[0];
+            soma += parseFloat(op?.dataset.diaria || 0) * Math.max(0, parseInt(l.querySelector('input').value, 10) || 0);
+        });
+        total.textContent = reais.format(soma);
+    };
+    adicionar.hidden = false;   // sem JavaScript, as linhas vazias do servidor bastam
+    adicionar.addEventListener('click', () => {
+        const nova = caixa.querySelector('[data-kit-linha]').cloneNode(true);
+        nova.querySelector('select').value = '';
+        nova.querySelector('input').value = '1';
+        caixa.append(nova);
+        nova.querySelector('select').focus();
+    });
+    caixa.addEventListener('click', (ev) => {
+        const botao = ev.target.closest('[data-kit-remover]');
+        if (!botao) { return; }
+        const linha = botao.closest('[data-kit-linha]');
+        if (caixa.querySelectorAll('[data-kit-linha]').length > 1) { linha.remove(); } else { linha.querySelector('select').value = ''; }
+        somar();
+    });
+    caixa.addEventListener('input', somar);
+    caixa.addEventListener('change', somar);
+    somar();
+});
+
+/* ---------- PIX: QR Code e "copia e cola" (a biblioteca só é baixada nas páginas com PIX) ---------- */
+document.querySelectorAll('[data-pix]').forEach(async (bloco) => {
+    const codigo = bloco.dataset.pix;
+    const alvo = bloco.querySelector('[data-pix-qr]');
+    if (alvo) {
+        const { default: qrcode } = await import('qrcode-generator');
+        const qr = qrcode(0, 'M');   // tamanho automático, correção de erro média (igual ao sistema antigo)
+        qr.addData(codigo);
+        qr.make();
+        alvo.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    }
+    const botao = bloco.querySelector('[data-pix-copiar]');
+    const campo = bloco.querySelector('[data-pix-codigo]');
+    botao?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(codigo);
+        } catch {
+            campo.select();             // http sem certificado: a área de transferência moderna fica bloqueada
+            document.execCommand('copy');
+        }
+        botao.textContent = 'Copiado!';
+        setTimeout(() => { botao.textContent = 'Copiar código'; }, 2000);
+    });
+});
+
+/* ---------- Nova locação (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-nova-locacao]').forEach(async (form) => {
+    const { novaLocacao } = await import('./locacao.js');
+    novaLocacao(form);
+});
+
+/* ---------- Devolução (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-devolucao]').forEach(async (form) => {
+    const { devolucao } = await import('./devolucao.js');
+    devolucao(form);
+});
+
+/* ---------- Reserva (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-reserva-form]').forEach(async (form) => {
+    const { reserva } = await import('./reserva.js');
+    reserva(form);
+});
+
+/* ---------- Orçamento (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-orcamento]').forEach(async (form) => {
+    const { orcamento } = await import('./orcamento.js');
+    orcamento(form);
+});
+
+/* ---------- Vistoria: assinatura e fotos (o código só é baixado nessa tela) ---------- */
+document.querySelectorAll('form[data-vistoria]').forEach(async (form) => {
+    const { vistoria } = await import('./vistoria.js');
+    vistoria(form);
+});
+
+/* ---------- Recados do painel: fechados ficam guardados no navegador de cada pessoa (sem armazenamento, voltam depois) ---------- */
+(() => {
+    const chave = 'lg_recados_fechados';
+    const lidos = () => { try { return JSON.parse(localStorage.getItem(chave) || '[]'); } catch (e) { return []; } };
+    document.querySelectorAll('[data-recado]').forEach((el) => {
+        const id = el.dataset.recado;
+        if (lidos().includes(id)) { el.hidden = true; }
+        el.querySelector('.recado-fechar')?.addEventListener('click', () => {
+            el.hidden = true;
+            guardar(chave, JSON.stringify([...lidos(), id].slice(-50)));
+        });
+    });
+})();

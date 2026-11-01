@@ -4,14 +4,14 @@
     $primeiroNome = explode(' ', trim($usuario->nome))[0];
     $hoje = \Illuminate\Support\Str::ucfirst(\Carbon\Carbon::now()->locale('pt_BR')->translatedFormat('l, d \d\e F'));
     $atalhos = [
-        ['Nova locação', 'Saída de equipamentos', 'locacoes', legado('locacoes', ['a' => 'nova'])],
-        ['Novo cliente', 'Cadastro rápido', 'clientes', legado('clientes', ['a' => 'novo'])],
-        ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', legado('orcamentos', ['a' => 'novo'])],
-        ['Registrar devolução', 'Entrada de equipamentos', 'devolucao', legado('locacoes')],
+        ['Nova locação', 'Saída de equipamentos', 'locacoes', route('locacoes.create')],
+        ['Novo cliente', 'Cadastro rápido', 'clientes', route('clientes.create')],
+        ['Novo orçamento', 'Proposta para o cliente', 'orcamentos', route('orcamentos.create')],
+        ['Registrar devolução', 'Entrada de equipamentos', 'devolucao', route('locacoes.index')],
     ];
     $kpis = [
-        ['Locações em aberto', numero($k->abertas), numero($k->vencem_hoje) . ' vence(m) hoje', 'locacoes', 'bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400', legado('locacoes')],
-        ['Atrasadas', numero($k->atrasadas), 'devolução prevista vencida', 'alerta', 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400', legado('locacoes')],
+        ['Locações em aberto', numero($k->abertas), numero($k->vencem_hoje) . ' vence(m) hoje', 'locacoes', 'bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400', route('locacoes.index')],
+        ['Atrasadas', numero($k->atrasadas), 'devolução prevista vencida', 'alerta', 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400', route('locacoes.index')],
         ['Total a receber', moeda($k->a_receber), 'saldo das locações', 'dinheiro', 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400', null],
         ['Clientes ativos', numero($k->clientes), 'ver a lista de clientes', 'clientes', 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400', route('clientes.index')],
     ];
@@ -30,7 +30,7 @@
 @endsection
 
 @section('acoes')
-    <a class="btn-primario" href="{{ legado('locacoes', ['a' => 'nova']) }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
+    <a class="btn-primario" href="{{ route('locacoes.create') }}"><x-icone nome="mais" class="size-4" /> Nova locação</a>
 @endsection
 
 @section('conteudo')
@@ -49,7 +49,7 @@
                 <h2 class="cartao-titulo">Devoluções para acompanhar</h2>
                 <p class="text-xs text-zinc-500">Atrasadas e as dos próximos 3 dias</p>
             </div>
-            <a class="text-sm font-medium text-marca-600 hover:text-marca-700" href="{{ legado('locacoes') }}">Ver todas</a>
+            <a class="text-sm font-medium text-marca-600 hover:text-marca-700" href="{{ route('locacoes.index') }}">Ver todas</a>
         </div>
         @if (!$atrasadas)
             <div class="px-6 py-14 text-center">
@@ -62,7 +62,7 @@
                 <thead><tr><th>Locação</th><th>Cliente</th><th>Devolução</th><th>Situação</th></tr></thead>
                 <tbody>
                 @foreach ($atrasadas as $l)
-                    @php $url = legado('locacoes', ['a' => 'ver', 'n' => $l->numero]); @endphp
+                    @php $url = route('locacoes.show', $l->numero); @endphp
                     <tr data-href="{{ $url }}">
                         <td><a href="{{ $url }}" class="font-medium text-zinc-900 hover:text-marca-600 dark:text-zinc-100">#{{ $l->numero }}</a></td>
                         <td>

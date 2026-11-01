@@ -1,19 +1,49 @@
 <?php
 
 use App\Http\Controllers\ArquivosController;
+use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\BuscaController;
+use App\Http\Controllers\CadastroController;
+use App\Http\Controllers\CaixaController;
+use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
+use App\Http\Controllers\ConfiguracoesController;
+use App\Http\Controllers\ContasPagarController;
+use App\Http\Controllers\DocumentosController;
+use App\Http\Controllers\DevolucaoController;
+use App\Http\Controllers\KitsController;
+use App\Http\Controllers\LocacoesController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\ManutencoesController;
+use App\Http\Controllers\NovaLocacaoController;
+use App\Http\Controllers\OrcamentosController;
 use App\Http\Controllers\PainelController;
-use App\Http\Controllers\PonteController;
+use App\Http\Controllers\ProdutosController;
+use App\Http\Controllers\RecibosController;
+use App\Http\Controllers\RelatoriosController;
+use App\Http\Controllers\ReservasController;
+use App\Http\Controllers\RoteiroController;
+use App\Http\Controllers\SenhaController;
+use App\Http\Controllers\SuporteController;
+use App\Http\Controllers\UnidadesController;
+use App\Http\Controllers\UsuariosController;
+use App\Http\Controllers\VistoriasController;
+use App\Http\Controllers\WebhookAsaasController;
 use App\Http\Middleware\SessaoLocadora;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [LoginController::class, 'index'])->name('login');
 Route::post('/login', [LoginController::class, 'entrar'])->name('login.entrar');
 Route::post('/sair', [LoginController::class, 'sair'])->name('sair');
-// Chegada pela ponte de sessão do sistema antigo (a passagem assinada é a autorização)
-Route::get('/ponte', [PonteController::class, 'entrar'])->name('ponte');
+// Link de suporte do painel da plataforma: o código de uso único é a autorização (não exige login)
+Route::get('/suporte/entrar', [SuporteController::class, 'entrar'])->name('suporte.entrar');
+// Cadastro público ("Teste grátis"): só existe com LOCGESTOR_CADASTRO_PUBLICO ligado (senão, 404)
+Route::get('/cadastro', [CadastroController::class, 'form'])->name('cadastro');
+Route::post('/cadastro', [CadastroController::class, 'criar'])->name('cadastro.criar');
+Route::get('/cadastro/pronto', [CadastroController::class, 'pronto'])->name('cadastro.pronto');
+// Avisos do Asaas (mensalidades): o endereço antigo (webhook_asaas.php) entrega a requisição a esta rota.
+// Sem CSRF (ver bootstrap/app.php); a autorização é o token do cabeçalho asaas-access-token.
+Route::post('/webhook/asaas', [WebhookAsaasController::class, 'receber'])->name('webhook.asaas');
 
 // Tudo abaixo exige sessão de uma locadora: o middleware define o app.tenant_id (RLS) da conexão
 Route::middleware(SessaoLocadora::class)->group(function () {
@@ -21,10 +51,112 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/painel', [PainelController::class, 'index'])->name('painel');
     Route::get('/clientes', [ClientesController::class, 'index'])->name('clientes.index');
     Route::post('/clientes/filtrar', [ClientesController::class, 'filtrar'])->name('clientes.filtrar');
-    Route::get('/clientes/{id}', [ClientesController::class, 'show'])->name('clientes.show');
+    Route::get('/clientes/novo', [ClientesController::class, 'create'])->name('clientes.create');
+    Route::post('/clientes', [ClientesController::class, 'store'])->name('clientes.store');
+    Route::get('/clientes/{id}', [ClientesController::class, 'show'])->whereUuid('id')->name('clientes.show');
+    Route::get('/clientes/{id}/editar', [ClientesController::class, 'edit'])->whereUuid('id')->name('clientes.edit');
+    Route::put('/clientes/{id}', [ClientesController::class, 'update'])->whereUuid('id')->name('clientes.update');
+    Route::post('/clientes/{id}/bloquear', [ClientesController::class, 'bloquear'])->whereUuid('id')->name('clientes.bloquear');
+    Route::delete('/clientes/{id}', [ClientesController::class, 'destroy'])->whereUuid('id')->name('clientes.destroy');
+    Route::get('/produtos', [ProdutosController::class, 'index'])->name('produtos.index');
+    Route::post('/produtos/filtrar', [ProdutosController::class, 'filtrar'])->name('produtos.filtrar');
+    Route::get('/produtos/novo', [ProdutosController::class, 'create'])->name('produtos.create');
+    Route::post('/produtos', [ProdutosController::class, 'store'])->name('produtos.store');
+    Route::get('/produtos/{id}/editar', [ProdutosController::class, 'edit'])->whereUuid('id')->name('produtos.edit');
+    Route::put('/produtos/{id}', [ProdutosController::class, 'update'])->whereUuid('id')->name('produtos.update');
+    Route::delete('/produtos/{id}', [ProdutosController::class, 'destroy'])->whereUuid('id')->name('produtos.destroy');
+    Route::get('/produtos/categorias', [CategoriasController::class, 'index'])->name('categorias.index');
+    Route::post('/produtos/categorias', [CategoriasController::class, 'store'])->name('categorias.store');
+    Route::put('/produtos/categorias/{id}', [CategoriasController::class, 'update'])->whereUuid('id')->name('categorias.update');
+    Route::delete('/produtos/categorias/{id}', [CategoriasController::class, 'destroy'])->whereUuid('id')->name('categorias.destroy');
+    Route::get('/produtos/kits', [KitsController::class, 'index'])->name('kits.index');
+    Route::get('/produtos/kits/novo', [KitsController::class, 'create'])->name('kits.create');
+    Route::post('/produtos/kits', [KitsController::class, 'store'])->name('kits.store');
+    Route::get('/produtos/kits/{id}/editar', [KitsController::class, 'edit'])->whereUuid('id')->name('kits.edit');
+    Route::put('/produtos/kits/{id}', [KitsController::class, 'update'])->whereUuid('id')->name('kits.update');
+    Route::delete('/produtos/kits/{id}', [KitsController::class, 'destroy'])->whereUuid('id')->name('kits.destroy');
+    Route::get('/produtos/{produto}/unidades/nova', [UnidadesController::class, 'create'])->whereUuid('produto')->name('unidades.create');
+    Route::post('/produtos/{produto}/unidades', [UnidadesController::class, 'store'])->whereUuid('produto')->name('unidades.store');
+    Route::get('/produtos/unidades/{id}', [UnidadesController::class, 'show'])->whereUuid('id')->name('unidades.show');
+    Route::put('/produtos/unidades/{id}', [UnidadesController::class, 'update'])->whereUuid('id')->name('unidades.update');
+    Route::post('/produtos/unidades/{id}/baixar', [UnidadesController::class, 'baixar'])->whereUuid('id')->name('unidades.baixar');
+    Route::delete('/produtos/unidades/{id}', [UnidadesController::class, 'destroy'])->whereUuid('id')->name('unidades.destroy');
+    Route::get('/locacoes', [LocacoesController::class, 'index'])->name('locacoes.index');
+    Route::post('/locacoes/filtrar', [LocacoesController::class, 'filtrar'])->name('locacoes.filtrar');
+    Route::get('/locacoes/nova', [NovaLocacaoController::class, 'create'])->name('locacoes.create');
+    Route::post('/locacoes', [NovaLocacaoController::class, 'store'])->name('locacoes.store');
+    Route::post('/locacoes/disponivel', [NovaLocacaoController::class, 'disponivel'])->name('locacoes.disponivel');
+    Route::get('/locacoes/{numero}', [LocacoesController::class, 'show'])->whereNumber('numero')->name('locacoes.show');
+    Route::get('/locacoes/{numero}/devolucao', [DevolucaoController::class, 'create'])->whereNumber('numero')->name('locacoes.devolucao');
+    Route::post('/locacoes/{numero}/devolucao', [DevolucaoController::class, 'store'])->whereNumber('numero')->name('locacoes.devolver');
+    foreach (['receber', 'prorrogar', 'cancelar', 'entrega', 'unidades'] as $acao) {
+        Route::post("/locacoes/{numero}/$acao", [LocacoesController::class, $acao])->whereNumber('numero')->name("locacoes.$acao");
+    }
+    Route::get('/reservas', [ReservasController::class, 'index'])->name('reservas.index');
+    Route::get('/reservas/nova', [ReservasController::class, 'create'])->name('reservas.create');
+    Route::post('/reservas', [ReservasController::class, 'store'])->name('reservas.store');
+    Route::get('/reservas/{numero}', [ReservasController::class, 'show'])->whereNumber('numero')->name('reservas.show');
+    Route::get('/reservas/{numero}/editar', [ReservasController::class, 'edit'])->whereNumber('numero')->name('reservas.edit');
+    Route::put('/reservas/{numero}', [ReservasController::class, 'update'])->whereNumber('numero')->name('reservas.update');
+    Route::post('/reservas/{numero}/cancelar', [ReservasController::class, 'cancelar'])->whereNumber('numero')->name('reservas.cancelar');
+    Route::get('/orcamentos', [OrcamentosController::class, 'index'])->name('orcamentos.index');
+    Route::get('/orcamentos/novo', [OrcamentosController::class, 'create'])->name('orcamentos.create');
+    Route::post('/orcamentos', [OrcamentosController::class, 'store'])->name('orcamentos.store');
+    Route::get('/orcamentos/{id}', [OrcamentosController::class, 'show'])->whereUuid('id')->name('orcamentos.show');
+    Route::post('/orcamentos/{id}/converter', [OrcamentosController::class, 'converter'])->whereUuid('id')->name('orcamentos.converter');
+    Route::delete('/orcamentos/{id}', [OrcamentosController::class, 'destroy'])->whereUuid('id')->name('orcamentos.destroy');
+    Route::get('/manutencoes', [ManutencoesController::class, 'index'])->name('manutencoes.index');
+    Route::get('/manutencoes/nova', [ManutencoesController::class, 'create'])->name('manutencoes.create');
+    Route::post('/manutencoes', [ManutencoesController::class, 'store'])->name('manutencoes.store');
+    Route::get('/manutencoes/{id}', [ManutencoesController::class, 'show'])->whereUuid('id')->name('manutencoes.show');
+    Route::post('/manutencoes/{id}/concluir', [ManutencoesController::class, 'concluir'])->whereUuid('id')->name('manutencoes.concluir');
+    Route::delete('/manutencoes/{id}', [ManutencoesController::class, 'destroy'])->whereUuid('id')->name('manutencoes.destroy');
+    Route::get('/caixa', [CaixaController::class, 'index'])->name('caixa.index');
+    Route::post('/caixa', [CaixaController::class, 'store'])->name('caixa.store');
+    Route::delete('/caixa/{id}', [CaixaController::class, 'destroy'])->whereUuid('id')->name('caixa.destroy');
+    Route::get('/caixa/contas', [ContasPagarController::class, 'index'])->name('caixa.contas');
+    Route::post('/caixa/contas', [ContasPagarController::class, 'store'])->name('caixa.contas.store');
+    Route::post('/caixa/contas/{id}/pagar', [ContasPagarController::class, 'pagar'])->whereUuid('id')->name('caixa.contas.pagar');
+    Route::post('/caixa/contas/{id}/desfazer', [ContasPagarController::class, 'desfazer'])->whereUuid('id')->name('caixa.contas.desfazer');
+    Route::delete('/caixa/contas/{id}', [ContasPagarController::class, 'excluir'])->whereUuid('id')->name('caixa.contas.excluir');
+    Route::post('/caixa/recorrentes', [ContasPagarController::class, 'recorrenteStore'])->name('caixa.recorrentes.store');
+    Route::put('/caixa/recorrentes/{id}', [ContasPagarController::class, 'recorrenteUpdate'])->whereUuid('id')->name('caixa.recorrentes.update');
+    Route::get('/caixa/previsao', [ContasPagarController::class, 'previsao'])->name('caixa.previsao');
+    Route::get('/recibos', [RecibosController::class, 'index'])->name('recibos.index');
+    Route::get('/recibos/novo', [RecibosController::class, 'create'])->name('recibos.create');
+    Route::post('/recibos', [RecibosController::class, 'store'])->name('recibos.store');
+    Route::get('/recibos/{id}', [RecibosController::class, 'show'])->whereUuid('id')->name('recibos.show');
+    Route::get('/recibos/{id}/imprimir', [RecibosController::class, 'imprimir'])->whereUuid('id')->name('recibos.imprimir');
+    Route::get('/relatorios', [RelatoriosController::class, 'index'])->name('relatorios.index');
+    Route::get('/relatorios/contador', [RelatoriosController::class, 'contador'])->name('relatorios.contador');
+    Route::get('/relatorios/contador/baixar', [RelatoriosController::class, 'contadorBaixar'])->name('relatorios.contador.baixar');
+    Route::get('/relatorios/{chave}', [RelatoriosController::class, 'ver'])->where('chave', '[a-z_]+')->name('relatorios.ver');
+    Route::get('/configuracoes', [ConfiguracoesController::class, 'index'])->name('config.index');
+    Route::put('/configuracoes/empresa', [ConfiguracoesController::class, 'salvar'])->name('config.empresa.salvar');
+    Route::get('/configuracoes/usuarios', [UsuariosController::class, 'index'])->name('config.usuarios');
+    Route::post('/configuracoes/usuarios', [UsuariosController::class, 'store'])->name('config.usuarios.store');
+    Route::put('/configuracoes/usuarios/{id}', [UsuariosController::class, 'update'])->whereUuid('id')->name('config.usuarios.update');
+    Route::get('/configuracoes/auditoria', [AuditoriaController::class, 'index'])->name('config.auditoria');
+    Route::get('/configuracoes/senha', [SenhaController::class, 'index'])->name('config.senha');
+    Route::put('/configuracoes/senha', [SenhaController::class, 'salvar'])->name('config.senha.salvar');
+    Route::get('/roteiro', [RoteiroController::class, 'index'])->name('roteiro.index');
+    Route::post('/roteiro/marcar', [RoteiroController::class, 'marcar'])->name('roteiro.marcar');
+    Route::post('/roteiro/desmarcar', [RoteiroController::class, 'desmarcar'])->name('roteiro.desmarcar');
+    Route::get('/locacoes/{numero}/contrato', [DocumentosController::class, 'contrato'])->whereNumber('numero')->name('documentos.contrato');
+    Route::get('/locacoes/{numero}/fatura', [DocumentosController::class, 'fatura'])->whereNumber('numero')->name('documentos.fatura');
+    Route::get('/locacoes/{numero}/romaneio', [DocumentosController::class, 'romaneio'])->whereNumber('numero')->name('documentos.romaneio');
+    Route::get('/orcamentos/{id}/imprimir', [OrcamentosController::class, 'imprimir'])->whereUuid('id')->name('orcamentos.imprimir');
+    Route::get('/locacoes/{numero}/vistoria', [VistoriasController::class, 'create'])->whereNumber('numero')->name('vistorias.create');
+    Route::post('/locacoes/{numero}/vistoria', [VistoriasController::class, 'store'])->whereNumber('numero')->name('vistorias.store');
+    Route::get('/vistorias/{id}', [VistoriasController::class, 'show'])->whereUuid('id')->name('vistorias.show');
+    Route::get('/arquivos/foto/{id}', [ArquivosController::class, 'foto'])->whereUuid('id')->name('arquivos.foto');
+    Route::get('/arquivos/assinatura/{id}', [ArquivosController::class, 'assinatura'])->whereUuid('id')->name('arquivos.assinatura');
     Route::post('/busca', [BuscaController::class, 'buscar'])->name('busca.buscar');
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');
-    Route::get('/ir', [PonteController::class, 'ir'])->name('ir');
     Route::get('/arquivos/logo', [ArquivosController::class, 'logo'])->name('arquivos.logo');
+    Route::post('/suporte/sair', [SuporteController::class, 'sair'])->name('suporte.sair');
 });
+
+// Painel da plataforma (dono do SaaS): tem sessão própria, separada da sessão das locadoras
+require __DIR__.'/plataforma.php';

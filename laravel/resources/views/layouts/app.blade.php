@@ -1,22 +1,21 @@
 @php
-    // Telas já no Laravel usam rota; as outras abrem no sistema antigo (pela ponte, já logado)
     $grupos = [
         'Operação' => [
             'painel'      => ['Painel', 'painel', route('painel')],
-            'locacoes'    => ['Locações', 'locacoes', legado('locacoes')],
-            'reservas'    => ['Reservas', 'reservas', legado('reservas')],
-            'orcamentos'  => ['Orçamentos', 'orcamentos', legado('orcamentos')],
-            'roteiro'     => ['Roteiro', 'roteiro', legado('roteiro')],
+            'locacoes'    => ['Locações', 'locacoes', route('locacoes.index')],
+            'reservas'    => ['Reservas', 'reservas', route('reservas.index')],
+            'orcamentos'  => ['Orçamentos', 'orcamentos', route('orcamentos.index')],
+            'roteiro'     => ['Roteiro', 'roteiro', route('roteiro.index')],
         ],
         'Cadastros' => [
             'clientes'    => ['Clientes', 'clientes', route('clientes.index')],
-            'produtos'    => ['Produtos', 'produtos', legado('produtos')],
-            'manutencoes' => ['Manutenção', 'manutencao', legado('manutencoes')],
+            'produtos'    => ['Produtos', 'produtos', route('produtos.index')],
+            'manutencoes' => ['Manutenção', 'manutencao', route('manutencoes.index')],
         ],
         'Financeiro' => [
-            'caixa'       => ['Fluxo de caixa', 'caixa', legado('caixa')],
-            'recibos'     => ['Recibos', 'recibos', legado('recibos')],
-            'relatorios'  => ['Relatórios', 'relatorios', legado('relatorios')],
+            'caixa'       => ['Fluxo de caixa', 'caixa', route('caixa.index')],
+            'recibos'     => ['Recibos', 'recibos', route('recibos.index')],
+            'relatorios'  => ['Relatórios', 'relatorios', route('relatorios.index')],
         ],
     ];
     $nomeLocadora = $empresa->nome_fantasia ?: $empresa->razao_social;
@@ -24,17 +23,20 @@
     $migalhas = $migalhas ?? [];
     // Ações rápidas da paleta de comandos (Ctrl+K)
     $comandos = [
-        ['Nova locação', legado('locacoes', ['a' => 'nova']), 'locacoes'],
-        ['Novo cliente', legado('clientes', ['a' => 'novo']), 'clientes'],
-        ['Novo orçamento', legado('orcamentos', ['a' => 'novo']), 'orcamentos'],
-        ['Nova reserva', legado('reservas', ['a' => 'nova']), 'reservas'],
-        ['Lançar no caixa', legado('caixa', ['a' => 'lancar']), 'caixa'],
+        ['Nova locação', route('locacoes.create'), 'locacoes'],
+        ['Novo cliente', route('clientes.create'), 'clientes'],
+        ['Novo produto', route('produtos.create'), 'produtos'],
+        ['Novo recibo', route('recibos.create'), 'recibos'],
+        ['Novo orçamento', route('orcamentos.create'), 'orcamentos'],
+        ['Nova reserva', route('reservas.create'), 'reservas'],
+        ['Nova manutenção', route('manutencoes.create'), 'manutencao'],
+        ['Lançar no caixa', route('caixa.index'), 'caixa'],
         ['Ir para o painel', route('painel'), 'painel'],
         ['Ir para clientes', route('clientes.index'), 'clientes'],
-        ['Ir para locações', legado('locacoes'), 'locacoes'],
-        ['Ir para produtos', legado('produtos'), 'produtos'],
-        ['Ir para relatórios', legado('relatorios'), 'relatorios'],
-        ['Configurações', legado('config'), 'config'],
+        ['Ir para locações', route('locacoes.index'), 'locacoes'],
+        ['Ir para produtos', route('produtos.index'), 'produtos'],
+        ['Ir para relatórios', route('relatorios.index'), 'relatorios'],
+        ['Configurações', route('config.index'), 'config'],
     ];
     $acoesPaleta = array_map(fn ($c) => ['rotulo' => $c[0], 'url' => $c[1], 'ico' => $c[2]], $comandos);
 @endphp
@@ -56,6 +58,7 @@
     })();
 </script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
+@include('layouts._pwa')
 </head>
 <body class="h-full">
 <div class="flex min-h-full">
@@ -102,7 +105,7 @@
         </nav>
 
         <div class="border-t border-zinc-100 p-3 dark:border-zinc-800">
-            <a href="{{ legado('config') }}" title="Configurações"
+            <a href="{{ route('config.index') }}" title="Configurações"
                class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
                 <x-icone nome="config" class="size-5 text-zinc-400" /><span class="recolhido:lg:hidden">Configurações</span>
             </a>
@@ -149,6 +152,52 @@
                 </button>
             </div>
         </header>
+
+        {{-- Acesso de suporte: sessão só de leitura, com prazo; o botão encerra e a ação fica na auditoria da locadora --}}
+        @if (session('suporte'))
+            <div role="status" class="border-b border-amber-200 bg-amber-50 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6 lg:px-8">
+                    <span>Acesso de suporte (somente leitura) · termina às {{ date('H:i', session('suporte.expira')) }} · motivo: {{ session('suporte.motivo') }}</span>
+                    <form method="post" action="{{ route('suporte.sair') }}">
+                        @csrf
+                        <button class="font-medium underline underline-offset-2">Encerrar acesso</button>
+                    </form>
+                </div>
+            </div>
+        @endif
+
+        {{-- Mensalidade do LocGestor: aviso só para o administrador; com fatura em aberto, o botão leva ao pagamento --}}
+        @php $mensalidade = \App\Support\Mensalidade::aviso(); @endphp
+        @if ($mensalidade)
+            <div role="alert" class="border-b text-sm {{ $mensalidade['tipo'] === 'erro'
+                    ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300' }}">
+                <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6 lg:px-8">
+                    <span>{{ $mensalidade['texto'] }}</span>
+                    @if ($mensalidade['link'] !== '')
+                        <a href="{{ $mensalidade['link'] }}" target="_blank" rel="noopener noreferrer" class="btn-primario py-1 text-xs">Pagar agora</a>
+                    @endif
+                </div>
+            </div>
+        @endif
+
+        {{-- Recados do painel da plataforma: todas as locadoras veem até a validade; fechar fica guardado no navegador --}}
+        @foreach (\App\Support\Recados::ativos() as $recado)
+            @php
+                $cor = [
+                    'aviso' => 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200',
+                    'novidade' => 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200',
+                    'manutencao' => 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200',
+                ][$recado->tipo] ?? 'border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100';
+            @endphp
+            <div role="note" data-recado="{{ $recado->id }}" class="recado border-b text-sm {{ $cor }}">
+                <div class="mx-auto flex max-w-7xl items-start gap-3 px-4 py-2 sm:px-6 lg:px-8">
+                    <p class="flex-1"><strong>{{ $recado->titulo }}</strong> · {{ $recado->texto }}
+                        <small class="opacity-70">(até {{ data_br($recado->expira_em) }})</small></p>
+                    <button type="button" class="recado-fechar shrink-0 text-lg leading-none opacity-70 hover:opacity-100" aria-label="Fechar recado">×</button>
+                </div>
+            </div>
+        @endforeach
 
         <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
             {{-- Telas com cabeçalho próprio (ex.: ficha do cliente) passam ocultarTitulo => true --}}
@@ -202,5 +251,6 @@
         @endforeach
     </template>
 </dialog>
+@yield('scripts')
 </body>
 </html>

@@ -1,6 +1,7 @@
 # LocGestor - testes automáticos a cada push e pull request.
-# Instala o banco do zero (PostgreSQL 18), sobe o sistema com o servidor embutido do PHP
-# e roda os testes de isolamento entre locadoras e os testes funcionais pelas telas.
+# Instala o banco do zero (PostgreSQL 18) e roda a suíte do sistema novo (pasta laravel/: locadoras, plataforma,
+# isolamento entre locadoras no banco, cobrança do Asaas simulada, WhatsApp e PWA). Depois sobe o servidor embutido
+# do PHP para o cadastro público, que ainda é do sistema antigo.
 name: Testes
 
 on:
@@ -46,7 +47,7 @@ jobs:
           coverage: none
 
       - name: Sintaxe de todos os arquivos PHP
-        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+        run: find . -name '*.php' -not -path './.git/*' -not -path './laravel/*' -print0 | xargs -0 -n1 php -l
 
       - name: Instalar o banco (papéis, estrutura, plataforma e demonstração)
         run: |
@@ -66,26 +67,31 @@ jobs:
                   $c["db_plataforma"]["password"] = getenv("SENHA_PLATAFORMA");
                   file_put_contents("config.php", "<?php\nreturn " . var_export($c, true) . ";\n");'
 
-      - name: Testes de isolamento entre locadoras
-        run: php tests/isolamento.php
+      # Laravel (pasta laravel/): exige PHP 8.3+, então roda só na linha do 8.4.
+      # Mesmo banco e mesmo papel locgestor_app (o RLS vale); cada teste é desfeito no fim.
+      - name: Laravel - dependências
+        if: matrix.php == '8.4'
+        working-directory: laravel
+        run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Subir o sistema
+      - name: Laravel - .env do teste
+        if: matrix.php == '8.4'
+        working-directory: laravel
         run: |
-          php -S localhost:8000 -t . > /tmp/servidor.log 2>&1 &
-          for i in $(seq 1 30); do curl -fs -o /dev/null "$LOCGESTOR_URL/index.php?p=login" && exit 0; sleep 0.5; done
-          cat /tmp/servidor.log; exit 1
+          cp .env.example .env
+          cat >> .env <<EOF
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_DATABASE=locgestor
+          DB_USERNAME=locgestor_app
+          DB_PASSWORD=$SENHA_APP
+          DB_PLATAFORMA_USERNAME=locgestor_plataforma
+          DB_PLATAFORMA_PASSWORD=$SENHA_PLATAFORMA
+          EOF
+          php artisan key:generate --no-interaction
 
-      - name: Testes funcionais (pelas telas)
-        run: php tests/funcional.php
+      - name: Laravel - testes (locadoras, plataforma, isolamento no banco, cobrança, WhatsApp e PWA)
+        if: matrix.php == '8.4'
+        working-directory: laravel
+        run: php artisan test
 
-      - name: Testes da cobrança automática (Asaas simulado)
-        run: php tests/cobranca.php
-
-      - name: Testes do cadastro público
-        run: php tests/cadastro.php
-
-      - name: Nenhum warning ou erro do PHP
-        if: always()
-        run: |
-          if [ -s logs/php-erros.log ]; then cat logs/php-erros.log; exit 1; fi
-          echo "logs/php-erros.log vazio"

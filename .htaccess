@@ -20,3 +20,11 @@ AddType application/manifest+json .webmanifest
 
 # Pastas ocultas (.git, .claude) respondem como inexistentes
 RedirectMatch 404 /\.(git|claude)(/|$)
+
+# Laravel: a pasta laravel/ (com .env, código e vendor) nunca é servida direto.
+# Só a parte pública (laravel/public) responde, pelo endereço /novo.
+RedirectMatch 404 ^/laravel(/|$)
+# Qualquer .env, em qualquer pasta, também não
+<FilesMatch "^\.env">
+    Require all denied
+</FilesMatch>

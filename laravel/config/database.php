@@ -102,6 +102,23 @@ return [
             'options' => [PDO::ATTR_PERSISTENT => false, PDO::ATTR_EMULATE_PREPARES => false],
         ],
 
+        // Painel da plataforma (dono do SaaS): papel próprio, que enxerga as locadoras só pelo que a plataforma gerencia
+        'plataforma' => [
+            'driver' => 'pgsql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_PLATAFORMA_USERNAME', 'locgestor_plataforma'),
+            'password' => env('DB_PLATAFORMA_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'timezone' => 'America/Fortaleza',
+            'options' => [PDO::ATTR_PERSISTENT => false, PDO::ATTR_EMULATE_PREPARES => false],
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),
