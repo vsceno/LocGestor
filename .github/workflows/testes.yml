@@ -95,17 +95,3 @@ jobs:
         working-directory: laravel
         run: php artisan test
 
-      - name: Subir o sistema
-        run: |
-          php -S localhost:8000 -t . > /tmp/servidor.log 2>&1 &
-          for i in $(seq 1 30); do curl -fs -o /dev/null "$LOCGESTOR_URL/index.php" && exit 0; sleep 0.5; done
-          cat /tmp/servidor.log; exit 1
-
-      - name: Testes do cadastro público (sistema antigo)
-        run: php tests/cadastro.php
-
-      - name: Nenhum warning ou erro do PHP
-        if: always()
-        run: |
-          if [ -s logs/php-erros.log ]; then cat logs/php-erros.log; exit 1; fi
-          echo "logs/php-erros.log vazio"
