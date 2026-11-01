@@ -55,7 +55,7 @@
 
     <label class="flex items-start gap-2 text-sm">
         <input type="checkbox" name="aceite" value="1" required class="mt-0.5">
-        <span>Li e aceito os <a href="{{ config('locgestor.termos_url') }}" target="_blank" rel="noopener noreferrer" class="font-medium text-marca-700 underline">termos de uso</a> e o tratamento dos dados conforme a LGPD.</span>
+        <span>Li e aceito os <a href="{{ \App\Support\Configuracoes::ler()->termos_url }}" target="_blank" rel="noopener noreferrer" class="font-medium text-marca-700 underline">termos de uso</a> e o tratamento dos dados conforme a LGPD.</span>
     </label>
     <button class="btn-primario w-full py-2.5">Criar minha conta</button>
 </form>

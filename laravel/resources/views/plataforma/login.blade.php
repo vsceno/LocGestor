@@ -12,8 +12,8 @@
 <div class="flex min-h-full items-center justify-center p-6">
     <div class="w-full max-w-sm">
         <div class="mb-8 flex items-center gap-3">
-            <img src="{{ asset('assets/brand/emblema-locgestor-256.png') }}" alt="LocGestor" class="size-10 object-contain">
-            <div><p class="text-lg font-semibold">LocGestor</p><p class="text-sm text-zinc-500">Painel da plataforma</p></div>
+            <img src="{{ \App\Support\Configuracoes::logoUrl() }}" alt="{{ \App\Support\Configuracoes::nomeSistema() }}" class="size-10 object-contain">
+            <div><p class="text-lg font-semibold">{{ \App\Support\Configuracoes::nomeSistema() }}</p><p class="text-sm text-zinc-500">Painel da plataforma</p></div>
         </div>
         <h1 class="text-2xl font-semibold tracking-tight">Entrar</h1>
         <p class="mt-1 text-sm text-zinc-500">Acesso restrito ao dono da plataforma e à equipe de suporte.</p>

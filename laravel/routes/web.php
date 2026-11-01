@@ -9,12 +9,13 @@ use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
 use App\Http\Controllers\ConfiguracoesController;
 use App\Http\Controllers\ContasPagarController;
-use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\DevolucaoController;
+use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\KitsController;
 use App\Http\Controllers\LocacoesController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\ManutencoesController;
+use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\NovaLocacaoController;
 use App\Http\Controllers\OrcamentosController;
 use App\Http\Controllers\PainelController;
@@ -38,6 +39,8 @@ Route::post('/sair', [LoginController::class, 'sair'])->name('sair');
 // Link de suporte do painel da plataforma: o código de uso único é a autorização (não exige login)
 Route::get('/suporte/entrar', [SuporteController::class, 'entrar'])->name('suporte.entrar');
 // Cadastro público ("Teste grátis"): só existe com LOCGESTOR_CADASTRO_PUBLICO ligado (senão, 404)
+// Logomarca da LocGestor (pública: aparece na entrada e nos cadastros). Sem envio, é a padrão.
+Route::get('/marca/logo', [MarcaController::class, 'logo'])->name('marca.logo');
 Route::get('/cadastro', [CadastroController::class, 'form'])->name('cadastro');
 Route::post('/cadastro', [CadastroController::class, 'criar'])->name('cadastro.criar');
 Route::get('/cadastro/pronto', [CadastroController::class, 'pronto'])->name('cadastro.pronto');

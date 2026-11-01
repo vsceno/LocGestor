@@ -28,7 +28,7 @@ class RecibosController extends Controller
 
         if (! Recibos::emitenteCompleto()) {
             return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'erro',
-                'msg' => 'Preencha a razão social e o CNPJ da LocGestor (LOCGESTOR_EMITENTE_RAZAO e LOCGESTOR_EMITENTE_CNPJ) antes de emitir recibos.']]);
+                'msg' => 'Preencha a razão social e o CNPJ da LocGestor em Configurações da LocGestor antes de emitir recibos.']]);
         }
 
         return response()->view('plataforma.recibo', [

@@ -13,8 +13,8 @@ class CadastroPublicoTest extends PlataformaTestCase
     /** Liga o cadastro só para este teste. */
     private function ligado(): void
     {
-        config(['locgestor.cadastro_publico' => true, 'locgestor.cadastro_dias_teste' => 14, 'locgestor.cadastro_plano' => '',
-            'locgestor.termos_url' => 'https://termos.exemplo.com/uso']);
+        $this->definirConfiguracoes(['cadastro_publico' => true, 'cadastro_dias_teste' => 14, 'cadastro_plano_id' => null,
+            'termos_url' => 'https://termos.exemplo.com/uso']);
     }
 
     /** O que o formulário envia (identificador único a cada teste). */
@@ -38,7 +38,7 @@ class CadastroPublicoTest extends PlataformaTestCase
 
     public function test_desligado_a_pagina_nao_existe(): void
     {
-        config(['locgestor.cadastro_publico' => false]);
+        $this->definirConfiguracoes(['cadastro_publico' => false]);
         $this->get(route('cadastro'))->assertNotFound();
         $this->post(route('cadastro.criar'), $this->formulario())->assertNotFound();
     }
@@ -46,7 +46,7 @@ class CadastroPublicoTest extends PlataformaTestCase
     public function test_ligado_mas_sem_termos_publicados_nao_abre(): void
     {
         // Sem texto de termos, ninguém se cadastra: a página não existe e a entrada não mostra o link
-        config(['locgestor.cadastro_publico' => true, 'locgestor.termos_url' => '']);
+        $this->definirConfiguracoes(['cadastro_publico' => true, 'termos_url' => '']);
         $this->get(route('cadastro'))->assertNotFound();
         $this->post(route('cadastro.criar'), $this->formulario())->assertNotFound();
         $this->get(route('login'))->assertDontSee('Teste grátis');

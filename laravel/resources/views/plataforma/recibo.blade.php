@@ -3,7 +3,7 @@
 @section('folha')
 <div class="cabecalho">
     <div class="emitente">
-        <img class="logomarca" src="{{ asset('assets/brand/emblema-locgestor-256.png') }}" alt="LocGestor">
+        <img class="logomarca" src="{{ \App\Support\Configuracoes::logoUrl() }}" alt="{{ \App\Support\Configuracoes::nomeSistema() }}">
         <div class="emitente-nome">
             <div class="emitente-razao">{{ $emitente['razao_social'] }}</div>
             <div>CNPJ {{ doc_formatar($emitente['cnpj']) }}</div>
@@ -30,6 +30,11 @@
 
 @if ($p->obs !== '')
     <p>Observação: {{ $p->obs }}</p>
+@endif
+
+@php $observacaoPadrao = \App\Support\Configuracoes::ler()->observacao_recibo; @endphp
+@if ($observacaoPadrao !== '')
+    <p>{{ $observacaoPadrao }}</p>
 @endif
 
 <p class="muted">Documento emitido pela plataforma LocGestor. Não substitui a nota fiscal de serviço, que é emitida à parte.</p>

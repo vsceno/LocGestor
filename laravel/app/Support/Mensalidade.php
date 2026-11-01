@@ -23,7 +23,8 @@ final class Mensalidade
 
         // O RLS só deixa ler as cobranças da própria locadora
         $cobranca = DB::selectOne("SELECT link FROM assinatura_cobrancas WHERE status = 'pendente' AND link <> '' ORDER BY vencimento LIMIT 1");
-        return self::montar($t, Assinaturas::diasAte($t->vencimento), (string) ($cobranca?->link ?? ''), (string) config('locgestor.suporte_contato'));
+
+        return self::montar($t, Assinaturas::diasAte($t->vencimento), (string) ($cobranca?->link ?? ''), Configuracoes::ler('pgsql')->suporte_contato);
     }
 
     /**
@@ -32,22 +33,24 @@ final class Mensalidade
      */
     public static function montar(object $t, int $dias, string $link, string $contato): ?array
     {
-        $contato = $contato !== '' ? ' Contato: ' . $contato . '.' : '';
+        $contato = $contato !== '' ? ' Contato: '.$contato.'.' : '';
 
         if ($dias < 0) {
             return [
                 'tipo' => 'erro', 'link' => $link,
-                'texto' => 'Mensalidade do LocGestor vencida desde ' . data_br($t->vencimento)
-                    . '. Regularize até ' . data_br(Locadora::limitePagamento($t)) . ' para evitar a suspensão do acesso.' . $contato,
+                'texto' => 'Mensalidade do LocGestor vencida desde '.data_br($t->vencimento)
+                    .'. Regularize até '.data_br(Locadora::limitePagamento($t)).' para evitar a suspensão do acesso.'.$contato,
             ];
         }
         if ($dias <= 5 || $link !== '') {
             $quando = $dias === 0 ? 'vence hoje' : ($dias === 1 ? 'vence amanhã' : "vence em $dias dias");
+
             return [
                 'tipo' => 'aviso', 'link' => $link,
-                'texto' => "Sua mensalidade do LocGestor (plano {$t->plano}) $quando (" . data_br($t->vencimento) . ').' . $contato,
+                'texto' => "Sua mensalidade do LocGestor (plano {$t->plano}) $quando (".data_br($t->vencimento).').'.$contato,
             ];
         }
+
         return null;
     }
 }

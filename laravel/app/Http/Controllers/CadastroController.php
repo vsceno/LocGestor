@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Configuracoes;
 use App\Support\Locadoras;
 use App\Support\Recusa;
 use Illuminate\Database\QueryException;
@@ -147,21 +148,21 @@ class CadastroController extends Controller
         return ['nome' => $d['nome'], 'slug' => $d['slug'], 'login' => $d['admin_login'], 'vencimento' => $vencimento];
     }
 
-    /** Plano do período de teste: o de LOCGESTOR_CADASTRO_PLANO ou o mais barato ativo. */
+    /** Plano do período de teste: o escolhido em Configurações da LocGestor ou o mais barato ativo. */
     private function plano(): ?object
     {
-        $nome = (string) config('locgestor.cadastro_plano', '');
+        $escolhido = Configuracoes::ler()->cadastro_plano_id;
         $db = DB::connection('plataforma');
 
-        return $nome !== ''
-            ? $db->selectOne('SELECT id, nome, limite_usuarios FROM planos WHERE ativo AND nome = ?', [$nome])
+        return $escolhido !== null
+            ? $db->selectOne('SELECT id, nome, limite_usuarios FROM planos WHERE ativo AND id = ?', [$escolhido])
             : $db->selectOne('SELECT id, nome, limite_usuarios FROM planos WHERE ativo ORDER BY preco_mensal, nome LIMIT 1');
     }
 
-    /** Dias do período de teste (entre 1 e 90). */
+    /** Dias do período de teste (entre 1 e 90, como na tela Configurações). */
     private function dias(): int
     {
-        return max(1, min(90, (int) config('locgestor.cadastro_dias_teste', 14)));
+        return max(1, min(90, (int) Configuracoes::ler()->cadastro_dias_teste));
     }
 
     /**
@@ -170,6 +171,6 @@ class CadastroController extends Controller
      */
     private function ativo(): void
     {
-        abort_unless((bool) config('locgestor.cadastro_publico') && trim((string) config('locgestor.termos_url')) !== '', 404);
+        abort_unless(Configuracoes::cadastroAberto(), 404);
     }
 }

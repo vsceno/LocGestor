@@ -10,10 +10,13 @@ use Tests\PlataformaTestCase;
 /** Recibos e estornos da mensalidade: numeração sem buracos, estorno sem apagar, acesso restrito e dados do emitente. */
 class ReciboTest extends PlataformaTestCase
 {
+    /** Dados da LocGestor como a tela Configurações grava (colunas da tabela). */
     private const EMITENTE = [
-        'razao_social' => 'LocGestor Sistemas Ltda', 'cnpj' => '11444777000161',
-        'endereco' => 'Rua Exemplo, 100 - Fortaleza/CE', 'contato' => 'contato@exemplo.com',
+        'emitente_razao' => 'LocGestor Sistemas Ltda', 'emitente_cnpj' => '11444777000161',
+        'emitente_endereco' => 'Rua Exemplo, 100 - Fortaleza/CE', 'emitente_contato' => 'contato@exemplo.com',
     ];
+
+    private const SEM_EMITENTE = ['emitente_razao' => '', 'emitente_cnpj' => '', 'emitente_endereco' => '', 'emitente_contato' => ''];
 
     private function pagar(string $locadoraId, float $valor = 99.0): string
     {
@@ -77,22 +80,22 @@ class ReciboTest extends PlataformaTestCase
         $this->get($url)->assertRedirect(route('plataforma.login'));
 
         $this->entrarNaPlataforma();
-        config(['locgestor.emitente' => ['razao_social' => '', 'cnpj' => '', 'endereco' => '', 'contato' => '']]);
+        $this->definirConfiguracoes(self::SEM_EMITENTE);
         $this->get($url)->assertRedirect(route('plataforma.locadoras.editar', $id))
-            ->assertSessionHas('flash', fn ($f) => str_contains($f[0]['msg'], 'LOCGESTOR_EMITENTE_CNPJ'));
+            ->assertSessionHas('flash', fn ($f) => str_contains($f[0]['msg'], 'Configurações da LocGestor'));
 
-        config(['locgestor.emitente' => self::EMITENTE]);
+        $this->definirConfiguracoes(self::EMITENTE);
         $this->get($url)->assertOk()
             ->assertSee('Recibo de mensalidade')->assertSee('11.222.333/0001-81')
             ->assertSee('noventa e nove reais')->assertSee('LocGestor Sistemas Ltda')
-            ->assertSee('emblema-locgestor-256.png', false);
+            ->assertSee('marca/logo', false);
         $this->assertStringContainsString('no-store', $this->get($url)->headers->get('Cache-Control'));
     }
 
     public function test_recibo_estornado_aparece_como_sem_validade(): void
     {
         $this->entrarNaPlataforma();
-        config(['locgestor.emitente' => self::EMITENTE]);
+        $this->definirConfiguracoes(self::EMITENTE);
         $id = $this->criarLocadora(['cnpj' => '11222333000181']);
         $pagamento = $this->pagar($id);
         $this->post(route('plataforma.locadoras.estornar', $id));

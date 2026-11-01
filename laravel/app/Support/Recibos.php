@@ -86,16 +86,14 @@ final class Recibos
         return implode(' e ', $partes);
     }
 
-    /** Dados da LocGestor que aparecem no recibo. Vazio em razão social ou CNPJ = não emite. */
+    /** Dados da LocGestor que aparecem no recibo (tela Configurações). Vazio em razão social ou CNPJ = não emite. */
     public static function emitente(): array
     {
-        return (array) config('locgestor.emitente', []);
+        return Configuracoes::emitente();
     }
 
     public static function emitenteCompleto(): bool
     {
-        $e = self::emitente();
-
-        return trim((string) ($e['razao_social'] ?? '')) !== '' && trim((string) ($e['cnpj'] ?? '')) !== '';
+        return Configuracoes::emitenteCompleto();
     }
 }
