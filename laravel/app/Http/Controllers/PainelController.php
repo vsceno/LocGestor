@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\PainelFinanceiro;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -23,6 +24,6 @@ class PainelController extends Controller
                                   WHERE l.status = 'aberta' AND l.data_prev_devolucao <= CURRENT_DATE + 3
                                   ORDER BY l.data_prev_devolucao, l.numero LIMIT 8");
 
-        return view('painel', compact('k', 'atrasadas'));
+        return view('painel', compact('k', 'atrasadas') + ['fin' => PainelFinanceiro::painel()]);
     }
 }
