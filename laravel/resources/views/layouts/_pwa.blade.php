@@ -1,6 +1,6 @@
 {{-- Instalação como aplicativo (PWA), como o sistema antigo: manifesto, ícones e o service worker (sw.js). Só na área da locadora. --}}
 <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
-<meta name="theme-color" content="#e8710a">
+<meta name="theme-color" content="{{ isset($empresa) ? \App\Support\Identidade::resolver($empresa)['cor_principal'] : '#e8710a' }}">
 <link rel="icon" type="image/png" href="{{ asset('assets/icons/icon-192.png') }}">
 <link rel="apple-touch-icon" href="{{ asset('assets/icons/icon-180.png') }}">
 <script data-sw="{{ asset('sw.js') }}">

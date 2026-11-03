@@ -136,6 +136,8 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/relatorios/{chave}', [RelatoriosController::class, 'ver'])->where('chave', '[a-z_]+')->name('relatorios.ver');
     Route::get('/configuracoes', [ConfiguracoesController::class, 'index'])->name('config.index');
     Route::put('/configuracoes/empresa', [ConfiguracoesController::class, 'salvar'])->name('config.empresa.salvar');
+    Route::get('/configuracoes/identidade', [ConfiguracoesController::class, 'identidade'])->name('config.identidade');
+    Route::put('/configuracoes/identidade', [ConfiguracoesController::class, 'salvarIdentidade'])->name('config.identidade.salvar');
     Route::get('/configuracoes/usuarios', [UsuariosController::class, 'index'])->name('config.usuarios');
     Route::post('/configuracoes/usuarios', [UsuariosController::class, 'store'])->name('config.usuarios.store');
     Route::put('/configuracoes/usuarios/{id}', [UsuariosController::class, 'update'])->whereUuid('id')->name('config.usuarios.update');
@@ -158,6 +160,7 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');
     Route::get('/arquivos/logo', [ArquivosController::class, 'logo'])->name('arquivos.logo');
+    Route::get('/arquivos/logo-quadrada', [ArquivosController::class, 'logoQuadrada'])->name('arquivos.logo_quadrada');
     Route::post('/suporte/sair', [SuporteController::class, 'sair'])->name('suporte.sair');
 });
 

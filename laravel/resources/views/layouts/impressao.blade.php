@@ -10,6 +10,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ $titulo }}</title>
 <link rel="stylesheet" href="{{ asset('assets/css/print.css') }}">
+{!! \App\Support\Identidade::html($empresa ?? null, true) !!}
 </head>
 <body>
 <div class="barra-impressao">
