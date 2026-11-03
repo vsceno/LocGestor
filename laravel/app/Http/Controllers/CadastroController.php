@@ -131,7 +131,7 @@ class CadastroController extends Controller
         try {
             Locadoras::provisionar([
                 'nome' => $d['nome'], 'slug' => $d['slug'], 'cnpj' => $d['cnpj'], 'email' => $d['email'], 'telefone' => $d['telefone'],
-                'plano' => $plano, 'vencimento' => $vencimento, 'carencia' => 5,
+                'plano' => $plano, 'vencimento' => $vencimento, 'carencia' => 5, 'teste_ate' => $vencimento,
                 'admin_nome' => $d['admin_nome'], 'admin_login' => $d['admin_login'], 'admin_senha' => $senha,
                 'trocar_senha' => false,   // quem se cadastra escolheu a própria senha
             ]);

@@ -68,9 +68,9 @@ class CadastroPublicoTest extends PlataformaTestCase
             ->post(route('cadastro.criar'), $dados)
             ->assertRedirect(route('cadastro.pronto'));
 
-        $t = DB::connection('plataforma')->selectOne('SELECT id, status, vencimento, carencia_dias, email_contato FROM tenants WHERE slug = ?', [$dados['slug']]);
-        $this->assertSame(['ativa', now()->addDays(14)->toDateString(), 5, 'contato@exemplo.com'],
-            [$t->status, $t->vencimento, (int) $t->carencia_dias, $t->email_contato]);
+        $t = DB::connection('plataforma')->selectOne('SELECT id, status, vencimento, carencia_dias, email_contato, teste_ate FROM tenants WHERE slug = ?', [$dados['slug']]);
+        $this->assertSame(['ativa', now()->addDays(14)->toDateString(), 5, 'contato@exemplo.com', now()->addDays(14)->toDateString()],
+            [$t->status, $t->vencimento, (int) $t->carencia_dias, $t->email_contato, $t->teste_ate]);
 
         // O admin escolheu a própria senha: não é obrigado a trocá-la no primeiro acesso
         $admin = Locadoras::noContexto($t->id, fn ($db) => $db->selectOne("SELECT login, trocar_senha FROM usuarios WHERE login = 'maria'"));
