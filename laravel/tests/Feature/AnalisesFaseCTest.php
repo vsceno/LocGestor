@@ -114,4 +114,21 @@ class AnalisesFaseCTest extends TestCase
         $this->get("/relatorios/ocupacao_mensal?de=$de&ate=$ate")->assertOk()->assertSee('Ocupação da frota por mês');
         $this->get("/relatorios/conversao?de=$de&ate=$ate")->assertOk()->assertSee('Conversão de orçamentos e reservas');
     }
+
+    public function test_a_dre_so_aparece_e_abre_para_o_administrador(): void
+    {
+        $this->entrarComo();
+        DB::insert("INSERT INTO usuarios (nome, login, senha_hash, perfil) VALUES ('Operador DRE', 'oper.dre', ?, 'operador')",
+            [password_hash('oper12345', PASSWORD_DEFAULT)]);
+        $de = now()->startOfMonth()->toDateString();
+        $ate = now()->toDateString();
+        $this->get('/relatorios')->assertSee('DRE simples por mês');
+
+        $this->post('/sair');
+        $this->entrarComo('alfa-locacoes', 'oper.dre', 'oper12345');
+        $this->get('/relatorios')->assertOk()->assertDontSee('DRE simples por mês')->assertSee('Faturamento por mês');
+        $this->get("/relatorios/dre?de=$de&ate=$ate")->assertForbidden();
+        $this->get("/relatorios/dre?de=$de&ate=$ate&csv=1")->assertForbidden();
+        $this->get("/relatorios/dre?de=$de&ate=$ate&imprimir=1")->assertForbidden();
+    }
 }

@@ -266,6 +266,7 @@ class Relatorios
             ],
             'dre' => [
                 'titulo' => 'DRE simples por mês',
+                'admin' => true,
                 'descricao' => 'Demonstração de resultado no regime de caixa: o que entrou e o que saiu em cada mês. '
                              .'Resultado = entradas − saídas; margem = resultado ÷ entradas. Manutenção e contas a pagar são '
                              .'as saídas lançadas por essas telas; o resto das saídas fica em "outras saídas".',

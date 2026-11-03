@@ -5,6 +5,7 @@
 @section('conteudo')
 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
     @foreach ($relatorios as $chave => $rel)
+        @continue(($rel['admin'] ?? false) && ! $admin)
         <a href="{{ route('relatorios.ver', $chave) }}" class="cartao block p-5 transition hover:-translate-y-0.5 hover:shadow-md">
             <h2 class="cartao-titulo">{{ $rel['titulo'] }}</h2>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ $rel['descricao'] }}</p>
