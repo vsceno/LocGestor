@@ -12,48 +12,48 @@ use Illuminate\Support\Facades\DB;
 class Relatorios
 {
     public const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto',
-                          'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     /** @return array<string, array<string, mixed>> */
     public static function definicoes(): array
     {
         return [
             'atraso' => [
-                'titulo'    => 'Locações em atraso',
+                'titulo' => 'Locações em atraso',
                 'descricao' => 'Locações abertas com a devolução prevista vencida, das mais atrasadas para as menos.',
-                'periodo'   => false,
-                'sql'       => "SELECT l.numero, c.nome AS cliente, COALESCE(NULLIF(c.celular, ''), c.telefone) AS telefone,
+                'periodo' => false,
+                'sql' => "SELECT l.numero, c.nome AS cliente, COALESCE(NULLIF(c.celular, ''), c.telefone) AS telefone,
                                        l.data_saida, l.data_prev_devolucao, CURRENT_DATE - l.data_prev_devolucao AS dias_atraso,
                                        v.valor_atual, v.valor_pago, v.valor_atual - v.valor_pago AS saldo
                                   FROM locacoes l JOIN clientes c ON c.id = l.cliente_id JOIN vw_locacao_valores v ON v.locacao_id = l.id
                                  WHERE l.status = 'aberta' AND l.data_prev_devolucao < CURRENT_DATE
                                  ORDER BY dias_atraso DESC, l.numero",
-                'colunas'   => ['numero' => ['Nº', 'link'], 'cliente' => ['Cliente', 'txt'], 'telefone' => ['Telefone', 'txt'],
-                                'data_saida' => ['Saída', 'date'], 'data_prev_devolucao' => ['Prevista', 'date'],
-                                'dias_atraso' => ['Dias de atraso', 'num'], 'valor_atual' => ['Valor até hoje', 'money'],
-                                'valor_pago' => ['Pago', 'money'], 'saldo' => ['Saldo', 'money']],
-                'soma'      => ['valor_atual', 'valor_pago', 'saldo'],
+                'colunas' => ['numero' => ['Nº', 'link'], 'cliente' => ['Cliente', 'txt'], 'telefone' => ['Telefone', 'txt'],
+                    'data_saida' => ['Saída', 'date'], 'data_prev_devolucao' => ['Prevista', 'date'],
+                    'dias_atraso' => ['Dias de atraso', 'num'], 'valor_atual' => ['Valor até hoje', 'money'],
+                    'valor_pago' => ['Pago', 'money'], 'saldo' => ['Saldo', 'money']],
+                'soma' => ['valor_atual', 'valor_pago', 'saldo'],
             ],
             'debito' => [
-                'titulo'    => 'Clientes com débito',
+                'titulo' => 'Clientes com débito',
                 'descricao' => 'Clientes com saldo a pagar (valor apurado menos o pago), somando todas as locações não canceladas.',
-                'periodo'   => false,
-                'sql'       => "SELECT c.nome AS cliente, COALESCE(NULLIF(c.celular, ''), c.telefone) AS telefone, count(*) AS locacoes,
+                'periodo' => false,
+                'sql' => "SELECT c.nome AS cliente, COALESCE(NULLIF(c.celular, ''), c.telefone) AS telefone, count(*) AS locacoes,
                                        SUM(v.valor_atual) AS total, SUM(v.valor_pago) AS pago, SUM(v.valor_atual - v.valor_pago) AS saldo
                                   FROM locacoes l JOIN clientes c ON c.id = l.cliente_id JOIN vw_locacao_valores v ON v.locacao_id = l.id
                                  WHERE l.status <> 'cancelada' AND v.valor_atual - v.valor_pago > 0.004
                                  GROUP BY c.id, c.nome, c.celular, c.telefone
                                  ORDER BY saldo DESC",
-                'colunas'   => ['cliente' => ['Cliente', 'txt'], 'telefone' => ['Telefone', 'txt'], 'locacoes' => ['Locações com saldo', 'num'],
-                                'total' => ['Valor', 'money'], 'pago' => ['Pago', 'money'], 'saldo' => ['Saldo devedor', 'money']],
-                'soma'      => ['locacoes', 'total', 'pago', 'saldo'],
-                'grafico'   => ['rotulo' => 'cliente', 'series' => ['saldo' => ['Saldo devedor', '#c5221f']], 'moeda' => true, 'horizontal' => true],
+                'colunas' => ['cliente' => ['Cliente', 'txt'], 'telefone' => ['Telefone', 'txt'], 'locacoes' => ['Locações com saldo', 'num'],
+                    'total' => ['Valor', 'money'], 'pago' => ['Pago', 'money'], 'saldo' => ['Saldo devedor', 'money']],
+                'soma' => ['locacoes', 'total', 'pago', 'saldo'],
+                'grafico' => ['rotulo' => 'cliente', 'series' => ['saldo' => ['Saldo devedor', '#c5221f']], 'moeda' => true, 'horizontal' => true],
             ],
             'estoque' => [
-                'titulo'    => 'Disponibilidade de estoque',
+                'titulo' => 'Disponibilidade de estoque',
                 'descricao' => 'Estoque, itens na rua, reservados para hoje, em manutenção e disponíveis, com o patrimônio a preço de reposição.',
-                'periodo'   => false,
-                'sql'       => "SELECT p.codigo, p.descricao, COALESCE(cat.nome, '') AS categoria, p.qtd_total,
+                'periodo' => false,
+                'sql' => "SELECT p.codigo, p.descricao, COALESCE(cat.nome, '') AS categoria, p.qtd_total,
                                        COALESCE(a.qtd_alugada, 0) AS alugado,
                                        COALESCE((SELECT SUM(ri.quantidade) FROM reserva_itens ri JOIN reservas r ON r.id = ri.reserva_id
                                                   WHERE r.status = 'ativa' AND ri.produto_id = p.id
@@ -70,19 +70,19 @@ class Relatorios
                                   LEFT JOIN vw_produto_manutencao mn ON mn.produto_id = p.id
                                  WHERE p.ativo
                                  ORDER BY p.descricao",
-                'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'categoria' => ['Categoria', 'txt'],
-                                'qtd_total' => ['Estoque', 'num'], 'alugado' => ['Alugado', 'num'], 'reservado' => ['Reservado hoje', 'num'],
-                                'manutencao' => ['Manutenção', 'num'],
-                                'disponivel' => ['Disponível', 'num'], 'valor_reposicao' => ['Reposição (un.)', 'money'],
-                                'patrimonio' => ['Patrimônio', 'money']],
-                'soma'      => ['qtd_total', 'alugado', 'reservado', 'manutencao', 'disponivel', 'patrimonio'],
+                'colunas' => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'categoria' => ['Categoria', 'txt'],
+                    'qtd_total' => ['Estoque', 'num'], 'alugado' => ['Alugado', 'num'], 'reservado' => ['Reservado hoje', 'num'],
+                    'manutencao' => ['Manutenção', 'num'],
+                    'disponivel' => ['Disponível', 'num'], 'valor_reposicao' => ['Reposição (un.)', 'money'],
+                    'patrimonio' => ['Patrimônio', 'money']],
+                'soma' => ['qtd_total', 'alugado', 'reservado', 'manutencao', 'disponivel', 'patrimonio'],
             ],
             'mais_alugados' => [
-                'titulo'    => 'Produtos mais alugados',
+                'titulo' => 'Produtos mais alugados',
                 'descricao' => 'Quantidade locada, faturamento e ocupação no período. Ocupação = unidades × dias alugados '
-                             . '÷ (estoque × dias do período).',
-                'periodo'   => true,
-                'sql'       => "WITH uso AS (
+                             .'÷ (estoque × dias do período).',
+                'periodo' => true,
+                'sql' => "WITH uso AS (
                                     SELECT li.produto_id,
                                            di.quantidade * GREATEST(0, LEAST(d.data, CAST(:ate AS date) + 1) - GREATEST(l.data_saida, CAST(:de AS date))) AS ud
                                       FROM devolucao_itens di
@@ -111,17 +111,17 @@ class Relatorios
                                             / (p.qtd_total * (CAST(:ate AS date) - CAST(:de AS date) + 1)) ELSE 0 END AS ocupacao
                                   FROM produtos p
                                  ORDER BY qtd_locada DESC, faturamento DESC",
-                'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'qtd_total' => ['Estoque', 'num'],
-                                'locacoes' => ['Locações', 'num'], 'qtd_locada' => ['Qtd. locada', 'num'],
-                                'faturamento' => ['Faturamento', 'money'], 'ocupacao' => ['Ocupação', 'pct']],
-                'soma'      => ['locacoes', 'qtd_locada', 'faturamento'],
-                'grafico'   => ['rotulo' => 'descricao', 'series' => ['faturamento' => ['Faturamento', '#e8710a']], 'moeda' => true, 'horizontal' => true],
+                'colunas' => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'qtd_total' => ['Estoque', 'num'],
+                    'locacoes' => ['Locações', 'num'], 'qtd_locada' => ['Qtd. locada', 'num'],
+                    'faturamento' => ['Faturamento', 'money'], 'ocupacao' => ['Ocupação', 'pct']],
+                'soma' => ['locacoes', 'qtd_locada', 'faturamento'],
+                'grafico' => ['rotulo' => 'descricao', 'series' => ['faturamento' => ['Faturamento', '#e8710a']], 'moeda' => true, 'horizontal' => true],
             ],
             'sem_movimento' => [
-                'titulo'    => 'Produtos sem movimento',
+                'titulo' => 'Produtos sem movimento',
                 'descricao' => 'Produtos ativos que não saíram em nenhuma locação no período, com o patrimônio parado.',
-                'periodo'   => true,
-                'sql'       => "SELECT p.codigo, p.descricao, p.qtd_total,
+                'periodo' => true,
+                'sql' => "SELECT p.codigo, p.descricao, p.qtd_total,
                                        (SELECT max(l.data_saida) FROM locacao_itens li JOIN locacoes l ON l.id = li.locacao_id
                                          WHERE li.produto_id = p.id AND l.status <> 'cancelada') AS ultima_saida,
                                        p.qtd_total * p.valor_reposicao AS patrimonio
@@ -131,15 +131,15 @@ class Relatorios
                                         WHERE li.produto_id = p.id AND l.status <> 'cancelada'
                                           AND l.data_saida BETWEEN CAST(:de AS date) AND CAST(:ate AS date))
                                  ORDER BY patrimonio DESC",
-                'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'qtd_total' => ['Estoque', 'num'],
-                                'ultima_saida' => ['Última saída', 'date'], 'patrimonio' => ['Patrimônio parado', 'money']],
-                'soma'      => ['qtd_total', 'patrimonio'],
+                'colunas' => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'qtd_total' => ['Estoque', 'num'],
+                    'ultima_saida' => ['Última saída', 'date'], 'patrimonio' => ['Patrimônio parado', 'money']],
+                'soma' => ['qtd_total', 'patrimonio'],
             ],
             'faturamento' => [
-                'titulo'    => 'Faturamento por mês',
+                'titulo' => 'Faturamento por mês',
                 'descricao' => 'Entradas, saídas e resultado do caixa em cada mês, com o número de locações iniciadas.',
-                'periodo'   => true,
-                'sql'       => "SELECT to_char(m, 'MM/YYYY') AS mes,
+                'periodo' => true,
+                'sql' => "SELECT to_char(m, 'MM/YYYY') AS mes,
                                        COALESCE((SELECT SUM(valor) FROM caixa WHERE tipo = 'E' AND date_trunc('month', data) = m
                                                   AND data BETWEEN CAST(:de AS date) AND CAST(:ate AS date)), 0) AS entradas,
                                        COALESCE((SELECT SUM(valor) FROM caixa WHERE tipo = 'S' AND date_trunc('month', data) = m
@@ -151,49 +151,49 @@ class Relatorios
                                   FROM generate_series(date_trunc('month', CAST(:de AS date)), date_trunc('month', CAST(:ate AS date)),
                                                        INTERVAL '1 month') AS m
                                  ORDER BY m",
-                'colunas'   => ['mes' => ['Mês', 'txt'], 'entradas' => ['Entradas', 'money'], 'saidas' => ['Saídas', 'money'],
-                                'resultado' => ['Resultado', 'money'], 'locacoes' => ['Locações', 'num']],
-                'soma'      => ['entradas', 'saidas', 'resultado', 'locacoes'],
-                'grafico'   => ['rotulo' => 'mes', 'series' => ['entradas' => ['Entradas', '#1e8e3e'], 'saidas' => ['Saídas', '#c5221f']], 'moeda' => true],
+                'colunas' => ['mes' => ['Mês', 'txt'], 'entradas' => ['Entradas', 'money'], 'saidas' => ['Saídas', 'money'],
+                    'resultado' => ['Resultado', 'money'], 'locacoes' => ['Locações', 'num']],
+                'soma' => ['entradas', 'saidas', 'resultado', 'locacoes'],
+                'grafico' => ['rotulo' => 'mes', 'series' => ['entradas' => ['Entradas', '#1e8e3e'], 'saidas' => ['Saídas', '#c5221f']], 'moeda' => true],
             ],
             'clientes_top' => [
-                'titulo'    => 'Clientes que mais alugam',
+                'titulo' => 'Clientes que mais alugam',
                 'descricao' => 'Clientes ordenados pelo valor das locações iniciadas no período.',
-                'periodo'   => true,
-                'sql'       => "SELECT c.nome AS cliente, count(*) AS locacoes, SUM(v.valor_atual) AS valor,
+                'periodo' => true,
+                'sql' => "SELECT c.nome AS cliente, count(*) AS locacoes, SUM(v.valor_atual) AS valor,
                                        SUM(v.valor_atual) / count(*) AS ticket, max(l.data_saida) AS ultima
                                   FROM locacoes l JOIN clientes c ON c.id = l.cliente_id JOIN vw_locacao_valores v ON v.locacao_id = l.id
                                  WHERE l.status <> 'cancelada' AND l.data_saida BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
                                  GROUP BY c.id, c.nome
                                  ORDER BY valor DESC
                                  LIMIT 50",
-                'colunas'   => ['cliente' => ['Cliente', 'txt'], 'locacoes' => ['Locações', 'num'], 'valor' => ['Valor', 'money'],
-                                'ticket' => ['Ticket médio', 'money'], 'ultima' => ['Última locação', 'date']],
-                'soma'      => ['locacoes', 'valor'],
-                'grafico'   => ['rotulo' => 'cliente', 'series' => ['valor' => ['Valor', '#e8710a']], 'moeda' => true, 'horizontal' => true],
+                'colunas' => ['cliente' => ['Cliente', 'txt'], 'locacoes' => ['Locações', 'num'], 'valor' => ['Valor', 'money'],
+                    'ticket' => ['Ticket médio', 'money'], 'ultima' => ['Última locação', 'date']],
+                'soma' => ['locacoes', 'valor'],
+                'grafico' => ['rotulo' => 'cliente', 'series' => ['valor' => ['Valor', '#e8710a']], 'moeda' => true, 'horizontal' => true],
             ],
             'periodo' => [
-                'titulo'    => 'Locações no período',
+                'titulo' => 'Locações no período',
                 'descricao' => 'Todas as locações com saída no período, com valores e saldo.',
-                'periodo'   => true,
-                'sql'       => "SELECT l.numero, c.nome AS cliente, l.data_saida, l.data_prev_devolucao, l.status,
+                'periodo' => true,
+                'sql' => "SELECT l.numero, c.nome AS cliente, l.data_saida, l.data_prev_devolucao, l.status,
                                        v.valor_atual, v.valor_pago,
                                        CASE WHEN l.status = 'cancelada' THEN 0 ELSE v.valor_atual - v.valor_pago END AS saldo
                                   FROM locacoes l JOIN clientes c ON c.id = l.cliente_id JOIN vw_locacao_valores v ON v.locacao_id = l.id
                                  WHERE l.data_saida BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
                                  ORDER BY l.data_saida, l.numero",
-                'colunas'   => ['numero' => ['Nº', 'link'], 'cliente' => ['Cliente', 'txt'], 'data_saida' => ['Saída', 'date'],
-                                'data_prev_devolucao' => ['Prevista', 'date'], 'status' => ['Situação', 'txt'],
-                                'valor_atual' => ['Valor', 'money'], 'valor_pago' => ['Pago', 'money'], 'saldo' => ['Saldo', 'money']],
-                'soma'      => ['valor_atual', 'valor_pago', 'saldo'],
+                'colunas' => ['numero' => ['Nº', 'link'], 'cliente' => ['Cliente', 'txt'], 'data_saida' => ['Saída', 'date'],
+                    'data_prev_devolucao' => ['Prevista', 'date'], 'status' => ['Situação', 'txt'],
+                    'valor_atual' => ['Valor', 'money'], 'valor_pago' => ['Pago', 'money'], 'saldo' => ['Saldo', 'money']],
+                'soma' => ['valor_atual', 'valor_pago', 'saldo'],
             ],
             'rentabilidade' => [
-                'titulo'    => 'Rentabilidade por equipamento',
+                'titulo' => 'Rentabilidade por equipamento',
                 'descricao' => 'Faturamento (itens devolvidos no período) menos o custo das manutenções concluídas no período. '
-                             . 'Investimento = valor de aquisição das unidades de patrimônio ou, sem elas, estoque × valor de reposição. '
-                             . '"Já recuperado" compara todo o faturamento menos manutenções, desde sempre, com o investimento.',
-                'periodo'   => true,
-                'sql'       => "WITH fat AS (
+                             .'Investimento = valor de aquisição das unidades de patrimônio ou, sem elas, estoque × valor de reposição. '
+                             .'"Já recuperado" compara todo o faturamento menos manutenções, desde sempre, com o investimento.',
+                'periodo' => true,
+                'sql' => 'WITH fat AS (
                                     SELECT li.produto_id,
                                            SUM(di.valor) FILTER (WHERE d.data BETWEEN CAST(:de AS date) AND CAST(:ate AS date)) AS periodo,
                                            SUM(di.valor) AS total
@@ -225,19 +225,19 @@ class Relatorios
                                   LEFT JOIN fat ON fat.produto_id = p.id
                                   LEFT JOIN man ON man.produto_id = p.id
                                  WHERE p.ativo OR fat.periodo > 0 OR man.periodo > 0
-                                 ORDER BY resultado DESC, p.descricao",
-                'colunas'   => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'faturamento' => ['Faturamento', 'money'],
-                                'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money'],
-                                'investimento' => ['Investimento', 'money'], 'recuperado' => ['Já recuperado', 'pct']],
-                'soma'      => ['faturamento', 'manutencao', 'resultado', 'investimento'],
-                'grafico'   => ['rotulo' => 'descricao', 'series' => ['resultado' => ['Resultado', '#1e8e3e']], 'moeda' => true, 'horizontal' => true],
+                                 ORDER BY resultado DESC, p.descricao',
+                'colunas' => ['codigo' => ['Código', 'txt'], 'descricao' => ['Produto', 'txt'], 'faturamento' => ['Faturamento', 'money'],
+                    'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money'],
+                    'investimento' => ['Investimento', 'money'], 'recuperado' => ['Já recuperado', 'pct']],
+                'soma' => ['faturamento', 'manutencao', 'resultado', 'investimento'],
+                'grafico' => ['rotulo' => 'descricao', 'series' => ['resultado' => ['Resultado', '#1e8e3e']], 'moeda' => true, 'horizontal' => true],
             ],
             'rentabilidade_unidade' => [
-                'titulo'    => 'Rentabilidade por unidade (patrimônio)',
+                'titulo' => 'Rentabilidade por unidade (patrimônio)',
                 'descricao' => 'Para as peças com número de patrimônio: dias na rua e faturamento das locações em que a unidade voltou '
-                             . 'no período (a parte dela no valor do item), menos as manutenções dela concluídas no período.',
-                'periodo'   => true,
-                'sql'       => "WITH uso AS (
+                             .'no período (a parte dela no valor do item), menos as manutenções dela concluídas no período.',
+                'periodo' => true,
+                'sql' => 'WITH uso AS (
                                     SELECT lu.unidade_id, d.data - l.data_saida AS dias,
                                            di.valor / NULLIF(di.quantidade, 0) AS valor
                                       FROM locacao_unidades lu
@@ -258,11 +258,139 @@ class Relatorios
                                                       AND m.data_fim BETWEEN CAST(:de AS date) AND CAST(:ate AS date)), 0) AS resultado
                                   FROM unidades u JOIN produtos p ON p.id = u.produto_id
                                  WHERE u.ativa
-                                 ORDER BY resultado DESC, u.patrimonio",
-                'colunas'   => ['patrimonio' => ['Patrimônio', 'txt'], 'produto' => ['Produto', 'txt'], 'aquisicao_valor' => ['Aquisição', 'money'],
-                                'locacoes' => ['Locações', 'num'], 'dias' => ['Dias na rua', 'num'], 'faturamento' => ['Faturamento', 'money'],
-                                'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money']],
-                'soma'      => ['locacoes', 'dias', 'faturamento', 'manutencao', 'resultado'],
+                                 ORDER BY resultado DESC, u.patrimonio',
+                'colunas' => ['patrimonio' => ['Patrimônio', 'txt'], 'produto' => ['Produto', 'txt'], 'aquisicao_valor' => ['Aquisição', 'money'],
+                    'locacoes' => ['Locações', 'num'], 'dias' => ['Dias na rua', 'num'], 'faturamento' => ['Faturamento', 'money'],
+                    'manutencao' => ['Manutenção', 'money'], 'resultado' => ['Resultado', 'money']],
+                'soma' => ['locacoes', 'dias', 'faturamento', 'manutencao', 'resultado'],
+            ],
+            'dre' => [
+                'titulo' => 'DRE simples por mês',
+                'descricao' => 'Demonstração de resultado no regime de caixa: o que entrou e o que saiu em cada mês. '
+                             .'Resultado = entradas − saídas; margem = resultado ÷ entradas. Manutenção e contas a pagar são '
+                             .'as saídas lançadas por essas telas; o resto das saídas fica em "outras saídas".',
+                'periodo' => true,
+                'sql' => "SELECT to_char(m, 'MM/YYYY') AS mes,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'E' AND c.locacao_id IS NOT NULL), 0) AS locacoes,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'E' AND c.locacao_id IS NULL), 0) AS outras_entradas,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'E'), 0) AS entradas,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'S' AND EXISTS (
+                                                    SELECT 1 FROM manutencoes x WHERE x.caixa_id = c.id)), 0) AS manutencao,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'S' AND EXISTS (
+                                                    SELECT 1 FROM contas_pagar x WHERE x.caixa_id = c.id)), 0) AS contas,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'S'
+                                                    AND NOT EXISTS (SELECT 1 FROM manutencoes x WHERE x.caixa_id = c.id)
+                                                    AND NOT EXISTS (SELECT 1 FROM contas_pagar x WHERE x.caixa_id = c.id)), 0) AS outras_saidas,
+                                       COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'S'), 0) AS saidas,
+                                       COALESCE(SUM(CASE WHEN c.tipo = 'E' THEN c.valor ELSE -c.valor END), 0) AS resultado,
+                                       CASE WHEN COALESCE(SUM(c.valor) FILTER (WHERE c.tipo = 'E'), 0) > 0
+                                            THEN 100.0 * COALESCE(SUM(CASE WHEN c.tipo = 'E' THEN c.valor ELSE -c.valor END), 0)
+                                                 / SUM(c.valor) FILTER (WHERE c.tipo = 'E')
+                                            ELSE 0 END AS margem
+                                  FROM generate_series(date_trunc('month', CAST(:de AS date)), date_trunc('month', CAST(:ate AS date)),
+                                                       INTERVAL '1 month') AS m
+                                  LEFT JOIN caixa c ON date_trunc('month', c.data) = m
+                                                   AND c.data BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
+                                 GROUP BY m ORDER BY m",
+                'colunas' => ['mes' => ['Mês', 'txt'], 'locacoes' => ['Entradas de locação', 'money'],
+                    'outras_entradas' => ['Outras entradas', 'money'], 'entradas' => ['Entradas', 'money'],
+                    'manutencao' => ['Manutenção', 'money'], 'contas' => ['Contas a pagar', 'money'],
+                    'outras_saidas' => ['Outras saídas', 'money'], 'saidas' => ['Saídas', 'money'],
+                    'resultado' => ['Resultado', 'money'], 'margem' => ['Margem', 'pct']],
+                'soma' => ['locacoes', 'outras_entradas', 'entradas', 'manutencao', 'contas', 'outras_saidas', 'saidas', 'resultado'],
+                'grafico' => ['rotulo' => 'mes', 'series' => ['entradas' => ['Entradas', '#1e8e3e'], 'saidas' => ['Saídas', '#c5221f']], 'moeda' => true],
+            ],
+            'ocupacao_mensal' => [
+                'titulo' => 'Ocupação da frota por mês',
+                'descricao' => 'Unidades-dia na rua ÷ unidades-dia disponíveis, mês a mês. Disponível = estoque ativo de hoje × dias do mês. '
+                             .'O estoque de hoje é usado em todos os meses (não há histórico de compra e baixa de equipamentos).',
+                'periodo' => true,
+                'sql' => "WITH meses AS (
+                                    SELECT m::date AS ini, (m + INTERVAL '1 month')::date AS prox
+                                      FROM generate_series(date_trunc('month', CAST(:de AS date)), date_trunc('month', CAST(:ate AS date)),
+                                                           INTERVAL '1 month') AS m
+                                ), uso AS (
+                                    SELECT me.ini, di.quantidade * GREATEST(0, LEAST(d.data, me.prox) - GREATEST(l.data_saida, me.ini)) AS ud
+                                      FROM meses me
+                                      CROSS JOIN devolucao_itens di
+                                      JOIN devolucoes d ON d.id = di.devolucao_id
+                                      JOIN locacao_itens li ON li.id = di.locacao_item_id
+                                      JOIN locacoes l ON l.id = li.locacao_id
+                                    UNION ALL
+                                    SELECT me.ini, (li.quantidade - li.qtd_devolvida)
+                                                   * GREATEST(0, LEAST(CURRENT_DATE, me.prox) - GREATEST(l.data_saida, me.ini))
+                                      FROM meses me
+                                      CROSS JOIN locacao_itens li
+                                      JOIN locacoes l ON l.id = li.locacao_id
+                                     WHERE l.status = 'aberta'
+                                ), estoque AS (
+                                    SELECT COALESCE(SUM(qtd_total), 0) AS unidades FROM produtos WHERE ativo
+                                ), locado AS (
+                                    SELECT ini, SUM(ud) AS ud FROM uso GROUP BY ini
+                                )
+                                SELECT to_char(me.ini, 'MM/YYYY') AS mes,
+                                       COALESCE(lo.ud, 0) AS locado,
+                                       (SELECT unidades FROM estoque) * (me.prox - me.ini) AS disponivel,
+                                       CASE WHEN (SELECT unidades FROM estoque) > 0
+                                            THEN 100.0 * COALESCE(lo.ud, 0) / ((SELECT unidades FROM estoque) * (me.prox - me.ini))
+                                            ELSE 0 END AS ocupacao
+                                  FROM meses me
+                                  LEFT JOIN locado lo ON lo.ini = me.ini
+                                 ORDER BY me.ini",
+                'colunas' => ['mes' => ['Mês', 'txt'], 'locado' => ['Unidades-dia locadas', 'num'],
+                    'disponivel' => ['Unidades-dia disponíveis', 'num'], 'ocupacao' => ['Ocupação', 'pct']],
+                'soma' => ['locado', 'disponivel'],
+                'grafico' => ['rotulo' => 'mes', 'series' => ['ocupacao' => ['Ocupação (%)', '#1a73e8']], 'moeda' => false],
+            ],
+            'conversao' => [
+                'titulo' => 'Conversão de orçamentos e reservas',
+                'descricao' => 'Pelo mês de emissão (orçamento) ou de criação (reserva). Orçamento: convertidos ÷ (emitidos − ainda vigentes, '
+                             .'em aberto). Reserva: convertidas ÷ (convertidas + canceladas + vencidas sem locação).',
+                'periodo' => true,
+                'sql' => "WITH orc AS (
+                                    SELECT date_trunc('month', o.emissao) AS mes, count(*) AS emitidos,
+                                           count(*) FILTER (WHERE o.status = 'convertido') AS convertidos,
+                                           count(*) FILTER (WHERE o.status = 'aberto' AND o.validade >= CURRENT_DATE) AS vigentes
+                                      FROM orcamentos o
+                                     WHERE o.emissao BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
+                                     GROUP BY 1
+                                ), res AS (
+                                    SELECT date_trunc('month', CAST(r.criado_em AS date)) AS mes, count(*) AS criadas,
+                                           count(*) FILTER (WHERE r.status = 'convertida') AS convertidas,
+                                           count(*) FILTER (WHERE r.status = 'cancelada') AS canceladas,
+                                           count(*) FILTER (WHERE r.status = 'ativa' AND r.data_fim < CURRENT_DATE) AS vencidas
+                                      FROM reservas r
+                                     WHERE CAST(r.criado_em AS date) BETWEEN CAST(:de AS date) AND CAST(:ate AS date)
+                                     GROUP BY 1
+                                )
+                                SELECT to_char(m, 'MM/YYYY') AS mes,
+                                       COALESCE(orc.emitidos, 0) AS orc_emitidos,
+                                       COALESCE(orc.convertidos, 0) AS orc_convertidos,
+                                       COALESCE(orc.vigentes, 0) AS orc_vigentes,
+                                       CASE WHEN COALESCE(orc.emitidos, 0) - COALESCE(orc.vigentes, 0) > 0
+                                            THEN 100.0 * COALESCE(orc.convertidos, 0) / (COALESCE(orc.emitidos, 0) - COALESCE(orc.vigentes, 0))
+                                            ELSE 0 END AS orc_taxa,
+                                       COALESCE(res.criadas, 0) AS res_criadas,
+                                       COALESCE(res.convertidas, 0) AS res_convertidas,
+                                       COALESCE(res.canceladas, 0) AS res_canceladas,
+                                       COALESCE(res.vencidas, 0) AS res_vencidas,
+                                       CASE WHEN COALESCE(res.convertidas, 0) + COALESCE(res.canceladas, 0) + COALESCE(res.vencidas, 0) > 0
+                                            THEN 100.0 * COALESCE(res.convertidas, 0)
+                                                 / (COALESCE(res.convertidas, 0) + COALESCE(res.canceladas, 0) + COALESCE(res.vencidas, 0))
+                                            ELSE 0 END AS res_taxa
+                                  FROM generate_series(date_trunc('month', CAST(:de AS date)), date_trunc('month', CAST(:ate AS date)),
+                                                       INTERVAL '1 month') AS m
+                                  LEFT JOIN orc ON orc.mes = m
+                                  LEFT JOIN res ON res.mes = m
+                                 ORDER BY m",
+                'colunas' => ['mes' => ['Mês', 'txt'], 'orc_emitidos' => ['Orçamentos emitidos', 'num'],
+                    'orc_convertidos' => ['Convertidos', 'num'], 'orc_vigentes' => ['Vigentes (em aberto)', 'num'],
+                    'orc_taxa' => ['Taxa de orçamento', 'pct'], 'res_criadas' => ['Reservas criadas', 'num'],
+                    'res_convertidas' => ['Convertidas', 'num'], 'res_canceladas' => ['Canceladas', 'num'],
+                    'res_vencidas' => ['Vencidas sem locação', 'num'], 'res_taxa' => ['Taxa de reserva', 'pct']],
+                'soma' => ['orc_emitidos', 'orc_convertidos', 'orc_vigentes', 'res_criadas', 'res_convertidas', 'res_canceladas', 'res_vencidas'],
+                'grafico' => ['rotulo' => 'mes', 'series' => ['orc_taxa' => ['Taxa de orçamento (%)', '#e8710a'],
+                    'res_taxa' => ['Taxa de reserva (%)', '#1a73e8']], 'moeda' => false],
             ],
         ];
     }
@@ -278,8 +406,10 @@ class Relatorios
         $bind = [];
         $sql = preg_replace_callback('/:(de|ate)\b/', function ($m) use (&$bind, $de, $ate) {
             $bind[] = $m[1] === 'de' ? $de : $ate;
+
             return '?';
         }, $rel['sql']);
+
         return array_map(fn ($r) => (array) $r, DB::select($sql, $bind));
     }
 
@@ -290,6 +420,7 @@ class Relatorios
         foreach ($rel['soma'] ?? [] as $c) {
             $totais[$c] = array_sum(array_map(fn ($l) => (float) $l[$c], $linhas));
         }
+
         return $totais;
     }
 
@@ -298,9 +429,9 @@ class Relatorios
     {
         return match ($tipo) {
             'money' => moeda($v),
-            'num'   => numero($v),
-            'pct'   => numero($v, 1) . '%',
-            'date'  => data_br($v),
+            'num' => numero($v),
+            'pct' => numero($v, 1).'%',
+            'date' => data_br($v),
             default => (string) ($v ?? ''),
         };
     }
@@ -310,13 +441,14 @@ class Relatorios
     {
         $s = match ($tipo) {
             'money' => number_format((float) $v, 2, ',', ''),
-            'pct'   => number_format((float) $v, 1, ',', ''),
-            'num'   => (string) (int) $v,
-            'date'  => data_br($v),
+            'pct' => number_format((float) $v, 1, ',', ''),
+            'num' => (string) (int) $v,
+            'date' => data_br($v),
             default => (string) ($v ?? ''),
         };
+
         // Evita que o Excel interprete texto como fórmula (CSV injection)
-        return preg_match('/^[=+\-@\t\r]/', $s) && !in_array($tipo, ['money', 'pct', 'num'], true) ? "'" . $s : $s;
+        return preg_match('/^[=+\-@\t\r]/', $s) && ! in_array($tipo, ['money', 'pct', 'num'], true) ? "'".$s : $s;
     }
 
     /** CSV de um relatório: BOM UTF-8, ";" e o total no fim, como o sistema antigo. */
@@ -344,6 +476,7 @@ class Relatorios
         rewind($out);
         $txt = (string) stream_get_contents($out);
         fclose($out);
+
         return $txt;
     }
 
@@ -355,11 +488,12 @@ class Relatorios
         fputcsv($out, array_map(fn ($c) => $c[0], $colunas), ';', '"', '');
         foreach ($linhas as $l) {
             fputcsv($out, array_map(fn ($campo, $c) => ($l[$campo] ?? null) === null ? '' : self::csvValor($c[1], $l[$campo]),
-                                    array_keys($colunas), $colunas), ';', '"', '');
+                array_keys($colunas), $colunas), ';', '"', '');
         }
         rewind($out);
         $txt = (string) stream_get_contents($out);
         fclose($out);
+
         return $txt;
     }
 
@@ -395,8 +529,8 @@ class Relatorios
         $ent = array_sum(array_column($resumo, 'entradas'));
         $sai = array_sum(array_column($resumo, 'saidas'));
         $resumo[] = ['categoria' => 'TOTAL DO MÊS', 'entradas' => $ent, 'saidas' => $sai, 'resultado' => $ent - $sai];
-        $resumo[] = ['categoria' => 'Saldo inicial (' . data_br($de) . ')', 'resultado' => $anterior];
-        $resumo[] = ['categoria' => 'Saldo final (' . data_br($ate) . ')', 'resultado' => $anterior + $ent - $sai];
+        $resumo[] = ['categoria' => 'Saldo inicial ('.data_br($de).')', 'resultado' => $anterior];
+        $resumo[] = ['categoria' => 'Saldo final ('.data_br($ate).')', 'resultado' => $anterior + $ent - $sai];
 
         return [
             "caixa_$mes.csv" => ['Lançamentos do caixa', ['data' => ['Data', 'date'], 'tipo' => ['Tipo', 'txt'], 'categoria' => ['Categoria', 'txt'],
