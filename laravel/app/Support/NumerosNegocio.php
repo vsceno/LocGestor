@@ -28,10 +28,10 @@ class NumerosNegocio
     {
         $db = DB::connection('plataforma');
         $meses = self::meses();
-        $ini = $meses[0] . '-01';
+        $ini = $meses[0].'-01';
 
         $receita = self::serie($db->select("SELECT to_char(date_trunc('month', data), 'YYYY-MM') AS mes, SUM(valor) AS total
-                                              FROM assinatura_pagamentos WHERE data >= CAST(? AS date) GROUP BY 1", [$ini]), $meses);
+                                              FROM assinatura_pagamentos WHERE data >= CAST(? AS date) AND estornado_em IS NULL GROUP BY 1", [$ini]), $meses);
         $novas = self::serie($db->select("SELECT to_char(date_trunc('month', criado_em), 'YYYY-MM') AS mes, count(*) AS total
                                             FROM tenants WHERE criado_em >= CAST(? AS date) GROUP BY 1", [$ini]), $meses);
         $canceladas = self::serie($db->select("SELECT to_char(date_trunc('month', cancelada_em), 'YYYY-MM') AS mes, count(*) AS total
@@ -47,7 +47,7 @@ class NumerosNegocio
         $mesAtual = (int) substr(end($meses), 5);
 
         return [
-            'rotulos' => array_map(fn ($m) => self::MESES[(int) substr($m, 5)] . '/' . substr($m, 2, 2), $meses),
+            'rotulos' => array_map(fn ($m) => self::MESES[(int) substr($m, 5)].'/'.substr($m, 2, 2), $meses),
             'mesAtual' => self::MESES[$mesAtual],
             'receita' => $receita,
             'novas' => $novas,
@@ -65,6 +65,7 @@ class NumerosNegocio
     private static function serie(array $linhas, array $meses): array
     {
         $por = array_column($linhas, 'total', 'mes');
+
         return array_map(fn ($m) => (float) ($por[$m] ?? 0), $meses);
     }
 }

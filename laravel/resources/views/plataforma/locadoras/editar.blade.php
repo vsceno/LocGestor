@@ -233,9 +233,11 @@
 <section class="cartao mt-6 overflow-hidden">
     <div class="cartao-cabecalho">
         <h2 class="cartao-titulo">Pagamentos</h2>
-        @if ($pagamentos)
+        {{-- Só o último pagamento não estornado pode ser estornado --}}
+        @php $vigente = collect($pagamentos)->firstWhere('estornado_em', null); @endphp
+        @if ($vigente)
             <form method="post" action="{{ route('plataforma.locadoras.estornar', $locadora->id) }}"
-                  data-confirmar="Estornar o último pagamento? O vencimento volta para {{ data_br($pagamentos[0]->vencimento_anterior) }}.">
+                  data-confirmar="Estornar o último pagamento? O vencimento volta para {{ data_br($vigente->vencimento_anterior) }}. O recibo continua registrado, marcado como estornado.">
                 @csrf
                 <button class="btn-secundario">Estornar o último</button>
             </form>
@@ -243,17 +245,26 @@
     </div>
     <div class="overflow-x-auto">
         <table class="tabela">
-            <thead><tr><th>Data</th><th class="num">Meses</th><th class="num">Valor</th><th>Forma</th><th>Vencimento</th><th>Registrado por</th><th>Obs.</th></tr></thead>
+            <thead><tr><th>Data</th><th class="num">Meses</th><th class="num">Valor</th><th>Forma</th><th>Vencimento</th><th>Registrado por</th><th>Obs. e recibo</th></tr></thead>
             <tbody>
                 @forelse ($pagamentos as $p)
-                    <tr>
+                    <tr class="{{ $p->estornado_em ? 'text-zinc-400' : '' }}">
                         <td class="whitespace-nowrap tabular-nums">{{ data_br($p->data) }}</td>
                         <td class="num">{{ numero($p->meses) }}</td>
                         <td class="num">{{ moeda($p->valor) }}</td>
                         <td>{{ $p->forma }}</td>
                         <td class="whitespace-nowrap tabular-nums">{{ data_br($p->vencimento_anterior) }} → {{ data_br($p->vencimento_novo) }}</td>
                         <td>{{ $p->usuario ?? '' }}</td>
-                        <td>{{ $p->obs }}</td>
+                        <td>
+                            {{ $p->obs }}
+                            @if ($p->recibo_numero)
+                                <a href="{{ route('plataforma.locadoras.recibo', [$locadora->id, $p->id]) }}" target="_blank" rel="noopener"
+                                   class="text-marca-700 underline dark:text-marca-400">Recibo nº {{ $p->recibo_numero }}</a>
+                            @endif
+                            @if ($p->estornado_em)
+                                <span class="selo-cinza">estornado em {{ data_br($p->estornado_em) }}</span>
+                            @endif
+                        </td>
                     </tr>
                 @empty
                     <tr><td colspan="7" class="px-4 py-10 text-center text-zinc-500">Nenhum pagamento registrado.</td></tr>

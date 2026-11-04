@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Controllers\Plataforma\AuditoriaController;
+use App\Http\Controllers\Plataforma\ConfiguracoesController;
 use App\Http\Controllers\Plataforma\ContaController;
 use App\Http\Controllers\Plataforma\LocadorasController;
 use App\Http\Controllers\Plataforma\LoginController;
 use App\Http\Controllers\Plataforma\NumerosController;
 use App\Http\Controllers\Plataforma\PlanosController;
 use App\Http\Controllers\Plataforma\RecadosController;
+use App\Http\Controllers\Plataforma\RecibosController;
 use App\Http\Controllers\Plataforma\UsoController;
 use App\Http\Middleware\SessaoPlataforma;
 use Illuminate\Support\Facades\Route;
@@ -30,12 +32,22 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::post('/locadoras/{id}/suporte', [LocadorasController::class, 'suporteEntrar'])->whereUuid('id')->name('locadoras.suporte');
         Route::post('/locadoras/{id}/pagamento', [LocadorasController::class, 'pagamento'])->whereUuid('id')->name('locadoras.pagamento');
         Route::post('/locadoras/{id}/estornar', [LocadorasController::class, 'estornar'])->whereUuid('id')->name('locadoras.estornar');
+        Route::get('/locadoras/{id}/pagamentos/{pagamento}/recibo', [RecibosController::class, 'show'])
+            ->whereUuid('id')->whereUuid('pagamento')->name('locadoras.recibo');
         Route::post('/locadoras/{id}/senha', [LocadorasController::class, 'resetSenha'])->whereUuid('id')->name('locadoras.senha');
         Route::post('/locadoras/{id}/cancelar', [LocadorasController::class, 'cancelarContrato'])->whereUuid('id')->name('locadoras.cancelar');
         Route::post('/locadoras/{id}/cobranca/config', [LocadorasController::class, 'cobrancaConfig'])->whereUuid('id')->name('locadoras.cobranca.config');
         Route::post('/locadoras/{id}/cobranca/gerar', [LocadorasController::class, 'cobrancaGerar'])->whereUuid('id')->name('locadoras.cobranca.gerar');
         Route::post('/locadoras/{id}/cobranca/sincronizar', [LocadorasController::class, 'cobrancaSincronizar'])->whereUuid('id')->name('locadoras.cobranca.sincronizar');
         Route::post('/locadoras/{id}/cobranca/cancelar', [LocadorasController::class, 'cobrancaCancelar'])->whereUuid('id')->name('locadoras.cobranca.cancelar');
+
+        // Configurações da LocGestor: uma rota por seção, cada uma grava só os próprios campos
+        Route::get('/configuracoes', [ConfiguracoesController::class, 'index'])->name('configuracoes');
+        Route::put('/configuracoes/empresa', [ConfiguracoesController::class, 'empresa'])->name('configuracoes.empresa');
+        Route::put('/configuracoes/identidade', [ConfiguracoesController::class, 'identidade'])->name('configuracoes.identidade');
+        Route::put('/configuracoes/documentos', [ConfiguracoesController::class, 'documentos'])->name('configuracoes.documentos');
+        Route::put('/configuracoes/cadastro', [ConfiguracoesController::class, 'cadastro'])->name('configuracoes.cadastro');
+        Route::put('/configuracoes/suporte', [ConfiguracoesController::class, 'suporte'])->name('configuracoes.suporte');
 
         Route::get('/planos', [PlanosController::class, 'index'])->name('planos.index');
         Route::post('/planos', [PlanosController::class, 'criar'])->name('planos.criar');

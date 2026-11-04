@@ -20,6 +20,7 @@
     ];
     $nomeLocadora = $empresa->nome_fantasia ?: $empresa->razao_social;
     $temLogo = ($empresa->logo_arquivo ?? '') !== '';
+    $temQuadrada = ($empresa->logo_quadrada_arquivo ?? '') !== '';
     $migalhas = $migalhas ?? [];
     // Ações rápidas da paleta de comandos (Ctrl+K)
     $comandos = [
@@ -58,6 +59,8 @@
     })();
 </script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
+{{-- Identidade visual da locadora (cores e fontes; sem escolha, o padrão neutro) --}}
+{!! \App\Support\Identidade::html($empresa) !!}
 @include('layouts._pwa')
 </head>
 <body class="h-full">
@@ -74,11 +77,18 @@
                 <img src="{{ route('arquivos.logo', ['v' => substr(md5($empresa->logo_arquivo), 0, 8)]) }}" alt="{{ $nomeLocadora }}"
                      class="h-9 max-w-36 rounded-md bg-white object-contain p-0.5 recolhido:lg:hidden">
             @endif
-            <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 text-sm font-bold text-white shadow-md shadow-marca-600/30
-                         {{ $temLogo ? 'hidden recolhido:lg:grid' : '' }}">LG</span>
+            @if ($temQuadrada)
+                <img src="{{ route('arquivos.logo_quadrada', ['v' => substr(md5($empresa->logo_quadrada_arquivo), 0, 8)]) }}" alt="{{ $nomeLocadora }}"
+                     class="size-9 shrink-0 rounded-xl bg-white object-contain p-0.5 {{ $temLogo ? 'hidden recolhido:lg:block' : '' }}">
+            @endif
+            {{-- Ícone neutro, sem marca de sistema: aparece onde a locadora não enviou logotipo --}}
+            <span aria-hidden="true" class="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 text-white shadow-md shadow-marca-600/30
+                         {{ $temQuadrada ? 'hidden' : ($temLogo ? 'hidden recolhido:lg:grid' : '') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+            </span>
             <div class="min-w-0 recolhido:lg:hidden {{ $temLogo ? 'sr-only' : '' }}">
                 <p class="truncate text-sm font-semibold">{{ $nomeLocadora }}</p>
-                <p class="text-xs text-zinc-500">LocGestor</p>
+                <p class="text-xs text-zinc-500">Sistema de Gestão</p>
             </div>
         </div>
 

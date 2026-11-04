@@ -34,17 +34,18 @@ class Locadoras
         return DB::connection('plataforma')->transaction(function () use ($t) {
             $db = DB::connection('plataforma');
             $id = (string) $db->selectOne(
-                'INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios, plano_id, vencimento, carencia_dias)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+                'INSERT INTO tenants (slug, nome, cnpj, email_contato, telefone, plano, limite_usuarios, plano_id, vencimento, carencia_dias, teste_ate)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
                 [$t['slug'], $t['nome'], $t['cnpj'], $t['email'], $t['telefone'], $t['plano']->nome, $t['plano']->limite_usuarios,
-                 $t['plano']->id, $t['vencimento'], $t['carencia']]
+                    $t['plano']->id, $t['vencimento'], $t['carencia'], $t['teste_ate'] ?? null]
             )->id;
             // Contexto da nova locadora só até o fim desta transação (true = SET LOCAL)
             $db->select("SELECT set_config('app.tenant_id', ?, true)", [$id]);
             // Linha da empresa (com os textos padrão de contrato e fatura) e as 5 categorias padrão
             $db->select('SELECT provisionar_dados_padrao(?)', [$t['nome']]);
             $db->insert("INSERT INTO usuarios (nome, login, senha_hash, perfil, trocar_senha) VALUES (?, ?, ?, 'admin', ?)",
-                        [$t['admin_nome'], $t['admin_login'], password_hash($t['admin_senha'], PASSWORD_DEFAULT), $t['trocar_senha'] ? 'true' : 'false']);
+                [$t['admin_nome'], $t['admin_login'], password_hash($t['admin_senha'], PASSWORD_DEFAULT), $t['trocar_senha'] ? 'true' : 'false']);
+
             return $id;
         });
     }
@@ -57,6 +58,7 @@ class Locadoras
         for ($i = 0; $i < 12; $i++) {
             $senha .= $alfabeto[random_int(0, strlen($alfabeto) - 1)];
         }
+
         return $senha;
     }
 

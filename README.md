@@ -8,7 +8,9 @@ próprio PostgreSQL (Row Level Security).
 
 **Para a locadora:** clientes, produtos e categorias, locação com disponibilidade em tempo real, devolução total ou
 parcial, reservas, recebimentos, fluxo de caixa, contrato e fatura de locação em A4 (com a logomarca da locadora, enviada em
-*Configurações*), painel com gráficos, 10 relatórios (entre eles a rentabilidade por equipamento e por unidade)
+*Configurações*), identidade visual própria (cores, fontes e logotipo quadrado), painel com gráficos e o resultado
+do mês, 13 relatórios (a DRE, só para o administrador, a rentabilidade por equipamento e por unidade, a ocupação da
+frota e a conversão de orçamentos e reservas)
 (impressão e CSV para o Excel), usuários com perfis e **WhatsApp**: botões que abrem o WhatsApp do atendente com a
 mensagem pronta (resumo da locação, lembrete de devolução, cobrança do saldo, confirmação de reserva), inclusive
 na lista de devoluções atrasadas e próximas do painel. Sem custo e sem cadastro: usa links `wa.me` com o celular do
@@ -17,10 +19,13 @@ a locação e a fatura mostram um QR Code e o "copia e cola" com o valor do sald
 e a cobrança pelo WhatsApp já leva o código. Sem API do banco, o recebimento é registrado pelo atendente quando o
 dinheiro cai. **Antes de usar com clientes, pague um PIX de teste de R$ 0,01 lendo o QR Code com o app do seu banco.**
 
-**Para o dono do SaaS:** painel da plataforma para cadastrar, suspender e reativar locadoras.
+**Para o dono do SaaS:** painel da plataforma para cadastrar, suspender e reativar locadoras, acompanhar os números da
+assinatura (receita recorrente, inadimplência e teste grátis) e manter a tela *Configurações da LocGestor* (dados da
+empresa, identidade, termos de uso e cadastro público).
 
-Tecnologia: PHP 8.1+ puro (sem framework, sem Composer), PostgreSQL 18, HTML/CSS/JavaScript puro e Chart.js 4.4.1
-salvo localmente (funciona sem internet).
+Tecnologia: **Laravel 13** (pasta `laravel/`, PHP 8.1+ e Composer), PostgreSQL 18, Tailwind CSS 4 compilado pelo Vite
+e Chart.js salvo localmente (funciona sem internet). O sistema antigo em PHP puro, na raiz, foi retirado: restam só os
+endereços antigos, que levam ao Laravel.
 
 ---
 
@@ -93,7 +98,7 @@ Ele pede, sem mostrar na tela:
 | Carregar demonstração? (S/N) | cria as locadoras `alfa-locacoes` e `beta-eventos` |
 
 Use senhas fortes com **letras, números, `-` e `_`** (o `.bat` não lida bem com `& ^ % ! "` e espaço).
-**Anote as duas senhas dos papéis:** elas vão no `config.php` no próximo passo.
+**Anote as duas senhas dos papéis:** elas vão no `laravel/.env` no passo 2.4.
 
 O instalador roda, nesta ordem:
 
@@ -130,18 +135,32 @@ ALTER ROLE locgestor_app        PASSWORD 'nova-senha-do-app';
 ALTER ROLE locgestor_plataforma PASSWORD 'nova-senha-da-plataforma';
 ```
 
-Depois de trocar, atualize o `config.php`. Para a senha do `suporte`, gere um novo hash com o comando
+Depois de trocar, atualize o `laravel/.env` (`DB_PASSWORD` ou `DB_PLATAFORMA_PASSWORD`). Para a senha do `suporte`, gere um novo hash com o comando
 `php -r ...` acima e rode `02_seed.sql` de novo com `-v hash_suporte=...`.
 
-### 2.4 Criar o `config.php`
+### 2.4 Configurar o Laravel (`laravel/.env`)
+
+As configurações do sistema ficam no arquivo `laravel/.env`. Ele **nunca vai para o GitHub** (está no `.gitignore`).
 
 ```bat
-copy config.example.php config.php
+cd laravel
+copy .env.example .env
+php artisan key:generate
+composer install
+npm install
+npm run build
+cd ..
 ```
 
-Abra o `config.php` e preencha `password` em `db_app` e em `db_plataforma` com as senhas dos papéis.
-**O `config.php` nunca vai para o GitHub** (está no `.gitignore`). Se ele não existir, o sistema mostra
-"Copie config.example.php para config.php e preencha as senhas do banco".
+Abra `laravel\.env` e preencha:
+
+- `DB_PASSWORD`: a senha do papel `locgestor_app` (a mesma digitada no `instalar.bat`);
+- `DB_PLATAFORMA_PASSWORD`: a senha do papel `locgestor_plataforma`;
+- as linhas `DB_*` do bloco do LocGestor vêm comentadas no modelo: tire o `#` delas;
+- `APP_URL=http://locgestor.test/novo`, `ASSET_URL=/novo` e `SESSION_PATH=/novo` (ver a seção 12).
+
+O `config.php` da raiz é **opcional**. Ele só guarda o endereço para onde `index.php` e `cadastro.php` levam
+(`laravel_url`); sem ele, o destino é `/novo`. Se precisar, `copy config.example.php config.php`.
 
 ### 2.5 Ativar o endereço `http://locgestor.test`
 
@@ -162,8 +181,7 @@ Entre eles estão o isolamento entre locadoras no próprio banco (RLS), as telas
 plataforma, o WhatsApp, o PWA e a cobrança automática do Asaas (com a API simulada, sem conta no Asaas).
 Precisa terminar com **todos os testes passando**. Rode de novo sempre que mexer no banco.
 
-A única parte que ainda roda no PHP da raiz é o cadastro público (`tests\cadastro.php`), enquanto o cadastro do
-sistema antigo estiver em uso.
+Não há mais testes na raiz: o cadastro público, a DRE e as demais telas estão cobertos em `laravel/tests/`.
 
 **No GitHub** ([.github/workflows/testes.yml](.github/workflows/testes.yml)), a cada push e pull request, os
 testes rodam sozinhos com **PHP 8.1 e 8.4** e **PostgreSQL 18**: instala o banco do zero, aplica as migrações,
@@ -176,7 +194,7 @@ na aba *Actions* e no selo no topo deste README.
 
 ### Painel da plataforma (dono do SaaS)
 
-`http://locgestor.test/plataforma.php`: usuário **`suporte`**, com a senha digitada no instalador.
+`http://locgestor.test/novo/plataforma/login`: usuário **`suporte`**, com a senha digitada no instalador.
 Para trocá-la, use o item **Minha senha** do menu (pede a senha atual; a antiga deixa de valer na hora).
 Na lista de locadoras, a faixa **Precisam de atenção** aponta quem tem mensalidade vencida ou vencendo, está
 suspensa ou está sem acesso há 7 dias, e os filtros da lista mostram cada grupo.
@@ -232,10 +250,11 @@ Envie ao cliente o identificador, o login e a senha temporária. No primeiro ace
 
 ### Cadastro público (teste grátis)
 
-Com `'cadastro_publico' => true` no `config.php`, a página `cadastro.php` (e o link **Teste grátis** no login)
-deixa uma locadora nova se cadastrar sozinha: nome, identificador, e-mail, telefone, CNPJ opcional e o usuário e
-a senha do administrador. Ela começa **ativa**, no plano de `'cadastro_plano'` (vazio = o mais barato ativo),
-com **vencimento em `'cadastro_dias_teste'` dias** (padrão 14) e 5 dias de carência; depois segue as mesmas regras
+Com a chave **Abrir o cadastro público** ligada em *Configurações da LocGestor* (e com os termos de uso publicados),
+a página `/novo/cadastro` (e o link **Teste grátis** no login) deixa uma locadora nova se cadastrar sozinha: nome,
+identificador, e-mail, telefone, CNPJ opcional e o usuário e a senha do administrador. Ela começa **ativa**, no plano
+escolhido em *Configurações* (vazio = o mais barato ativo), com **vencimento em X dias** (configurável de 1 a 90, padrão
+14) e 5 dias de carência; depois segue as mesmas regras
 de mensalidade (e, com o Asaas ligado para ela, cobrança automática).
 
 - **Desligado por padrão:** sem a opção, a página responde 404.
@@ -243,6 +262,33 @@ de mensalidade (e, com o Asaas ligado para ela, cobrança automática).
   **3 cadastros por IP por hora** (o IP fica guardado só como hash). Cada cadastro vai para o `logs/app.log`.
 - Antes de ligar em produção, escreva os **termos de uso e a política de privacidade** (o formulário pede o aceite)
   e publique-os no seu site.
+
+### Configurações da LocGestor
+
+Painel da plataforma › **Configurações**. Cada seção salva só o que está nela, e toda alteração fica na auditoria:
+
+- **Dados da empresa:** razão social e CNPJ (com os dígitos verificados), endereço e contato. Sem razão social e CNPJ,
+  os recibos de mensalidade não são emitidos.
+- **Identidade visual:** nome do sistema e logomarca, redesenhada em PNG (sem metadados).
+- **Documentos:** termos de uso e política de privacidade (só endereços `https://`), observação padrão do recibo e o
+  número do próximo recibo (automático e sem buracos).
+- **Cadastro público:** abre ou fecha o "Teste grátis". Não abre sem os termos publicados. Dias de teste de 1 a 90 e
+  plano do teste.
+- **Suporte:** contato mostrado às locadoras no aviso de mensalidade.
+- **Integrações (só leitura):** mostra se o Asaas e o token do webhook estão configurados. As chaves ficam no
+  `laravel/.env`, nunca na tela.
+
+### Números financeiros
+
+Painel da plataforma › **Números**, na parte de assinaturas:
+
+- **Receita recorrente (MRR)** e **ARR**: mensalidades das locadoras não canceladas com plano pago, com o gráfico dos
+  últimos 12 meses.
+- **Cancelado no mês**, em valor e em quantidade.
+- **Inadimplência:** cobranças do Asaas vencidas e não pagas, por faixa (1 a 30, 31 a 60 e mais de 60 dias), com a
+  lista das 15 maiores e link para a ficha da locadora.
+- **Teste grátis que virou pagamento:** das locadoras que já acabaram o teste, quantas pagaram.
+- **Cobranças do mês** por situação e **receita do mês por plano**.
 
 ### Planos e mensalidades
 
@@ -254,7 +300,7 @@ de mensalidade (e, com o Asaas ligado para ela, cobrança automática).
   **registrar pagamento** de 1 a 24 meses (avança o vencimento; valor vazio = preço do plano × meses);
   **estornar o último pagamento** (o vencimento volta); **suspender/reativar** manualmente.
 - **Aviso na locadora:** o admin vê uma faixa quando faltam 5 dias ou menos e, depois de vencida, até quando pode
-  regularizar. Para mostrar seu contato nesse aviso, preencha `'suporte_contato'` no `config.php`.
+  regularizar. Para mostrar seu contato nesse aviso, preencha o contato de suporte em *Configurações da LocGestor*.
 - **Suspensão automática:** passada a carência sem pagamento, o sistema da locadora **bloqueia o acesso na hora**
   (não depende de tarefa agendada) e o painel passa a mostrar "suspensa por inadimplência". Registrar o pagamento
   **reativa** a locadora automaticamente.
@@ -370,7 +416,7 @@ item (ok, avariado, sujo, incompleto), observações, até **12 fotos** e a **as
 - Vistoria registrada **não pode ser alterada nem apagada** (o banco não dá essa permissão ao sistema): é a prova.
 - O celular reduz as fotos antes de enviar; o servidor regrava todas (máx. 1600 px, JPEG), o que também remove os
   metadados da câmera, como a localização GPS.
-- Os arquivos ficam em `storage/` (ou na pasta de `pasta_arquivos` do `config.php`), separados por locadora, e só
+- Os arquivos ficam em `storage/` (ou na pasta de `LOCGESTOR_PASTA_ARQUIVOS` do `laravel/.env`), separados por locadora, e só
   são entregues pelo sistema, para quem está logado na locadora dona. O acesso direto à pasta é bloqueado.
 
 ### Patrimônio e manutenção
@@ -409,6 +455,23 @@ tudo num **.zip** com um LEIAME: lançamentos do caixa, recebimentos de locaçã
 contas pagas e o resumo por categoria com saldo inicial e final. É regime de caixa (o que entrou e saiu no fluxo
 de caixa). Como traz CPF/CNPJ, envie só ao contador; cada exportação fica anotada no `logs/app.log` (sem CPF).
 
+### Identidade visual
+
+*Configurações › Identidade visual* (só administrador): cores principal, de destaque, do texto escuro, do texto claro
+e do fundo; fontes dos títulos e dos textos; e o logotipo quadrado (usado no menu recolhido). Sem escolha, o sistema
+usa o padrão neutro azul. O contraste é conferido ao salvar: texto sobre o fundo (4,5:1), texto dos botões (4,5:1) e
+cor principal sobre o fundo (3:1). A prévia mostra o efeito antes de salvar, e *Voltar ao padrão neutro* desfaz tudo.
+A logomarca horizontal fica em *Dados da locadora*. As impressões (contrato, fatura, recibo) usam a cor escolhida.
+
+### Resultado do mês e análises
+
+- **Painel:** *Resultado do mês* mostra locações iniciadas, faturado, recebido, ticket médio e prazo até o primeiro
+  pagamento, comparados com o mês anterior. Há o gráfico de faturado e recebido dos últimos 12 meses e a idade do
+  saldo a receber (0 a 30, 31 a 60 e mais de 60 dias desde a saída da locação).
+- **Relatórios:** *DRE simples por mês* (só administrador), *Ocupação da frota por mês* e *Conversão de orçamentos e
+  reservas*. A DRE segue o regime de caixa: resultado = entradas − saídas. "Outras saídas" são as que não vêm de
+  manutenção nem de conta a pagar.
+
 ### Auditoria
 
 *Configurações › Auditoria* (só administrador): toda inclusão, alteração e exclusão em locações, devoluções,
@@ -430,28 +493,24 @@ reservas, clientes, produtos, kits, categorias, patrimônio, manutenções, caix
 ```
 locgestor/
 ├── laravel/               o sistema das locadoras e o painel da plataforma (Laravel 13), em /novo
-│   ├── app/               Controllers, Middleware e Support (regras: Locadora, Cobrancas, Assinaturas...)
-│   ├── routes/            web.php (locadoras), plataforma.php (painel do dono do SaaS), console.php (rotina)
-│   ├── resources/views/   telas em Blade (layouts/app.blade.php para a locadora)
-│   ├── public/            entrada do Laravel, compilados (build/), PWA (manifest, sw.js) e assets copiados
-│   └── tests/             testes do sistema (php artisan test)
+│   ├── app/               Controllers, Middleware, Support (regras: Locadora, Cobrancas, Assinaturas, Identidade,
+│   │                      PainelFinanceiro, NumerosFinanceiros, Relatorios...) e Console (rotina diária)
+│   ├── routes/            web.php (locadoras), plataforma.php (painel do dono do SaaS), console.php (agendamento)
+│   ├── resources/views/   telas em Blade (layouts/app.blade.php: locadora; layouts/plataforma.blade.php: painel)
+│   ├── public/            entrada do Laravel, compilados (build/), PWA (manifest, sw.js) e assets
+│   ├── tests/             testes do sistema (php artisan test)
+│   ├── .env.example       modelo das configurações (copie para .env; o .env não vai para o GitHub)
+│   └── composer.json      dependências do PHP (composer install)
+├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat, backup.bat,
+│                          seguranca_postgres.sql e migrations/ (atualizações do banco, de 001 a 031)
 ├── index.php              endereço antigo: só redireciona para o Laravel (/novo)
-├── plataforma.php         painel antigo do dono do SaaS (ainda em uso até a migração ser confirmada)
+├── cadastro.php           endereço antigo do cadastro público: redireciona para /novo/cadastro
 ├── webhook_asaas.php      avisos de pagamento do Asaas: entrega ao Laravel (POST /webhook/asaas)
-├── cadastro.php           cadastro público antigo de locadoras (desligado por padrão)
-├── config.example.php     modelo de configuração do sistema antigo (versionado, sem senhas)
-├── config.php             configuração real (NÃO versionado)
-├── .htaccess              sem listagem; bloqueia config*.php, .md, .sql, .bat, .log, .git
-├── app/                   (bloqueado para a web) bootstrap, tenant, suporte, layout e Asaas do sistema antigo
-├── modulos_plataforma/    telas antigas do painel da plataforma (login, locadoras, planos, números...)
-├── assets/                css/app.css, js/app.js e graficos.js, vendor/chart.umd.js (usados pelo painel antigo)
-├── database/              00_roles.sql, 01_schema.sql, 02_seed.sql, 03_demo.sql, instalar.bat,
-│                          backup.bat, seguranca_postgres.sql e migrations/ (atualizações do banco)
-├── tarefas/               diaria.php: rotina diária do sistema antigo; bloqueada para a web
-├── tests/                 cadastro.php (cadastro público do sistema antigo)
-├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push
-├── storage/               fotos e assinaturas das vistorias (não versionadas; acesso direto bloqueado)
-└── logs/                  app.log e php-erros.log (não versionados)
+├── config.example.php     modelo opcional da raiz (só o endereço laravel_url)
+├── .htaccess              sem listagem; bloqueia config*.php, README.md, .sql, .bat, .log, .git, .claude, laravel/ e .env
+├── .github/workflows/     testes.yml: roda os testes no GitHub a cada push (PHP 8.1 e 8.4)
+├── storage/               arquivos enviados (fotos, assinaturas, logomarcas): não versionados, acesso direto bloqueado
+└── logs/                  registros do sistema (não versionados)
 ```
 
 As telas das locadoras estão em `laravel/` (rotas em `laravel/routes/web.php`). As telas antigas do sistema das
@@ -556,7 +615,8 @@ Preparação para o futuro:
 - **Auditoria** de toda alteração nos cadastros e movimentos (seção 3), sem dados pessoais nem senhas.
 - Pilhas de erro do PHP sem os argumentos das funções (`zend.exception_ignore_args`): a senha do banco nunca
   chega ao `php-erros.log`.
-- Pastas `app/`, `modulos_plataforma/`, `database/`, `tests/` e `logs/` são bloqueadas para a web.
+- A pasta `laravel/` (com o `.env`, o código e o `vendor`), `database/`, `logs/` e `storage/` não são servidas pela web;
+  só `laravel/public` responde, pelo endereço `/novo`. Qualquer arquivo `.env` é recusado.
 
 ---
 
@@ -564,11 +624,11 @@ Preparação para o futuro:
 
 | Sintoma | Causa e solução |
 |---|---|
-| "Copie config.example.php para config.php..." | crie o `config.php` (passo 2.4) |
-| "Não foi possível conectar ao banco de dados" | PostgreSQL desligado ou senha errada no `config.php` |
+| "SQLSTATE ... password authentication failed" ou "connection refused" | PostgreSQL desligado, ou senha errada em `DB_PASSWORD` / `DB_PLATAFORMA_PASSWORD` no `laravel/.env` (passo 2.4) |
+| Tela em branco ou erro "Table ... does not exist" / coluna inexistente | o banco é de uma versão anterior: aplique as migrações que faltam (seção 10.1, de 028 a 031) |
 | `php artisan test` (em `laravel/`) acusa falha no isolamento | **não use o sistema em produção** até corrigir: algo no banco deixou de isolar as locadoras |
 | Gráficos vazios em `http://localhost/locgestor/` | um `.htaccess` em `C:\laragon\www` que bloqueia `/vendor/` impede o Chart.js de carregar. Acesse por `http://locgestor.test` |
-| Arquivos "travados" (erro no `git commit`, log com linhas faltando) | programas de backup/sincronização (TeraBox, OneDrive etc.) prendem os arquivos enquanto copiam. Exclua a pasta do projeto da sincronização (ela também contém o `config.php` com as senhas) |
+| Arquivos "travados" (erro no `git commit`, log com linhas faltando) | programas de backup/sincronização (TeraBox, OneDrive etc.) prendem os arquivos enquanto copiam. Exclua a pasta do projeto da sincronização (ela também contém o `laravel/.env` com as senhas) |
 | PostgreSQL aceita qualquer senha | o Laragon vem com `trust` no `pg_hba.conf`. Siga a seção 10.5 antes de expor a máquina |
 | "Muitas tentativas de acesso. Aguarde 15 minutos..." | limite de login atingido (seção 10.2). Espere 15 minutos ou, como `postgres`: `DELETE FROM login_tentativas;` |
 | Usuário só consegue abrir "Minha senha" | ele entrou com senha temporária; ao definir uma senha nova, o sistema libera as outras telas |
@@ -612,6 +672,10 @@ psql -U postgres -d locgestor -f database\migrations\024_periodo_do_item.sql
 psql -U postgres -d locgestor -f database\migrations\025_dias_cobranca.sql
 psql -U postgres -d locgestor -f database\migrations\026_periodo_orcamento_reserva.sql
 psql -U postgres -d locgestor -f database\migrations\027_logomarca.sql
+psql -U postgres -d locgestor -f database\migrations\028_recibo_e_estorno_plataforma.sql
+psql -U postgres -d locgestor -f database\migrations\029_configuracoes_plataforma.sql
+psql -U postgres -d locgestor -f database\migrations\030_identidade_visual.sql
+psql -U postgres -d locgestor -f database\migrations\031_numeros_financeiros.sql
 cd laravel
 php artisan test
 ```
@@ -645,6 +709,10 @@ php artisan test
 | `025_dias_cobranca.sql` | a view de valores conta o dia da saída (27/10 a 05/11 = 10 dias) |
 | `026_periodo_orcamento_reserva.sql` | período por item no orçamento (`periodo`, `valor_quinzenal`) e na reserva (`periodo`) |
 | `027_logomarca.sql` | coluna `logo_arquivo` na `empresa` (logomarca da locadora nos documentos impressos) |
+| `028_recibo_e_estorno_plataforma.sql` | recibos de mensalidade numerados sem buracos (`plataforma_sequencias`); colunas `recibo_numero`, `estornado_em` e `estorno_motivo` em `assinatura_pagamentos`. Estorno marca o pagamento e não apaga |
+| `029_configuracoes_plataforma.sql` | tabela `plataforma_configuracoes` (uma linha): dados da LocGestor, nome, termos de uso, cadastro público, suporte; com auditoria |
+| `030_identidade_visual.sql` | identidade visual da locadora: cores, fontes e `logo_quadrada_arquivo` na `empresa` (vazio = padrão neutro) |
+| `031_numeros_financeiros.sql` | `tenants.teste_ate` (fim do teste grátis, gravado pelo cadastro público) e índice de cobranças por situação e vencimento |
 
 ### 10.2 Proteções do login (já ativas)
 
@@ -660,10 +728,13 @@ php artisan test
 
 1. No Laragon: *Menu › Apache › SSL › Enabled* (ou instale o certificado do seu domínio no servidor).
 2. Confira que `https://locgestor.test` abre.
-3. No `config.php`: `'forcar_https' => true,`
+3. No `laravel/.env`: `APP_URL=https://SEU-DOMINIO`, `SESSION_SECURE_COOKIE=true` e `LOCGESTOR_FORCAR_HTTPS=true`.
+   Depois, na pasta `laravel`: `php artisan config:clear`.
 
-A partir daí, todo acesso por `http://` é redirecionado (301) para `https://`, o navegador passa a exigir HTTPS
-(cabeçalho HSTS) e o cookie de sessão vira `Secure`. Só ative o item 3 depois que o item 2 funcionar.
+A partir daí, todo acesso por `http://` é redirecionado (301) para `https://`, as respostas levam o cabeçalho HSTS
+(o navegador passa a usar só HTTPS por um ano) e o cookie de sessão só viaja por HTTPS. Só ative o item 3 depois que o
+item 2 funcionar. Atrás de Cloudflare ou balanceador, o proxy precisa estar em `LOCGESTOR_PROXIES` para o sistema
+reconhecer o HTTPS vindo dele.
 
 ### 10.4 Backup e restauração
 
@@ -736,29 +807,33 @@ Se algo parar de funcionar, volte `scram-sha-256` para `trust` no `pg_hba.conf` 
 
 1. **Conta de testes:** crie uma conta em [sandbox.asaas.com](https://sandbox.asaas.com) e gere a chave da API
    (*Integrações › Chaves de API*). Na conta de verdade (asaas.com) o passo é o mesmo.
-2. **`config.php`** (nunca vai para o Git):
-   ```php
-   'asaas' => [
-       'ambiente'      => 'sandbox',              // 'producao' quando for cobrar de verdade
-       'chave'         => '$aact_...',            // chave da API
-       'webhook_token' => 'um-texto-longo-aleatorio',
-       'dias_antes'    => 10,                     // gera a cobrança 10 dias antes do vencimento
-   ],
+2. **`laravel/.env`** (nunca vai para o Git). Depois, na pasta `laravel`: `php artisan config:clear`.
+   ```bat
+   LOCGESTOR_ASAAS_AMBIENTE=sandbox
+   LOCGESTOR_ASAAS_CHAVE=$aact_...
+   LOCGESTOR_ASAAS_WEBHOOK_TOKEN=um-texto-longo-aleatorio
+   LOCGESTOR_ASAAS_DIAS_ANTES=10
    ```
-3. **Rotina diária** (gera as cobranças, confere os pagamentos e suspende os inadimplentes). Teste à mão com
-   `php tarefas\diaria.php` e agende (PowerShell; use o `php.exe` do Laragon):
+   `sandbox` para testes e `producao` para cobrar de verdade. A chave de produção nunca vai junto com `sandbox`.
+3. **Rotina diária e agendador.** O Laravel gera as cobranças, confere os pagamentos e suspende os inadimplentes
+   todo dia às 06:00 (`laravel/routes/console.php`), mas só se o servidor chamar o agendador **a cada minuto**.
+   Teste à mão com `php artisan locgestor:rotina-diaria` (na pasta `laravel`) e agende o agendador (PowerShell; use o
+   `php.exe` do Laragon):
    ```powershell
-   $acao    = New-ScheduledTaskAction -Execute 'C:\laragon\bin\php\php-8.x\php.exe' -Argument 'tarefas\diaria.php' -WorkingDirectory 'C:\laragon\www\locgestor'
-   $gatilho = New-ScheduledTaskTrigger -Daily -At '07:00'
+   $acao    = New-ScheduledTaskAction -Execute 'C:\laragon\bin\php\php-8.x\php.exe' -Argument 'artisan schedule:run' -WorkingDirectory 'C:\laragon\www\locgestor\laravel'
+   $gatilho = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
    $config  = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-   Register-ScheduledTask -TaskPath '\LocGestor\' -TaskName 'Rotina diaria' -Action $acao -Trigger $gatilho -Settings $config -Force
+   Register-ScheduledTask -TaskPath '\LocGestor\' -TaskName 'Agendador do Laravel' -Action $acao -Trigger $gatilho -Settings $config -Force
    ```
 4. **Webhook** (baixa na hora; só quando o sistema estiver num endereço público com HTTPS): no Asaas,
    *Integrações › Webhooks*, URL `https://SEU-DOMINIO/webhook_asaas.php`, eventos de **cobrança** e o mesmo
-   **token de autenticação** do `webhook_token`. Sem webhook (ex.: no Laragon local) tudo funciona igual, só que a
+   **token de autenticação** de `LOCGESTOR_ASAAS_WEBHOOK_TOKEN`. Sem webhook (ex.: no Laragon local) tudo funciona igual, só que a
    baixa acontece na rotina diária ou no botão **Conferir pagamentos**.
 5. **Em cada locadora** (painel › Gerenciar): preencha o **CNPJ** (o Asaas exige) e marque **Gerar a cobrança no
    Asaas**. O botão **Gerar cobrança do vencimento** cria a cobrança na hora, sem esperar a rotina.
+6. **Validar antes de cobrar de verdade:** no sandbox, gere a cobrança de uma locadora de teste, pague pela fatura
+   de teste e confira a baixa no painel. No Asaas, envie um aviso de teste do webhook e confira que um token errado
+   é recusado (401). Só depois troque para `producao`, com a chave de produção.
 
 Como funciona e o que protege:
 
@@ -773,6 +848,39 @@ Como funciona e o que protege:
 - Os testes da cobrança (`laravel/tests/Feature/Plataforma/CobrancaAsaasTest.php`) usam a API simulada; antes de cobrar de verdade, faça um ciclo
   completo no **sandbox** (gerar, pagar pela fatura de teste e conferir a baixa).
 
+### 10.7 Checklist de produção
+
+Faça nesta ordem. Cada item vale para uma instalação nova ou para uma atualização.
+
+1. **Servidor:** PHP 8.1 ou superior com as extensões exigidas pelo `laravel/composer.json` (inclui `gd`, usado nas
+   logomarcas e nas fotos) e PostgreSQL 18.
+2. **`laravel/.env`:** `APP_ENV=production`, `APP_DEBUG=false`, `APP_KEY` gerada, `APP_URL` com `https://`, as senhas
+   dos papéis em `DB_PASSWORD` e `DB_PLATAFORMA_PASSWORD`, e `LOCGESTOR_PASTA_ARQUIVOS` apontando para uma pasta fora
+   da pasta do site. Se houver Cloudflare ou balanceador na frente, `LOCGESTOR_PROXIES` com os IPs (seção abaixo).
+3. **Banco:** numa instalação nova, `database\instalar.bat` aplica tudo (responda `N` à demonstração). Num banco
+   existente, aplique as migrações que faltam (seção 10.1), de 028 a 031 e as seguintes.
+4. **Painel da plataforma › Configurações da LocGestor:** dados da empresa (razão social e CNPJ, para os recibos),
+   nome do sistema, termos de uso e política de privacidade em `https://`. O cadastro público só deve ser aberto
+   depois que os termos estiverem publicados.
+5. **Trocar a senha do usuário `suporte`** (painel da plataforma › Minha senha) e a senha do administrador de cada
+   locadora real.
+6. **Agendador:** `php artisan schedule:run` a cada minuto (seção 10.6, passo 3).
+7. **Asaas:** chave de produção, webhook público com HTTPS e validação no sandbox antes (seção 10.6).
+8. **HTTPS** (seção 10.3) e **backup** com cópia para fora do computador (seção 10.4).
+9. **Senha do PostgreSQL** (seção 10.5).
+10. **Teste depois de publicar:** entrar como administrador de uma locadora, abrir o painel, imprimir uma fatura e um
+    recibo, conferir a auditoria, e, se o cadastro estiver aberto, criar uma locadora de teste e apagá-la pelo painel.
+11. **Dados de demonstração:** não instale com a demonstração (`03_demo.sql`) em produção.
+
+### Atualizações e variáveis de ambiente (`laravel/.env`)
+
+Variáveis que o sistema lê, além das de banco e do Asaas (seção 10.6):
+
+- `LOCGESTOR_PROXIES`: IPs dos proxies confiáveis, separados por vírgula (Cloudflare, balanceador). **Vazio = nenhum
+  proxy confiável**, que é o padrão seguro. Com um proxy de verdade na frente, sem essa lista o endereço do visitante
+  fica errado nos registros e no limite de tentativas de login. Não ponha IPs que não são do seu proxy.
+- `LOCGESTOR_PASTA_ARQUIVOS`: pasta das fotos, assinaturas e logomarcas (padrão: `storage/` na raiz do projeto).
+
 ---
 
 ## 11. O que ficou de fora e próximos passos
@@ -785,6 +893,21 @@ Não implementado nesta versão:
 - **baixa automática** do PIX das locações (precisa da API do banco da locadora; as mensalidades já têm cobrança automática pelo Asaas);
 - exclusão/anonimização de cliente a pedido (LGPD) e prazo de guarda da auditoria (hoje ela não expira);
 - **anexos** de documentos do cliente (fotos de avaria e assinatura já existem nas vistorias);
+
+Decisões em aberto e limitações conhecidas (registradas para não serem esquecidas):
+
+- **Fonte Roboto:** não está disponível. Hoje há a Inter (já no pacote `@fontsource-variable/inter`) e a fonte do sistema.
+  Adicioná-la exige um pacote novo (`@fontsource-variable/roboto`), por isso depende de aprovação.
+- **Permissões:** só existem os perfis *administrador* e *operador*. A DRE é restrita ao administrador. Liberar a
+  DRE a uma pessoa específica exige um campo de permissão por usuário e uma opção na tela *Usuários*; ainda não existe.
+- **Marca na entrada:** a tela de login e o aplicativo instalado (PWA, com manifesto e ícones fixos) mostram a marca
+  LocGestor. A identidade de cada locadora aparece depois do login, porque antes não se sabe qual locadora está entrando.
+- **Números da plataforma:** a receita recorrente e o cancelamento em valor usam o plano atual de cada locadora (o banco
+  não guarda a troca de plano). A ocupação da frota usa o estoque de hoje em todos os meses. A DRE é de regime de caixa.
+- **Menor privilégio:** o perfil do painel da plataforma ainda consegue ler `clientes` e `locacoes`. Essa leitura deve
+  ser revisada.
+- **Asaas em produção:** a cobrança e o webhook só foram testados com a API simulada. Falta o ciclo completo no sandbox
+  com uma chave real (seção 10.6, passo 6).
 
 Sugestões de próximos passos, em ordem:
 
@@ -812,7 +935,8 @@ roteiro do motorista. Contrato, fatura, romaneio, orçamento impresso e vistoria
 do Laravel. A plataforma também: o painel do operador (`/novo/plataforma/login`, com sessão própria) tem locadoras
 (cadastro, plano, mensalidade, pagamentos e estorno, suspensão, senha temporária, acesso de suporte e cancelamento),
 planos, números, uso por locadora, recados, auditoria e a troca da senha do operador. O cadastro público ("Teste
-grátis") fica no Laravel, desligado por padrão (`LOCGESTOR_CADASTRO_PUBLICO=true` no `.env` liga). A cobrança pelo Asaas
+grátis") fica no Laravel, desligado por padrão: abre pela chave em *Configurações da LocGestor*, só com os termos de uso
+publicados. A cobrança pelo Asaas
 (cobrança automática, conferência, webhook em `/webhook/asaas` e a rotina diária `php artisan locgestor:rotina-diaria`,
 agendada às 06:00 pelo `schedule:run`) também é do Laravel. O endereço antigo do webhook (`webhook_asaas.php`) só
 encaminha a requisição para ele. As telas antigas continuam acessíveis pelo endereço, mas o menu já leva ao Laravel.
@@ -839,7 +963,8 @@ As telas do Laravel usam **Tailwind CSS 4** compilado pelo Vite (`npm run build`
 do pacote `@fontsource-variable/inter`, junto com o build: nada é baixado da internet quando o sistema está em uso.
 Atalhos: `Ctrl+K` (ou `/`) abre a paleta de busca e ações; o botão de lua/sol troca o tema claro/escuro.
 
-No `.env`, preencha `DB_*` com o mesmo papel do `db_app` do `config.php`, `SESSION_DRIVER=file` e `CACHE_STORE=file`.
+No `.env`, preencha `DB_*` com o papel `locgestor_app` e a senha digitada no instalador (passo 2.4). `SESSION_DRIVER=file`
+e `CACHE_STORE=file` também valem para o ambiente local.
 **Nunca rode `php artisan migrate`** contra esse banco: a estrutura continua nos arquivos de `database/`.
 
 **Testes do Laravel:** `cd laravel` e `php artisan test`. Eles usam o mesmo banco e o mesmo papel do `.env` (o RLS vale) e
@@ -850,5 +975,5 @@ Cobrem login e bloqueio por tentativas, isolamento entre locadoras, cadastro de 
 No GitHub, rodam junto com os testes do sistema atual (linha do PHP 8.4).
 
 **Endereço antigo:** `http://locgestor.test/` e `index.php` levam para o sistema novo (`/novo`). Quem chega por
-ele entra de novo com a senha: não há mais passagem entre os dois sistemas. O `config.php` só precisa de
-`'laravel_url' => 'http://locgestor.test/novo'`, que é o endereço para onde o redirecionamento vai.
+ele entra de novo com a senha: não há mais passagem entre os dois sistemas. Se o endereço antigo precisar de outro
+destino, o `config.php` da raiz (opcional) recebe `'laravel_url' => 'https://SEU-DOMINIO/novo'`.

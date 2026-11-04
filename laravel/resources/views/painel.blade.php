@@ -105,4 +105,71 @@
         </div>
     </section>
 </div>
+
+{{-- Resultado do mês: comparado com o anterior, 12 meses e a idade do saldo --}}
+@php
+    $detalhe = fn (?float $variacao, float $anterior, bool $moeda) => $variacao === null
+        ? 'sem base no mês anterior'
+        : ($variacao >= 0 ? '+' : '') . numero($variacao, 1) . '% · antes: ' . ($moeda ? moeda($anterior) : numero($anterior));
+@endphp
+<div class="mt-10">
+    <h2 class="text-base font-semibold">Resultado do mês</h2>
+    <p class="mt-1 text-sm text-zinc-500">{{ $fin['mes']['rotulo'] }}, comparado com {{ $fin['anterior']['rotulo'] }}.</p>
+</div>
+<div class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
+    <x-kpi rotulo="Locações iniciadas" :valor="numero($fin['mes']['locacoes'])"
+           :detalhe="$detalhe($fin['variacaoLocacoes'], $fin['anterior']['locacoes'], false)" ico="locacoes"
+           cor="bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400" />
+    <x-kpi rotulo="Faturado no mês" :valor="moeda($fin['mes']['faturado'])"
+           :detalhe="$detalhe($fin['variacaoFaturado'], $fin['anterior']['faturado'], true)" ico="caixa"
+           cor="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" />
+    <x-kpi rotulo="Recebido no mês" :valor="moeda($fin['mes']['recebido'])"
+           :detalhe="$detalhe($fin['variacaoRecebido'], $fin['anterior']['recebido'], true)" ico="dinheiro"
+           cor="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" />
+    <x-kpi rotulo="Ticket médio por locação" :valor="moeda($fin['ticket'])"
+           :detalhe="$detalhe($fin['variacaoTicket'], $fin['ticketAnterior'], true)" ico="relatorios"
+           cor="bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" />
+    <x-kpi rotulo="Prazo até o 1º pagamento" :valor="$fin['prazoPagamento'] === null ? '—' : numero($fin['prazoPagamento'], 1) . ' dias'"
+           detalhe="locações dos últimos 12 meses" ico="relogio"
+           cor="bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400" />
+</div>
+
+<div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <section class="cartao p-5 xl:col-span-2">
+        <h2 class="cartao-titulo">Faturado e recebido, 12 meses</h2>
+        <p class="mt-1 text-sm text-zinc-500">Faturado: locações iniciadas no mês. Recebido: entradas do caixa no mês.</p>
+        <div class="mt-4 h-72">
+            <canvas role="img" aria-label="Faturado e recebido nos últimos 12 meses"
+                    data-grafico="{{ json_encode(['tipo' => 'bar', 'rotulos' => $fin['serieRotulos'], 'moeda' => true,
+                        'series' => [['nome' => 'Faturado', 'cor' => '#1a73e8', 'dados' => $fin['serieFaturado']],
+                                     ['nome' => 'Recebido', 'cor' => '#1e8e3e', 'dados' => $fin['serieRecebido']]]], JSON_UNESCAPED_UNICODE) }}"></canvas>
+        </div>
+    </section>
+
+    <section class="cartao p-5">
+        <h2 class="cartao-titulo">Idade do saldo a receber</h2>
+        <p class="mt-1 text-sm text-zinc-500">Dias desde a saída da locação, para o que ainda não foi pago.</p>
+        <div class="mt-4 h-48">
+            <canvas role="img" aria-label="Saldo a receber por idade"
+                    data-grafico="{{ json_encode(['tipo' => 'bar', 'rotulos' => array_column($fin['idade']['faixas'], 'rotulo'), 'moeda' => true,
+                        'series' => [['nome' => 'Saldo', 'cor' => '#c5221f', 'dados' => array_column($fin['idade']['faixas'], 'valor')]]], JSON_UNESCAPED_UNICODE) }}"></canvas>
+        </div>
+        <ul class="mt-4 divide-y divide-zinc-100 text-sm dark:divide-zinc-800">
+            @foreach ($fin['idade']['faixas'] as $faixa)
+                <li class="flex items-center justify-between py-2">
+                    <span>{{ $faixa['rotulo'] }} <span class="text-xs text-zinc-500">· {{ numero($faixa['quantidade']) }} locação(ões)</span></span>
+                    <span class="font-medium tabular-nums">{{ moeda($faixa['valor']) }}</span>
+                </li>
+            @endforeach
+            <li class="flex items-center justify-between pt-3 font-semibold">
+                <span>Total a receber</span><span class="tabular-nums">{{ moeda($fin['idade']['total']) }}</span>
+            </li>
+        </ul>
+    </section>
+</div>
+@endsection
+
+@section('scripts')
+<script src="{{ asset('assets/vendor/chart.umd.js') }}"></script>
+<script src="{{ asset('assets/js/graficos.js') }}"></script>
 @endsection

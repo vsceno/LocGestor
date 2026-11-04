@@ -61,7 +61,7 @@
                 </label>
                 <button class="btn-primario w-full py-2.5">Entrar</button>
             </form>
-            @if (config('locgestor.cadastro_publico'))
+            @if (\App\Support\Configuracoes::cadastroAberto('pgsql'))
                 <p class="mt-6 text-center text-sm text-zinc-500">Ainda não tem conta? <a href="{{ route('cadastro') }}" class="font-medium text-marca-700 hover:underline">Teste grátis</a></p>
             @endif
         </div>

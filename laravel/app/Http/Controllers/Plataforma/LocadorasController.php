@@ -70,13 +70,13 @@ class LocadorasController extends Controller
         $slug = strtolower(trim((string) $request->input('slug', '')));
         $adminNome = trim((string) $request->input('admin_nome', ''));
         $adminLogin = strtolower(trim((string) $request->input('admin_login', '')));
-        if (!preg_match('/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/', $slug)) {
+        if (! preg_match('/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/', $slug)) {
             $erros[] = 'Identificador inválido: use de 3 a 40 letras minúsculas, números e hífen (sem hífen no início ou no fim).';
         }
         if ($adminNome === '' || mb_strlen($adminNome) > 100) {
             $erros[] = 'Informe o nome do administrador.';
         }
-        if (!preg_match('/^[a-z0-9._-]{3,40}$/', $adminLogin)) {
+        if (! preg_match('/^[a-z0-9._-]{3,40}$/', $adminLogin)) {
             $erros[] = 'Login do administrador inválido (3 a 40 letras minúsculas, números, ponto, hífen ou sublinhado).';
         }
         if ($erros) {
@@ -108,12 +108,14 @@ class LocadorasController extends Controller
         if ($p === null) {
             return redirect()->route('plataforma.locadoras');
         }
+
         return response()->view('plataforma.locadoras.criada', ['p' => $p])->header('Cache-Control', 'no-store');
     }
 
     public function editar(string $id): View
     {
         $t = $this->locadora($id);
+
         return view('plataforma.locadoras.editar', [
             'locadora' => $t,
             'planos' => Assinaturas::planosAtivos(),
@@ -162,7 +164,7 @@ class LocadorasController extends Controller
             'UPDATE tenants SET nome = ?, cnpj = ?, email_contato = ?, telefone = ?, plano_id = ?, plano = ?,
                     limite_usuarios = ?, vencimento = ?, carencia_dias = ? WHERE id = ?',
             [$dados['nome'], $dados['cnpj'], $dados['email'], $dados['telefone'], $dados['plano']->id, $dados['plano']->nome,
-             $limite, $dados['vencimento'], $dados['carencia'], $id]
+                $limite, $dados['vencimento'], $dados['carencia'], $id]
         );
         Log::info('Locadora atualizada.', ['slug' => $t->slug]);
 
@@ -174,13 +176,14 @@ class LocadorasController extends Controller
         ) !== null) {
             $avisos[] = ['tipo' => 'aviso', 'msg' => 'Há cobrança pendente no Asaas com outro vencimento. Cancele-a abaixo se não valer mais.'];
         }
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', $avisos);
     }
 
     public function status(Request $request, string $id): RedirectResponse
     {
         $status = (string) $request->input('status', '');
-        if (!in_array($status, ['ativa', 'suspensa'], true)) {
+        if (! in_array($status, ['ativa', 'suspensa'], true)) {
             return $this->voltarComErro('Requisição inválida.');
         }
         $t = $this->locadora($id);
@@ -199,6 +202,7 @@ class LocadorasController extends Controller
         $msg = $status === 'ativa'
             ? "Locadora {$t->nome} reativada."
             : "Locadora {$t->nome} suspensa. Os usuários dela perderam o acesso.";
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok', 'msg' => $msg]]);
     }
 
@@ -211,11 +215,11 @@ class LocadorasController extends Controller
         }
         $meses = filter_var($request->input('meses', ''), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 24]]);
         $data = trim((string) $request->input('data', ''));
-        if ($meses === false || !Formulario::dataValida($data) || $data > now()->toDateString()) {
+        if ($meses === false || ! Formulario::dataValida($data) || $data > now()->toDateString()) {
             return $this->voltarComErro('Confira os meses (1 a 24) e a data do pagamento.');
         }
         $forma = (string) $request->input('forma', '');
-        if (!in_array($forma, Estoque::FORMAS_PGTO, true)) {
+        if (! in_array($forma, Estoque::FORMAS_PGTO, true)) {
             return $this->voltarComErro('Escolha a forma de pagamento.');
         }
         // Em branco = preço do plano × meses; preenchido, o valor digitado (ex.: "1.234,50")
@@ -233,8 +237,9 @@ class LocadorasController extends Controller
         } catch (Recusa $e) {
             return $this->voltarComErro($e->getMessage());
         }
-        $msg = 'Pagamento de ' . moeda($r['valor']) . ' registrado. Próximo vencimento: ' . data_br($r['novo']) . '.'
-            . ($r['reativou'] ? ' Locadora reativada.' : '');
+        $msg = 'Pagamento de '.moeda($r['valor']).' registrado. Próximo vencimento: '.data_br($r['novo']).'.'
+            .($r['reativou'] ? ' Locadora reativada.' : '');
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok', 'msg' => $msg]]);
     }
 
@@ -247,7 +252,8 @@ class LocadorasController extends Controller
                 $db = DB::connection('plataforma');
                 $venc = $db->selectOne('SELECT vencimento FROM tenants WHERE id = ? FOR UPDATE', [$id]);
                 $p = $db->selectOne(
-                    'SELECT id, vencimento_anterior, vencimento_novo FROM assinatura_pagamentos WHERE locadora_id = ? ORDER BY criado_em DESC LIMIT 1',
+                    'SELECT id, vencimento_anterior, vencimento_novo FROM assinatura_pagamentos
+                      WHERE locadora_id = ? AND estornado_em IS NULL ORDER BY criado_em DESC LIMIT 1 FOR UPDATE',
                     [$id]
                 );
                 if ($venc === null || $p === null) {
@@ -259,12 +265,15 @@ class LocadorasController extends Controller
                 if ($venc->vencimento !== $p->vencimento_novo) {
                     throw new Recusa('O vencimento foi alterado depois deste pagamento. Ajuste o vencimento manualmente e exclua o pagamento pelo banco, se preciso.');
                 }
-                $db->delete('DELETE FROM assinatura_pagamentos WHERE id = ?', [$p->id]);
+                // Não se apaga pagamento (o recibo continua existindo): marca como estornado e devolve o vencimento
+                $db->update("UPDATE assinatura_pagamentos SET estornado_em = now(), estorno_motivo = 'Estornado pelo painel'
+                              WHERE id = ?", [$p->id]);
                 $db->update('UPDATE tenants SET vencimento = ? WHERE id = ?', [$p->vencimento_anterior, $id]);
             });
         } catch (Recusa $e) {
             return $this->voltarComErro($e->getMessage());
         }
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok', 'msg' => 'Último pagamento estornado.']]);
     }
 
@@ -276,7 +285,7 @@ class LocadorasController extends Controller
         if ($t->status === 'cancelada') {
             return $this->voltarComErro('Locadora não encontrada ou cancelada.');
         }
-        if (!Str::isUuid($usuario)) {
+        if (! Str::isUuid($usuario)) {
             return $this->voltarComErro('Usuário não encontrado.');
         }
 
@@ -345,11 +354,13 @@ class LocadorasController extends Controller
             return $this->voltarComErro($e->getMessage());
         } catch (AsaasErro $e) {
             Log::error($e->getMessage());
+
             return $this->voltarComErro($e->getMessage());
         }
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok',
-            'msg' => 'Cobrança de ' . moeda($c->valor) . ' com vencimento em ' . data_br($c->vencimento) . ' '
-                . ($c->status === 'pendente' ? 'disponível' : $c->status) . ' no Asaas.']]);
+            'msg' => 'Cobrança de '.moeda($c->valor).' com vencimento em '.data_br($c->vencimento).' '
+                .($c->status === 'pendente' ? 'disponível' : $c->status).' no Asaas.']]);
     }
 
     /** Confere no Asaas as cobranças pendentes desta locadora e dá baixa nas que foram pagas. */
@@ -365,8 +376,10 @@ class LocadorasController extends Controller
             }
         } catch (AsaasErro $e) {
             Log::error($e->getMessage());
+
             return $this->voltarComErro($e->getMessage());
         }
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok',
             'msg' => $pagas > 0 ? "$pagas pagamento(s) recebido(s) e registrado(s)." : 'Nenhum pagamento novo no Asaas.']]);
     }
@@ -376,7 +389,7 @@ class LocadorasController extends Controller
     {
         $this->locadora($id);
         $cobranca = (string) $request->input('cobranca', '');
-        if (!Str::isUuid($cobranca) || DB::connection('plataforma')->selectOne(
+        if (! Str::isUuid($cobranca) || DB::connection('plataforma')->selectOne(
             'SELECT 1 FROM assinatura_cobrancas WHERE id = ? AND locadora_id = ?', [$cobranca, $id]
         ) === null) {
             return $this->voltarComErro('Cobrança não encontrada.');
@@ -387,8 +400,10 @@ class LocadorasController extends Controller
             return $this->voltarComErro($e->getMessage());
         } catch (AsaasErro $e) {
             Log::error($e->getMessage());
+
             return $this->voltarComErro($e->getMessage());
         }
+
         return redirect()->route('plataforma.locadoras.editar', $id)->with('flash', [['tipo' => 'ok', 'msg' => 'Cobrança cancelada.']]);
     }
 
@@ -415,6 +430,7 @@ class LocadorasController extends Controller
             return $this->voltarComErro($e->getMessage());
         } catch (AsaasErro $e) {
             Log::error($e->getMessage());
+
             return $this->voltarComErro($e->getMessage());
         }
         Log::info('Contrato da locadora cancelado.', ['slug' => $t->slug]);
@@ -427,6 +443,7 @@ class LocadorasController extends Controller
     private function locadora(string $id): object
     {
         abort_unless(Str::isUuid($id), 404);
+
         return DB::connection('plataforma')->selectOne(
             'SELECT t.*, p.nome AS plano_nome, p.preco_mensal FROM tenants t LEFT JOIN planos p ON p.id = t.plano_id WHERE t.id = ?',
             [$id]
@@ -449,7 +466,7 @@ class LocadorasController extends Controller
         if (mb_strlen($dados['nome']) < 3 || mb_strlen($dados['nome']) > 150) {
             $erros[] = 'Informe o nome da locadora (3 a 150 caracteres).';
         }
-        if ($dados['cnpj'] !== '' && (strlen($dados['cnpj']) !== 14 || !doc_valido($dados['cnpj']))) {
+        if ($dados['cnpj'] !== '' && (strlen($dados['cnpj']) !== 14 || ! doc_valido($dados['cnpj']))) {
             $erros[] = 'CNPJ inválido.';
         }
         if ($dados['email'] !== '' && filter_var($dados['email'], FILTER_VALIDATE_EMAIL) === false) {
@@ -460,6 +477,7 @@ class LocadorasController extends Controller
         }
 
         $assinatura = Assinaturas::formulario($request->all());
+
         return [
             $dados + ['plano' => $assinatura['plano'], 'vencimento' => $assinatura['vencimento'], 'carencia' => $assinatura['carencia']],
             [...$erros, ...$assinatura['erros']],

@@ -63,7 +63,9 @@ class PagamentosTest extends PlataformaTestCase
         $this->post(route('plataforma.locadoras.estornar', $id))
             ->assertSessionHas('flash', fn ($f) => $f[0]['tipo'] === 'ok');
         $this->assertSame('2026-05-10', $this->locadoraNoBanco($id)->vencimento);
-        $this->assertSame(0, $this->pagamentos($id));
+        // O pagamento não some: fica marcado como estornado (o recibo continua existindo)
+        $this->assertSame(1, $this->pagamentos($id));
+        $this->assertNotNull(DB::connection('plataforma')->selectOne('SELECT estornado_em FROM assinatura_pagamentos WHERE locadora_id = ?', [$id])->estornado_em);
     }
 
     public function test_estorno_recusa_se_o_vencimento_mudou_depois_do_pagamento(): void

@@ -9,12 +9,13 @@ use App\Http\Controllers\CategoriasController;
 use App\Http\Controllers\ClientesController;
 use App\Http\Controllers\ConfiguracoesController;
 use App\Http\Controllers\ContasPagarController;
-use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\DevolucaoController;
+use App\Http\Controllers\DocumentosController;
 use App\Http\Controllers\KitsController;
 use App\Http\Controllers\LocacoesController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\ManutencoesController;
+use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\NovaLocacaoController;
 use App\Http\Controllers\OrcamentosController;
 use App\Http\Controllers\PainelController;
@@ -37,7 +38,10 @@ Route::post('/login', [LoginController::class, 'entrar'])->name('login.entrar');
 Route::post('/sair', [LoginController::class, 'sair'])->name('sair');
 // Link de suporte do painel da plataforma: o código de uso único é a autorização (não exige login)
 Route::get('/suporte/entrar', [SuporteController::class, 'entrar'])->name('suporte.entrar');
-// Cadastro público ("Teste grátis"): só existe com LOCGESTOR_CADASTRO_PUBLICO ligado (senão, 404)
+// Cadastro público ("Teste grátis"): só existe com a chave "Abrir o cadastro público" ligada na tela
+// Configurações da LocGestor (e com os termos de uso publicados); senão, 404
+// Logomarca da LocGestor (pública: aparece na entrada e nos cadastros). Sem envio, é a padrão.
+Route::get('/marca/logo', [MarcaController::class, 'logo'])->name('marca.logo');
 Route::get('/cadastro', [CadastroController::class, 'form'])->name('cadastro');
 Route::post('/cadastro', [CadastroController::class, 'criar'])->name('cadastro.criar');
 Route::get('/cadastro/pronto', [CadastroController::class, 'pronto'])->name('cadastro.pronto');
@@ -133,6 +137,8 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/relatorios/{chave}', [RelatoriosController::class, 'ver'])->where('chave', '[a-z_]+')->name('relatorios.ver');
     Route::get('/configuracoes', [ConfiguracoesController::class, 'index'])->name('config.index');
     Route::put('/configuracoes/empresa', [ConfiguracoesController::class, 'salvar'])->name('config.empresa.salvar');
+    Route::get('/configuracoes/identidade', [ConfiguracoesController::class, 'identidade'])->name('config.identidade');
+    Route::put('/configuracoes/identidade', [ConfiguracoesController::class, 'salvarIdentidade'])->name('config.identidade.salvar');
     Route::get('/configuracoes/usuarios', [UsuariosController::class, 'index'])->name('config.usuarios');
     Route::post('/configuracoes/usuarios', [UsuariosController::class, 'store'])->name('config.usuarios.store');
     Route::put('/configuracoes/usuarios/{id}', [UsuariosController::class, 'update'])->whereUuid('id')->name('config.usuarios.update');
@@ -155,6 +161,7 @@ Route::middleware(SessaoLocadora::class)->group(function () {
     Route::get('/busca', [BuscaController::class, 'index'])->name('busca.index');
     Route::post('/busca/rapida', [BuscaController::class, 'rapida'])->name('busca.rapida');
     Route::get('/arquivos/logo', [ArquivosController::class, 'logo'])->name('arquivos.logo');
+    Route::get('/arquivos/logo-quadrada', [ArquivosController::class, 'logoQuadrada'])->name('arquivos.logo_quadrada');
     Route::post('/suporte/sair', [SuporteController::class, 'sair'])->name('suporte.sair');
 });
 

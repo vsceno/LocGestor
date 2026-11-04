@@ -273,7 +273,7 @@
                         <label class="block"><span class="text-sm font-medium">Data</span>
                             <input type="date" name="data" value="{{ $errors->has('receber') ? old('data') : $hoje }}" max="{{ $hoje }}" required class="campo mt-1.5"></label>
                     </div>
-                    <button class="btn-primario w-full justify-center"><x-icone nome="dinheiro" class="size-4" /> Registrar recebimento</button>
+                    <button class="btn-destaque w-full justify-center"><x-icone nome="dinheiro" class="size-4" /> Registrar recebimento</button>
                 </form>
             </section>
         @endunless

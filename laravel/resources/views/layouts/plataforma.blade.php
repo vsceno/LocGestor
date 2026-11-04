@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ $titulo ?? 'Plataforma' }} · Painel da plataforma · LocGestor</title>
+<link rel="icon" type="image/png" href="{{ route('marca.logo') }}">
+<title>{{ $titulo ?? 'Plataforma' }} · Painel da plataforma · {{ \App\Support\Configuracoes::nomeSistema() }}</title>
 <script>try { var t = localStorage.getItem('lg-tema'); if (t === 'escuro' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {}</script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -17,14 +18,15 @@
         'recados'   => ['Recados', 'plataforma.recados.index'],
         'auditoria' => ['Auditoria', 'plataforma.auditoria'],
         'planos'    => ['Planos', 'plataforma.planos.index'],
+        'configuracoes' => ['Configurações', 'plataforma.configuracoes'],
         'conta'     => ['Minha senha', 'plataforma.conta'],
     ];
 @endphp
 <header class="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
     <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div class="flex items-center gap-3">
-            <span class="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-700 text-sm font-bold text-white">LG</span>
-            <div><p class="text-sm font-semibold">LocGestor</p><p class="text-xs text-zinc-500">Painel da plataforma</p></div>
+            <img src="{{ \App\Support\Configuracoes::logoUrl() }}" alt="" class="size-9 object-contain">
+            <div><p class="text-sm font-semibold">{{ \App\Support\Configuracoes::nomeSistema() }}</p><p class="text-xs text-zinc-500">Painel da plataforma</p></div>
         </div>
         <nav class="flex flex-wrap items-center gap-1" aria-label="Módulos da plataforma">
             @foreach ($menu as $chave => [$rotulo, $rota])

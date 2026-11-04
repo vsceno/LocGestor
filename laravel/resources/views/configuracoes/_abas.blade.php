@@ -1,7 +1,7 @@
 {{-- Seções de configurações. Administrador vê tudo; os demais, só a própria senha --}}
 @php
     $abas = session('usuario.perfil') === 'admin'
-        ? ['config.index' => 'Empresa e documentos', 'config.usuarios' => 'Usuários', 'config.auditoria' => 'Auditoria', 'config.senha' => 'Minha senha']
+        ? ['config.index' => 'Empresa e documentos', 'config.identidade' => 'Identidade visual', 'config.usuarios' => 'Usuários', 'config.auditoria' => 'Auditoria', 'config.senha' => 'Minha senha']
         : ['config.senha' => 'Minha senha'];
 @endphp
 <nav class="mb-6 inline-flex gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800" aria-label="Seções de configurações">
