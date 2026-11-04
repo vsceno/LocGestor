@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ForcarHttps;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Avisos do Asaas: quem chama é o Asaas, sem formulário; a autorização é o token do cabeçalho asaas-access-token
         $middleware->preventRequestForgery(except: ['webhook/asaas']);
+
+        // HTTPS obrigatório em produção (LOCGESTOR_FORCAR_HTTPS=true); no ambiente local, desligado
+        $middleware->append(ForcarHttps::class);
 
         // Atrás de um proxy (Cloudflare, balanceador), o IP do cliente vem no X-Forwarded-For. Só os IPs de
         // LOCGESTOR_PROXIES podem informar esse cabeçalho. Sem a variável, nenhum proxy é confiável (o padrão seguro):

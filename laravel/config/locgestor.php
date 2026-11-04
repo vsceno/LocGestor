@@ -24,6 +24,7 @@ return [
     // Proxies confiáveis (IPs separados por vírgula). Infraestrutura do servidor, por isso fica no ambiente
     // e não na tela. Vazio = nenhum proxy confiável (o padrão seguro).
     'proxies' => env('LOCGESTOR_PROXIES', ''),
+    'forcar_https' => (bool) env('LOCGESTOR_FORCAR_HTTPS', false),
 
     // Os demais dados (empresa, identidade, documentos, cadastro público, suporte) ficam na tabela
     // plataforma_configuracoes e são alterados pela tela Configurações da LocGestor, no painel da plataforma.

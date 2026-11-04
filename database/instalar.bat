@@ -1,7 +1,9 @@
 @echo off
 rem =====================================================================
 rem LocGestor - instalação do banco de dados
-rem Roda 00_roles.sql, 01_schema.sql, 02_seed.sql e (opcional) 03_demo.sql.
+rem Roda 00_roles.sql, 01_schema.sql, 02_seed.sql, (opcional) 03_demo.sql e, por fim, todas as
+rem migracoes de migrations em ordem (028 em diante inclusive): assim a instalacao nova
+rem fica igual a um banco atualizado.
 rem Use no Terminal do Laragon (psql e php no PATH).
 rem
 rem Pede: senha do postgres, senhas dos papéis locgestor_app e
@@ -55,22 +57,28 @@ for /f "delims=" %%h in ('php -r "echo password_hash($argv[1], PASSWORD_DEFAULT)
 if not defined HASH_SUPORTE ( echo Falha ao gerar o hash da senha do suporte. & goto erro )
 
 echo.
-echo [1/4] Papeis e banco de dados...
+echo [1/5] Papeis e banco de dados...
 %PSQL% -d postgres -v senha_app=%SENHA_APP% -v senha_plataforma=%SENHA_PLATAFORMA% -f 00_roles.sql || goto erro
-echo [2/4] Estrutura (tabelas, RLS, views, permissoes)...
+echo [2/5] Estrutura (tabelas, RLS, views, permissoes)...
 %PSQL% -d locgestor -f 01_schema.sql || goto erro
-echo [3/4] Usuario da plataforma...
+echo [3/5] Usuario da plataforma...
 %PSQL% -d locgestor -v hash_suporte=%HASH_SUPORTE% -f 02_seed.sql || goto erro
 
-if not defined DEMO set /p "DEMO=[4/4] Carregar as locadoras de demonstracao (alfa-locacoes e beta-eventos)? (S/N) "
+if not defined DEMO set /p "DEMO=[4/5] Carregar as locadoras de demonstracao (alfa-locacoes e beta-eventos)? (S/N) "
 if /i "%DEMO%"=="S" (
     %PSQL% -d locgestor -f 03_demo.sql || goto erro
     echo Demonstracao carregada. Empresas: alfa-locacoes e beta-eventos, usuario admin, senha admin123.
 )
 
+echo [5/5] Migracoes (versoes posteriores, em ordem)...
+for %%f in (migrations\*.sql) do (
+    echo    %%~nxf
+    %PSQL% -d locgestor -f "%%f" || goto erro
+)
+
 echo.
 echo Instalacao concluida.
-echo Agora copie config.example.php para config.php e preencha as senhas dos papeis.
+echo Agora copie laravel\.env.example para laravel\.env e preencha DB_PASSWORD e DB_PLATAFORMA_PASSWORD com as senhas dos papeis.
 echo Painel da plataforma: usuario suporte com a senha que voce digitou.
 endlocal
 exit /b 0

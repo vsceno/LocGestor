@@ -38,7 +38,8 @@ Route::post('/login', [LoginController::class, 'entrar'])->name('login.entrar');
 Route::post('/sair', [LoginController::class, 'sair'])->name('sair');
 // Link de suporte do painel da plataforma: o código de uso único é a autorização (não exige login)
 Route::get('/suporte/entrar', [SuporteController::class, 'entrar'])->name('suporte.entrar');
-// Cadastro público ("Teste grátis"): só existe com LOCGESTOR_CADASTRO_PUBLICO ligado (senão, 404)
+// Cadastro público ("Teste grátis"): só existe com a chave "Abrir o cadastro público" ligada na tela
+// Configurações da LocGestor (e com os termos de uso publicados); senão, 404
 // Logomarca da LocGestor (pública: aparece na entrada e nos cadastros). Sem envio, é a padrão.
 Route::get('/marca/logo', [MarcaController::class, 'logo'])->name('marca.logo');
 Route::get('/cadastro', [CadastroController::class, 'form'])->name('cadastro');

@@ -15,7 +15,7 @@ use Illuminate\View\View;
 
 /**
  * Cadastro público ("Teste grátis"): uma locadora nova se cadastra e começa o período de teste, sem cartão.
- * Desligado por padrão (LOCGESTOR_CADASTRO_PUBLICO). Contra robôs, sem serviço externo: campo-isca invisível, tempo
+ * Desligado por padrão (chave na tela Configurações da LocGestor, que não abre sem os termos de uso). Contra robôs, sem serviço externo: campo-isca invisível, tempo
  * mínimo de preenchimento e no máximo 3 cadastros por IP por hora (o IP é guardado só como hash). A criação é a mesma
  * do painel da plataforma. Mesmas regras de cadastro.php do sistema antigo.
  */
